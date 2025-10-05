@@ -1,9 +1,23 @@
 # State Management Architecture (Exploration)
 
-Related: [[models]], [[architecture]]
+Related: [[models]], [[architecture]], [[architecture-api]], [[state-broadcasting]]
 
-**Status:** Exploration (not yet crystallized)
+**Status:** Exploration (Drizzle + Feathers decision made)
 **Date:** January 2025
+**Last Updated:** January 2025 (after Feathers architecture decision)
+
+---
+
+## Executive Summary
+
+**Chosen Stack:**
+- **ORM:** Drizzle ORM (type-safe, lightweight, schema-driven)
+- **Database:** LibSQL (V1 local) / PostgreSQL (V2 cloud)
+- **API Layer:** FeathersJS (REST + WebSocket, built on Drizzle)
+
+See [[architecture-api]] for complete architecture and [[state-broadcasting]] for real-time sync.
+
+This document focuses on the **persistence layer** (Drizzle + database schema).
 
 ---
 

@@ -1,9 +1,18 @@
 # State Broadcasting & Multi-Client Sync (Exploration)
 
-Related: [[state-management]], [[agent-interface]], [[core]]
+Related: [[state-management]], [[agent-interface]], [[core]], [[architecture-api]]
 
-**Status:** Exploration (not yet crystallized)
+**Status:** Exploration (FeathersJS decision made, see [[architecture-api]])
 **Date:** January 2025
+**Last Updated:** January 2025 (after FeathersJS architecture decision)
+
+---
+
+## Executive Summary
+
+**Decision:** Use **FeathersJS** for unified real-time architecture across V1 (local) and V2 (cloud).
+
+See [[architecture-api]] for full stack architecture. This document explores the multi-client sync challenges and how FeathersJS solves them.
 
 ---
 
@@ -267,92 +276,124 @@ socket.on('task:completed', (result) => {
 
 ---
 
-## Recommended Architecture
+## Chosen Architecture: FeathersJS
 
-### V1: Local Desktop (IPC-Based)
+**See [[architecture-api]] for complete details.**
+
+### Why FeathersJS?
+
+**Unified approach for V1 (local) and V2 (cloud):**
+- **Automatic real-time events** via Service hooks (`created`, `updated`, `patched`, `removed`)
+- **WebSocket + Socket.io** built-in (with polling fallback)
+- **Room/channel-based pub/sub** for session isolation
+- **Same client code** for local daemon and cloud server
+- **Works with Drizzle ORM** (custom adapter needed)
+
+### V1: Local Feathers Daemon
 
 ```
-┌─────────────┐
-│ Main Process│  (Owns DB, runs agent clients)
-└──────┬──────┘
-       │ IPC broadcasts
-   ┌───┴────┬────────┐
-   │        │        │
-┌──▼──┐ ┌──▼──┐ ┌──▼──┐
-│Win 1│ │Win 2│ │Win 3│  (Renderer processes, just UI)
-└─────┘ └─────┘ └─────┘
+┌─────────────────────────────┐
+│ Agor Daemon (localhost:3030)│
+│                             │
+│  ├─ Feathers Server         │
+│  ├─ Drizzle + LibSQL        │
+│  └─ Agent Clients           │
+└──────────┬──────────────────┘
+           │ WebSocket (local)
+     ┌─────┴─────┬──────────┐
+     │           │          │
+┌────▼────┐ ┌───▼───┐ ┌───▼───┐
+│ Browser │ │Browser│ │Desktop│  (Feathers clients)
+│ Window 1│ │Window2│ │  App  │
+└─────────┘ └───────┘ └───────┘
 ```
 
-**Flow:**
-1. User action in Window 1 → IPC message to Main
-2. Main process updates DB
-3. Main broadcasts change to all windows via IPC
-4. All windows update UI
+**Key Features:**
+- Local daemon auto-starts with first client
+- All windows connect to `ws://localhost:3030`
+- Feathers channels broadcast to all connected clients
+- No IPC needed - pure WebSocket
 
-**Implementation (Electron):**
+**Example Flow:**
+1. User creates task in Browser Window 1
+2. Feathers client → POST `/tasks` → Feathers service
+3. Service saves to DB via Drizzle
+4. Service hook emits `task created` event
+5. Feathers broadcasts to all clients via WebSocket channels
+6. All connected windows receive event and update UI
+
+**Implementation:**
 ```typescript
-// Main process state manager
-class MainProcessStateManager {
-  private windows = new Set<BrowserWindow>();
-
-  broadcast(event: string, data: unknown) {
-    this.windows.forEach(win => {
-      win.webContents.send(event, data);
-    });
+// Feathers Service (server)
+class TasksService {
+  async create(data, params) {
+    const task = await db.insert(tasks).values(data).returning();
+    // Feathers automatically emits 'created' event
+    return task;
   }
+}
 
-  async handleTaskExecute(taskId: string, prompt: string) {
-    // Execute task
-    const execution = await agentSession.executeTask(prompt);
+// Feathers Channels (server)
+app.service('tasks').publish('created', (data, context) => {
+  // Broadcast to all clients watching this session
+  return app.channel(`session:${data.session_id}`);
+});
 
-    // Stream updates to all windows
-    execution.onMessage((message) => {
-      this.broadcast('task:message', { taskId, message });
+// React Hook (client)
+function useTasks(sessionId) {
+  const client = useFeathers();
+  const [tasks, setTasks] = useState([]);
+
+  useEffect(() => {
+    const tasksService = client.service('tasks');
+
+    // Real-time listener
+    tasksService.on('created', (task) => {
+      if (task.session_id === sessionId) {
+        setTasks((prev) => [...prev, task]);
+      }
     });
 
-    execution.onComplete((result) => {
-      this.broadcast('task:completed', { taskId, result });
-    });
-  }
+    return () => tasksService.removeAllListeners();
+  }, [sessionId]);
+
+  return tasks;
 }
 ```
 
 ---
 
-### V2: Agor Cloud (WebSocket + Rooms)
+### V2: Agor Cloud (Feathers + PostgreSQL/Turso)
 
 ```
 ┌────────────────────────────────────┐
-│   WebSocket Server (Soketi/Ably)  │
+│ Agor Cloud (cloud.agor.dev)       │
 │                                    │
-│  Room: session:abc123              │
-│    ├─ Client 1 (User A, Browser)  │
-│    ├─ Client 2 (User A, Mobile)   │
-│    └─ Client 3 (User B, Browser)  │
-│                                    │
-│  Room: session:def456              │
-│    └─ Client 4 (User C)            │
-└────────────────────────────────────┘
-         ▲
-         │ Agent events
-    ┌────┴────┐
-    │  Agent  │
-    │ Workers │  (Background processes running agents)
-    └─────────┘
+│  ├─ Feathers Server (scaled)      │
+│  ├─ PostgreSQL / Turso             │
+│  └─ Agent Workers (separate)      │
+└──────────┬─────────────────────────┘
+           │ WebSocket (wss://)
+     ┌─────┴─────┬──────────┬─────────┐
+     │           │          │         │
+┌────▼────┐ ┌───▼───┐ ┌───▼───┐ ┌───▼────┐
+│ User A  │ │User A │ │ User B│ │ User C │
+│ Browser │ │Mobile │ │Browser│ │Browser │
+└─────────┘ └───────┘ └───────┘ └────────┘
 ```
 
-**Flow:**
-1. User joins session → WebSocket subscribes to `session:${id}` room
-2. User executes task → API call to agent worker
-3. Agent streams updates → Worker publishes to WebSocket room
-4. All subscribed clients receive update → UI updates
+**Same Feathers architecture, different deployment:**
+- Feathers server deployed to cloud (Fly.io, Railway, etc.)
+- PostgreSQL or Turso for multi-tenant data
+- Agent workers run as separate services
+- Same React hooks work in cloud mode
+- Authentication via JWT (Feathers built-in)
 
-**Technology Stack (Example):**
-- **Frontend:** React + WebSocket client
-- **Backend:** Node.js API server (REST + WebSocket)
-- **Real-time:** Soketi (WebSocket server) or Ably (managed)
-- **Database:** LibSQL/Turso (cloud sync)
-- **Agent Workers:** Separate processes running agent clients
+**Key Difference from V1:**
+- **V1:** Local daemon (`ws://localhost:3030`), single user, LibSQL
+- **V2:** Cloud server (`wss://cloud.agor.dev`), multi-user, PostgreSQL/Turso
+
+**Same client code** - just change Feathers connection URL!
 
 ---
 

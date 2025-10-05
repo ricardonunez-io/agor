@@ -12,15 +12,19 @@ This directory contains modular knowledge files that document Agor's concepts, a
 ### Core Concepts
 - **[core.md](concepts/core.md)** - The 5 primitives, core insights, and vision
 - **[models.md](concepts/models.md)** - Information architecture, data models, and relationships
-- **[architecture.md](concepts/architecture.md)** - System design, storage structure, data flow
+- **[id-management.md](concepts/id-management.md)** - UUIDv7 strategy, short IDs, collision resolution
+- **[architecture.md](concepts/architecture.md)** - System design, storage structure, data flow (WIP)
 - **[design.md](concepts/design.md)** - UI/UX principles and component patterns
 
 ### Explorations (Work in Progress)
 Experimental ideas and designs not yet crystallized into concepts. These represent active thinking and may graduate to `concepts/` when ready:
 
-- **[state-management.md](explorations/state-management.md)** - State persistence architecture (Drizzle + LibSQL)
+- **[architecture-api.md](explorations/architecture-api.md)** - **[DECISION]** FeathersJS + Drizzle full-stack architecture
+- **[state-management.md](explorations/state-management.md)** - Persistence layer (Drizzle ORM + LibSQL/PostgreSQL)
+- **[state-broadcasting.md](explorations/state-broadcasting.md)** - Real-time sync & multi-client (FeathersJS WebSocket)
 - **[agent-interface.md](explorations/agent-interface.md)** - Agent abstraction layer (Claude Code, Codex, Gemini, etc.)
-- **[state-broadcasting.md](explorations/state-broadcasting.md)** - Real-time sync & multi-client architecture (IPC, WebSocket, conflict resolution)
+- **[cli.md](explorations/cli.md)** - CLI design (oclif, entity commands, stateful context)
+- **[git-worktree.md](explorations/git-worktree.md)** - Git worktree management strategy
 
 **Lifecycle:** `explorations/` → `concepts/` when design is validated and ready to be official
 
