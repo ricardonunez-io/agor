@@ -1,18 +1,22 @@
 # Job Stories
 
-> **Context:** agor needs to work for both humans (locally) and Tembo (background cloud tasks). While humans may prefer UI, Tembo platform would require a CLI or API/SDK. Ideally both humans and Tembo generate the same artifacts, so humans can transfer sessions to Tembo and vice versa - Tembo is just another dev.
+## Guiding principles
+
+### For Humans and Autonomous Agents
+
+agor needs to work for both humans (locally) and Tembo (background cloud tasks). While humans may prefer UI, Tembo platform would require a CLI or API/SDK. Ideally both humans and Tembo generate the same artifacts, so humans can transfer sessions to Tembo and vice versa - Tembo is just another dev.
+
+### Open source
+
+When I'm choosing AI development infrastructure, I want open source and vendor-neutral solutions, so I can avoid lock-in and contribute to community-driven improvements.
+
+### Coding Agent Agnostic
+
+When I'm context-switching between agents, I want zero conflicts and seamless transitions, so I can use the best tool for each specific task without workflow disruption.
 
 ---
 
 ## P1 - MVP
-
-### Open Source
-
-When I'm choosing AI development infrastructure, I want open source and vendor-neutral solutions, so I can avoid lock-in and contribute to community-driven improvements.
-
-### Agent Agnostic
-
-When I'm context-switching between agents, I want zero conflicts and seamless transitions, so I can use the best tool for each specific task without workflow disruption.
 
 ### CLI Interface
 
@@ -78,7 +82,7 @@ When I complete tasks with AI agents, I want post-task hooks to generate structu
 
 When I'm starting new work that's similar to past projects, I want to search all my reports and learnings, so I can reuse successful approaches and avoid repeating mistakes.
 
-## P4 - Team Features
+## P4 - Multiplayer
 
 ### Share Sessions
 
