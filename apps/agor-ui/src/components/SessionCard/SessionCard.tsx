@@ -7,8 +7,22 @@ import {
   ForkOutlined,
   LoadingOutlined,
   PlusCircleOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
-import { Badge, Button, Card, Collapse, Modal, Space, Spin, Tag, Typography } from 'antd';
+import {
+  Badge,
+  Button,
+  Card,
+  Collapse,
+  Form,
+  Input,
+  Modal,
+  Space,
+  Spin,
+  Tag,
+  Typography,
+} from 'antd';
+import React from 'react';
 import type { Session, Task } from '../../types';
 import TaskListItem from '../TaskListItem';
 import './SessionCard.css';
@@ -23,6 +37,7 @@ interface SessionCardProps {
   onTaskClick?: (taskId: string) => void;
   onSessionClick?: () => void;
   onDelete?: (sessionId: string) => void;
+  onUpdate?: (sessionId: string, updates: Partial<Session>) => void;
   defaultExpanded?: boolean;
 }
 
@@ -32,8 +47,12 @@ const SessionCard = ({
   onTaskClick,
   onSessionClick,
   onDelete,
+  onUpdate,
   defaultExpanded = true,
 }: SessionCardProps) => {
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [form] = Form.useForm();
+
   const handleDelete = () => {
     Modal.confirm({
       title: 'Delete Session',
@@ -44,6 +63,13 @@ const SessionCard = ({
       onOk: () => {
         onDelete?.(session.session_id);
       },
+    });
+  };
+
+  const handleSettingsSave = () => {
+    form.validateFields().then(values => {
+      onUpdate?.(session.session_id, { description: values.title });
+      setSettingsOpen(false);
     });
   };
   const getAgentIcon = () => {
@@ -168,6 +194,18 @@ const SessionCard = ({
             style={{ cursor: 'grab' }}
           />
           <div className="nodrag">
+            {onUpdate && (
+              <Button
+                type="text"
+                size="small"
+                icon={<SettingOutlined />}
+                onClick={e => {
+                  e.stopPropagation();
+                  setSettingsOpen(true);
+                }}
+                title="Session settings"
+              />
+            )}
             {onSessionClick && (
               <Button
                 type="text"
@@ -257,6 +295,25 @@ const SessionCard = ({
           </Text>
         </div>
       </div>
+
+      {/* Settings Modal */}
+      <Modal
+        title="Session Settings"
+        open={settingsOpen}
+        onOk={handleSettingsSave}
+        onCancel={() => setSettingsOpen(false)}
+        okText="Save"
+      >
+        <Form form={form} layout="vertical" initialValues={{ title: session.description || '' }}>
+          <Form.Item
+            label="Title"
+            name="title"
+            rules={[{ required: false, message: 'Please enter a session title' }]}
+          >
+            <Input placeholder="Enter session title" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </Card>
   );
 };

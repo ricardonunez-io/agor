@@ -8,6 +8,7 @@ const { Text } = Typography;
 
 export interface NewSessionConfig {
   agent: string;
+  title?: string;
   initialPrompt?: string;
   gitBranch?: string;
   createWorktree?: boolean;
@@ -30,13 +31,14 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
 
   const handleCreate = () => {
-    form.validateFields().then((values) => {
+    form.validateFields().then(values => {
       if (!selectedAgent) {
         return;
       }
 
       onCreate({
         agent: selectedAgent,
+        title: values.title,
         initialPrompt: values.initialPrompt,
         gitBranch: values.gitBranch,
         createWorktree: values.createWorktree,
@@ -73,7 +75,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
         <Form.Item label="Select Coding Agent" required>
           <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            {availableAgents.map((agent) => (
+            {availableAgents.map(agent => (
               <AgentSelectionCard
                 key={agent.id}
                 agent={agent}
@@ -83,6 +85,14 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
               />
             ))}
           </Space>
+        </Form.Item>
+
+        <Form.Item
+          name="title"
+          label="Session Title (optional)"
+          help="A short descriptive name for this session"
+        >
+          <Input placeholder="e.g., Auth System Implementation" />
         </Form.Item>
 
         <Form.Item
