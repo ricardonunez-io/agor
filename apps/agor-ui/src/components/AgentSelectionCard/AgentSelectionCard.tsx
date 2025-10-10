@@ -41,13 +41,17 @@ export const AgentSelectionCard: React.FC<AgentSelectionCardProps> = ({
             <Text strong style={{ fontSize: '14px' }}>
               {agent.name}
             </Text>
-            {agent.installed && (
+            {agent.installed ? (
               <Tag
                 icon={<CheckCircleOutlined />}
                 color="success"
                 style={{ fontSize: '11px', padding: '0 6px' }}
               >
                 Installed
+              </Tag>
+            ) : (
+              <Tag color="orange" style={{ fontSize: '11px', padding: '0 6px' }}>
+                COMING SOON
               </Tag>
             )}
           </Space>

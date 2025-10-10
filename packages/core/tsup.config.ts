@@ -15,4 +15,6 @@ export default defineConfig({
   dts: true,
   clean: true,
   splitting: false,
+  // Don't bundle the Agent SDK - it needs to resolve its own internal files
+  external: ['@anthropic-ai/claude-agent-sdk'],
 });

@@ -103,6 +103,11 @@ function AppContent() {
           sessionId: session.session_id,
         });
         message.success('Session created and added to board!');
+
+        // If there's an initial prompt, send it to the agent
+        if (config.initialPrompt && config.initialPrompt.trim()) {
+          await handleSendPrompt(session.session_id, config.initialPrompt);
+        }
       } catch (error) {
         message.error(
           `Failed to add session to board: ${error instanceof Error ? error.message : String(error)}`

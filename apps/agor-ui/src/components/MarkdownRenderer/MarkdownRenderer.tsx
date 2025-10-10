@@ -16,7 +16,7 @@ interface MarkdownRendererProps {
   /**
    * Markdown content to render
    */
-  content: string;
+  content: string | string[];
   /**
    * If true, renders inline (without <p> wrapper)
    */
@@ -24,7 +24,15 @@ interface MarkdownRendererProps {
 }
 
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, inline = false }) => {
-  const html = inline ? md.renderInline(content) : md.render(content);
+  // Handle array of strings: filter empty, join with double newlines
+  const text = Array.isArray(content) ? content.filter(t => t.trim()).join('\n\n') : content;
+
+  let html = md.render(text);
+
+  // If inline, strip wrapping <p> tags but keep inner HTML
+  if (inline) {
+    html = html.replace(/^<p>(.*)<\/p>\n?$/s, '$1');
+  }
 
   return (
     <Typography>
