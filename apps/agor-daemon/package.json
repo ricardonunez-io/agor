@@ -23,11 +23,13 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.44.6",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
     "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.10.2",
     "concurrently": "^9.2.1",
     "tsx": "^4.19.2",

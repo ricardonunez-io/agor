@@ -66,9 +66,9 @@ export function LoginPage({ onLogin, loading = false, error }: LoginPageProps) {
               }}
             />
             <Title level={2} style={{ margin: 0 }}>
-              Welcome to Agor
+              Agor
             </Title>
-            <Text type="secondary">Agent orchestration platform</Text>
+            <Text type="secondary">Next-gen agent orchestration</Text>
           </div>
         </Space>
 

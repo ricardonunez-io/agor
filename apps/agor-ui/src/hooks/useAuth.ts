@@ -23,7 +23,8 @@ interface UseAuthReturn extends AuthState {
 }
 
 const DAEMON_URL = 'http://localhost:3030';
-const TOKEN_KEY = 'agor-jwt';
+const ACCESS_TOKEN_KEY = 'agor-access-token';
+const REFRESH_TOKEN_KEY = 'agor-refresh-token';
 
 /**
  * Authentication hook
@@ -38,14 +39,16 @@ export function useAuth(): UseAuthReturn {
   });
 
   /**
-   * Re-authenticate using stored token
+   * Re-authenticate using stored token (with automatic refresh)
    */
   const reAuthenticate = useCallback(async () => {
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      const storedToken = localStorage.getItem(TOKEN_KEY);
-      if (!storedToken) {
+      const storedAccessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+      const storedRefreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+
+      if (!storedAccessToken && !storedRefreshToken) {
         setState({
           user: null,
           accessToken: null,
@@ -56,7 +59,7 @@ export function useAuth(): UseAuthReturn {
         return;
       }
 
-      // Create temporary client to verify token
+      // Create temporary client
       const client = createClient(DAEMON_URL);
 
       // Connect the client first (since autoConnect is false)
@@ -83,25 +86,72 @@ export function useAuth(): UseAuthReturn {
         });
       });
 
-      // Try to authenticate with stored token
-      const result = await client.authenticate({
-        strategy: 'jwt',
-        accessToken: storedToken,
-      });
+      // Try to authenticate with stored access token first
+      if (storedAccessToken) {
+        try {
+          const result = await client.authenticate({
+            strategy: 'jwt',
+            accessToken: storedAccessToken,
+          });
 
+          setState({
+            user: result.user,
+            accessToken: result.accessToken,
+            authenticated: true,
+            loading: false,
+            error: null,
+          });
+
+          client.io.close();
+          return;
+        } catch (_accessTokenError) {
+          // Access token expired, try refresh token
+          console.log('Access token expired, attempting refresh...');
+        }
+      }
+
+      // Access token expired or missing, try refresh token
+      if (storedRefreshToken) {
+        try {
+          const refreshResult = await client.service('authentication/refresh').create({
+            refreshToken: storedRefreshToken,
+          });
+
+          // Store new access token
+          localStorage.setItem(ACCESS_TOKEN_KEY, refreshResult.accessToken);
+
+          setState({
+            user: refreshResult.user,
+            accessToken: refreshResult.accessToken,
+            authenticated: true,
+            loading: false,
+            error: null,
+          });
+
+          console.log('✓ Token refreshed successfully');
+          client.io.close();
+          return;
+        } catch (_refreshError) {
+          // Refresh token also expired
+          console.log('Refresh token expired, need to login again');
+        }
+      }
+
+      // Both tokens invalid or expired
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
       setState({
-        user: result.user,
-        accessToken: result.accessToken,
-        authenticated: true,
+        user: null,
+        accessToken: null,
+        authenticated: false,
         loading: false,
         error: null,
       });
-
-      // Clean up temporary client
       client.io.close();
     } catch (_error) {
-      // Token invalid or expired
-      localStorage.removeItem(TOKEN_KEY);
+      // Connection or other error
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
       setState({
         user: null,
         accessToken: null,
@@ -116,6 +166,77 @@ export function useAuth(): UseAuthReturn {
   useEffect(() => {
     reAuthenticate();
   }, [reAuthenticate]);
+
+  // Auto-refresh token 5 minutes before expiration
+  useEffect(() => {
+    if (!state.authenticated || !state.accessToken) return;
+
+    // Access token expires in 1 hour, refresh after 55 minutes
+    const REFRESH_INTERVAL = 55 * 60 * 1000; // 55 minutes in milliseconds
+
+    const refreshTimer = setInterval(async () => {
+      const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+      if (!refreshToken) {
+        console.log('No refresh token available');
+        return;
+      }
+
+      try {
+        const client = createClient(DAEMON_URL);
+        client.io.connect();
+
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Connection timeout')), 5000);
+
+          if (client.io.connected) {
+            clearTimeout(timeout);
+            resolve();
+            return;
+          }
+
+          client.io.once('connect', () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+
+          client.io.once('connect_error', err => {
+            clearTimeout(timeout);
+            reject(err);
+          });
+        });
+
+        const refreshResult = await client.service('authentication/refresh').create({
+          refreshToken,
+        });
+
+        // Store new access token
+        localStorage.setItem(ACCESS_TOKEN_KEY, refreshResult.accessToken);
+
+        setState(prev => ({
+          ...prev,
+          accessToken: refreshResult.accessToken,
+          user: refreshResult.user,
+        }));
+
+        console.log('✓ Token auto-refreshed successfully');
+        client.io.close();
+      } catch (error) {
+        console.error('Failed to auto-refresh token:', error);
+        // Token refresh failed, user needs to login again
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+        localStorage.removeItem(REFRESH_TOKEN_KEY);
+        setState({
+          user: null,
+          accessToken: null,
+          authenticated: false,
+          loading: false,
+          error: 'Session expired, please login again',
+        });
+      }
+    }, REFRESH_INTERVAL);
+
+    return () => clearInterval(refreshTimer);
+  }, [state.authenticated, state.accessToken]);
 
   /**
    * Login with email and password
@@ -158,8 +279,12 @@ export function useAuth(): UseAuthReturn {
         password,
       });
 
-      // Store token
-      localStorage.setItem(TOKEN_KEY, result.accessToken);
+      // Store both access and refresh tokens
+      localStorage.setItem(ACCESS_TOKEN_KEY, result.accessToken);
+      if (result.refreshToken) {
+        localStorage.setItem(REFRESH_TOKEN_KEY, result.refreshToken);
+        console.log('✓ Tokens stored in localStorage (access + refresh)');
+      }
 
       setState({
         user: result.user,
@@ -188,7 +313,8 @@ export function useAuth(): UseAuthReturn {
    * Logout
    */
   const logout = async () => {
-    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
     setState({
       user: null,
       accessToken: null,

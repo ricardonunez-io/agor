@@ -276,7 +276,7 @@ async function main() {
       audience: 'https://agor.dev',
       issuer: 'agor',
       algorithm: 'HS256',
-      expiresIn: '7d',
+      expiresIn: '1h', // Access token: 1 hour
     },
     local: {
       usernameField: 'email',
@@ -292,6 +292,92 @@ async function main() {
   authentication.register('anonymous', new AnonymousStrategy());
 
   app.use('/authentication', authentication);
+
+  // Hook: Add refresh token to authentication response
+  app.service('authentication').hooks({
+    after: {
+      create: [
+        async context => {
+          // Only add refresh token for non-anonymous authentication
+          if (
+            context.result &&
+            context.result.user &&
+            context.result.user.user_id !== 'anonymous'
+          ) {
+            const jwt = await import('jsonwebtoken');
+
+            // Generate refresh token (30 days)
+            const refreshToken = jwt.sign(
+              {
+                sub: context.result.user.user_id,
+                type: 'refresh',
+              },
+              jwtSecret,
+              {
+                expiresIn: '30d',
+                issuer: 'agor',
+                audience: 'https://agor.dev',
+              }
+            );
+
+            // Add refresh token to response
+            context.result.refreshToken = refreshToken;
+          }
+          return context;
+        },
+      ],
+    },
+  });
+
+  // Refresh token endpoint
+  app.use('/authentication/refresh', {
+    async create(data: { refreshToken: string }) {
+      const jwt = await import('jsonwebtoken');
+
+      try {
+        // Verify refresh token
+        const decoded = jwt.verify(data.refreshToken, jwtSecret, {
+          issuer: 'agor',
+          audience: 'https://agor.dev',
+        }) as { sub: string; type: string };
+
+        if (decoded.type !== 'refresh') {
+          throw new Error('Invalid token type');
+        }
+
+        // Get user
+        const user = await usersService.get(decoded.sub as import('@agor/core/types').UUID);
+
+        // Generate new access token
+        const accessToken = jwt.sign(
+          {
+            sub: user.user_id,
+            type: 'access',
+          },
+          jwtSecret,
+          {
+            expiresIn: '1h',
+            issuer: 'agor',
+            audience: 'https://agor.dev',
+          }
+        );
+
+        // Return new access token and user
+        return {
+          accessToken,
+          user: {
+            user_id: user.user_id,
+            email: user.email,
+            name: user.name,
+            emoji: user.emoji,
+            role: user.role,
+          },
+        };
+      } catch (error) {
+        throw new Error('Invalid or expired refresh token');
+      }
+    },
+  });
 
   // Initialize repositories for ClaudeTool
   const messagesRepo = new MessagesRepository(db);
