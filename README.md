@@ -30,13 +30,14 @@ Organize sessions on visual boards. Coordinate parallel workflows. Orchestrate c
 
 **Current capabilities:**
 
-- 📊 **Visual session canvas** - Organize AI coding sessions on drag-and-drop boards
+- 📊 **Visual session canvas** - Organize AI coding sessions on drag-and-drop boards with zones
 - 💬 **Full conversation history** - Import and browse Claude Code transcripts with task extraction
-- 👥 **Real-time collaboration** - Multi-user boards with WebSocket sync
-- 🔐 **User authentication** - Email/password login with JWT tokens
+- 👥 **Real-time collaboration** - Multi-user boards with facepile, cursor swarm, and presence indicators
+- 🔐 **User authentication** - Email/password login with JWT tokens (anonymous mode for local dev)
 - 🗄️ **Local-first storage** - SQLite database at `~/.agor/agor.db`
 - 🌐 **REST + WebSocket API** - FeathersJS daemon for programmatic access
 - 🖥️ **CLI + GUI** - Command-line tools and React-based UI
+- 🤖 **Claude Agent SDK** - Live session execution with streaming responses
 
 ---
 
@@ -234,19 +235,23 @@ See [context/concepts/architecture.md](context/concepts/architecture.md) for com
 
 ✅ Session import from Claude Code transcripts
 ✅ Task extraction from user prompts
-✅ Visual board canvas with drag-and-drop
+✅ Visual board canvas with drag-and-drop sessions and zones
 ✅ Real-time multi-user sync via WebSocket
-✅ User authentication (email/password + JWT)
+✅ User authentication (email/password + JWT + anonymous mode)
 ✅ CLI commands for sessions, boards, repos, users
 ✅ Session conversation viewer with task breakdown
 ✅ Git repository and worktree management
+✅ Multiplayer cursors and presence indicators (facepile, cursor swarm)
+✅ Claude Agent SDK integration with live execution
+✅ OpenAI Codex SDK integration (beta)
+✅ Board zones for organizing sessions visually
 
 **What's coming in Phase 3:**
 
-🔄 MCP server integration (UI + SDK)
-🔄 Session forking and genealogy visualization
-🔄 Social features (facepile, cursor swarm, presence)
+🔄 MCP server UI integration and SDK hookup
+🔄 Session forking UI and genealogy visualization
 🔄 Concept and report management
+🔄 Enhanced Codex integration (full permission system)
 
 See [PROJECT.md](PROJECT.md) for detailed roadmap.
 
@@ -326,11 +331,17 @@ See [PROJECT.md](PROJECT.md) for complete roadmap.
 - [context/concepts/architecture.md](context/concepts/architecture.md) - System design
 - [context/concepts/design.md](context/concepts/design.md) - UI/UX guidelines
 
-**Explorations:**
+**Real-Time Collaboration:**
+
+- [context/concepts/multiplayer.md](context/concepts/multiplayer.md) - Multiplayer features
+- [context/concepts/auth.md](context/concepts/auth.md) - Authentication & authorization
+- [context/concepts/websockets.md](context/concepts/websockets.md) - WebSocket sync
+
+**Future Explorations:**
 
 - [context/explorations/single-package.md](context/explorations/single-package.md) - Distribution strategy
 - [context/explorations/mcp-integration.md](context/explorations/mcp-integration.md) - MCP server design
-- [context/explorations/social-features.md](context/explorations/social-features.md) - Collaboration features
+- [context/explorations/subtask-orchestration.md](context/explorations/subtask-orchestration.md) - Multi-agent coordination
 
 ---
 

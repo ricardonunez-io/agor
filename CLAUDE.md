@@ -22,27 +22,27 @@ All architectural documentation lives in `context/`. **Start with `context/READM
 - **`context/concepts/id-management.md`** - UUIDv7 implementation, short IDs, and branded types
 - **`context/concepts/design.md`** - UI/UX standards and component patterns (for agor-ui work)
 - **`context/concepts/frontend-guidelines.md`** - React/Ant Design patterns, token-based styling, WebSocket integration
+- **`context/concepts/multiplayer.md`** - Real-time collaboration, facepile, cursor swarm, presence indicators
+- **`context/concepts/board-objects.md`** - Board layout system, zones, session pinning
+- **`context/concepts/mcp-integration.md`** - MCP server management (Phase 1-2 complete)
 
 ### Explorations (WIP/Future)
 
-For deeper dives into specific design decisions, see `context/explorations/`:
+For deeper dives into future features and design decisions, see `context/explorations/`:
 
-**Agent Integration:**
+**Future Features:**
 
-- `agent-interface.md` - Agent abstraction layer design for supporting multiple AI agents
-- `agent-abstraction-analysis.md` - Analysis of agent integration patterns and common abstractions
-- `terminology-agentic-tools.md` - Terminology definitions for agentic systems and tools
-
-**CLI & User Experience:**
-
-- `cli.md` - CLI design patterns (oclif framework, entity commands, stateful context management)
-- `conversation-design.md` - Conversational interface patterns for agent interactions
+- `worktree-ux-design.md` - Git worktree UI/UX design
 - `native-cli-feature-gaps.md` - Feature comparison between native agent CLIs and SDK capabilities
 
 **Orchestration & Coordination:**
 
 - `subtask-orchestration.md` - Multi-agent task coordination and getting agents to spawn Agor-tracked subtasks
 - `async-jobs.md` - Background job processing, queuing strategies, and long-running task management
+
+**Distribution:**
+
+- `single-package.md` - Distribution strategy (npm packages → bundled CLI → desktop app)
 
 ## Project Structure
 
@@ -419,15 +419,22 @@ pnpm agor repo list
 
 ## Implementation Status
 
-**✅ Phase 2 Complete (Multi-User Foundation):**
+**✅ Phase 2 Complete (Multi-User Foundation + Multiplayer):**
 
-- Database schema with all tables (sessions, tasks, messages, repos, boards, users, mcp_servers)
+- Database schema with all tables (sessions, tasks, messages, repos, boards, users, mcp_servers, board_objects)
 - FeathersJS daemon with REST + WebSocket broadcasting
 - User authentication (email/password + JWT) with anonymous mode
 - Real-time position sync for multi-user boards
+- **Multiplayer collaboration:**
+  - Facepile component showing active users
+  - Real-time cursor broadcasting and rendering (100ms throttle)
+  - Presence indicators with stale cursor cleanup
+  - Remote cursors visible in canvas and minimap
+- Board zones for visual organization (create, resize, pin sessions)
 - MCP server configuration and database schema
 - Claude Agent SDK integration with CLAUDE.md auto-loading
-- React Flow canvas with drag-and-drop sessions
+- OpenAI Codex SDK integration (beta, with permission system)
+- React Flow canvas with drag-and-drop sessions and zones
 - User management UI with emoji avatars
 - SessionDrawer with conversation view and task preview
 - CLI with full CRUD operations (sessions, repos, boards, users, config)
@@ -438,9 +445,9 @@ pnpm agor repo list
 
 - MCP server UI integration (settings modal, session enablement)
 - Hook MCP servers to Claude Agent SDK
-- Social collaboration features (facepile, cursor swarm, presence indicators)
 - Session forking UI and genealogy visualization
 - Concept management and report generation
+- Enhanced Codex permission modes (untrusted, on-request, on-failure, never)
 
 See `PROJECT.md` for detailed roadmap.
 

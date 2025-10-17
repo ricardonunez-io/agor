@@ -13,29 +13,31 @@ This document describes the **parent-child locking** feature for board objects, 
 
 **Board Objects Foundation:**
 
-- **Zone Rectangles** - Resizable colored regions (`ZoneNode` component in `apps/agor-ui/src/components/SessionCanvas/canvas/BoardObjectNodes.tsx`)
-- **Real-time Sync** - WebSocket broadcasting via daemon service hooks (`apps/agor-daemon/src/index.ts:310-344`)
-- **Atomic Updates** - Backend methods (`upsertBoardObject`, `removeBoardObject`, `batchUpsertBoardObjects` in `packages/core/src/db/repositories/boards.ts`)
-- **Drag-to-draw zones** - Tool in SessionCanvas with keyboard shortcuts (Z, E, Esc, Delete)
-- **Storage** - `board.objects` JSON dictionary in database, `board.layout` for session positions
+- ✅ **Zone Rectangles** - Resizable colored regions with labels and colors
+- ✅ **Real-time Sync** - WebSocket broadcasting via daemon service hooks
+- ✅ **Atomic Updates** - Backend methods for CRUD operations
+- ✅ **Drag-to-draw zones** - Tool in SessionCanvas with keyboard shortcuts (Z, E, Esc, Delete)
+- ✅ **Storage** - `board.objects` JSON dictionary in database, `board.layout` for session positions
 
-**Parent-Child Locking:**
+**Parent-Child Locking (Session Pinning):**
 
-- **Drop-to-pin** - Sessions automatically pin to zones when dropped inside
-- **Pin indicator** - Pin icon replaces drag handle when session is pinned
-- **Unpin button** - Click pin icon to unpin from zone
-- **Coordinate conversion** - Automatic relative ↔ absolute position conversion
-- **Zone movement** - Pinned sessions move with their parent zone (React Flow native)
-- **Visual feedback** - Pinned sessions show zone color border
+- ✅ **Drop-to-pin** - Sessions automatically pin to zones when dropped inside
+- ✅ **Pin indicator** - Pin icon replaces drag handle when session is pinned
+- ✅ **Unpin button** - Click pin icon to unpin from zone
+- ✅ **Coordinate conversion** - Automatic relative ↔ absolute position conversion
+- ✅ **Zone movement** - Pinned sessions move with their parent zone (React Flow native)
+- ✅ **Visual feedback** - Pinned sessions show 1px zone-colored border
 
 **Zone Triggers with Handlebars:**
 
-- **Trigger types** - Prompt, Task, Subtask
-- **Handlebars templates** - Dynamic prompt generation from session data
-- **Session context** - Access `issue_url`, `pull_request_url`, `description`, and custom context
-- **Custom context** - User-defined JSON fields accessible via `{{ session.context.* }}`
-- **Trigger confirmation** - Modal prompts before executing trigger
-- **Template rendering** - Graceful fallback if template fails
+- ✅ **Trigger types** - Prompt, Task, Subtask (unified `/sessions/:id/prompt` endpoint)
+- ✅ **Handlebars templates** - Dynamic prompt generation from session data
+- ✅ **Session context** - Access `issue_url`, `pull_request_url`, `description`, and custom context
+- ✅ **Custom context** - User-defined JSON fields accessible via `{{ session.context.* }}`
+- ✅ **Trigger confirmation** - Modal prompts before executing trigger
+- ✅ **Template rendering** - Graceful fallback if template fails
+- ✅ **Session Settings UI** - Modal for editing issue URLs, PR URLs, and custom context JSON
+- ✅ **Zone Config UI** - Modal for configuring triggers with Handlebars help text
 
 ---
 

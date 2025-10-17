@@ -23,21 +23,17 @@ This directory contains modular knowledge files that document Agor's concepts, a
 - **[websockets.md](concepts/websockets.md)** - Real-time communication with FeathersJS/Socket.io, progressive streaming, future scalability
 - **[agent-integration.md](concepts/agent-integration.md)** - Claude Agent SDK integration, session continuity, live execution
 - **[auth.md](concepts/auth.md)** - Authentication & authorization, anonymous-first, JWT/Local strategies, user attribution
+- **[multiplayer.md](concepts/multiplayer.md)** - Real-time collaboration, facepile, cursor swarm, presence indicators
+- **[board-objects.md](concepts/board-objects.md)** - Board layout system, zones, session pinning, visual organization
+- **[mcp-integration.md](concepts/mcp-integration.md)** - MCP server management, CRUD UI/CLI, session-level selection
 
 ### Explorations (Work in Progress)
 
 Experimental ideas and designs not yet crystallized into concepts. These represent active thinking and may graduate to `concepts/` when ready:
 
-**Agent Integration:**
+**Future Features:**
 
-- **[agent-interface.md](explorations/agent-interface.md)** - Agent abstraction layer design for supporting multiple AI agents (Claude Code, Cursor, Codex, Gemini)
-- **[agent-abstraction-analysis.md](explorations/agent-abstraction-analysis.md)** - Analysis of agent integration patterns and common abstractions
-- **[terminology-agentic-tools.md](explorations/terminology-agentic-tools.md)** - Terminology definitions for agentic systems and tools
-
-**CLI & User Experience:**
-
-- **[cli.md](explorations/cli.md)** - CLI design patterns (oclif framework, entity commands, stateful context management)
-- **[conversation-design-future.md](explorations/conversation-design-future.md)** - Advanced conversation UI features (tool blocks, LLM enrichment, pattern detection)
+- **[worktree-ux-design.md](explorations/worktree-ux-design.md)** - Git worktree UI/UX design
 - **[native-cli-feature-gaps.md](explorations/native-cli-feature-gaps.md)** - Feature comparison between native agent CLIs and SDK capabilities
 
 **Orchestration & Coordination:**
@@ -45,9 +41,10 @@ Experimental ideas and designs not yet crystallized into concepts. These represe
 - **[subtask-orchestration.md](explorations/subtask-orchestration.md)** - Multi-agent task coordination and getting agents to spawn Agor-tracked subtasks
 - **[async-jobs.md](explorations/async-jobs.md)** - Background job processing, queuing strategies, and long-running task management
 
-**Multiplayer & Collaboration:**
+**Distribution & Launch:**
 
-- **[multiplayer-auth.md](explorations/multiplayer-auth.md)** - Phase 3 cloud deployment planning (OAuth, organizations, RBAC, API tokens)
+- **[single-package.md](explorations/single-package.md)** - Distribution strategy (bundled CLI + daemon + UI into single npm package)
+- **[docs-website.md](explorations/docs-website.md)** - Documentation website with Nextra (user guides, REST API reference, MDX support)
 
 **Lifecycle:** `explorations/` → `concepts/` when design is validated and ready to be official
 

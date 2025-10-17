@@ -1,35 +1,31 @@
 ## Implementation Status
 
-### Social features
+### ✅ Phase 2 Complete: Multi-User Foundation + Multiplayer
 
-See [context/explorations/social-features.md](context/explorations/social-features.md) for detailed implementation plan.
+See [context/concepts/multiplayer.md](context/concepts/multiplayer.md) and [context/concepts/mcp-integration.md](context/concepts/mcp-integration.md) for full documentation.
 
-**Goal:** Add presence indicators so teammates can see what each other is doing in real-time.
+**Completed Features:**
 
-- [ ] **Facepile** - Show active users on board (1-2 days)
-  - PresenceManager service in daemon
-  - `board:join` / `board:leave` WebSocket events
-  - `usePresence()` hook in UI
-  - Ant Design `Avatar.Group` component in canvas header
+- ✅ **User Authentication** - Email/password + JWT, anonymous mode
+- ✅ **Real-time collaboration** - Multi-user boards with WebSocket sync
+- ✅ **Board zones** - Visual organization with Handlebars triggers (Prompt/Task/Subtask)
+- ✅ **Facepile** - Active users with emoji avatars in header
+- ✅ **Cursor swarm** - Real-time cursor broadcasting (100ms throttle)
+  - Remote cursors visible in canvas and minimap
+  - Smooth position transitions with timestamp-based ordering
+- ✅ **MCP server integration** - Phase 1-2 complete
+  - Database schema + repositories + services
+  - MCPServersTable UI with full CRUD
+  - MCPServerSelect for session-level selection
+  - CLI commands: `agor mcp add/list/show/remove`
+- ✅ **Claude Agent SDK** - Live session execution with streaming
+- ✅ **OpenAI Codex SDK** - Beta integration with permission modes
 
-- [ ] **Cursor swarm** - Real-time cursor positions (2-3 days)
-  - `cursor:move` / `cursor:update` events (throttled to 50ms)
-  - `useCursorBroadcast()` and `useRemoteCursors()` hooks
-  - CursorOverlay component with smooth interpolation
-  - Use React Flow project() for coordinate mapping
+### Phase 3: Collaboration & Orchestration
 
-- [ ] **Presence indicators** - Who's viewing which sessions (1 day)
-  - `viewing:session` events
-  - Mini avatar badges on session cards
-  - Tooltip showing viewer names
+**Goal:** Complete fork/spawn workflow and advanced presence features.
 
-- [ ] **Typing indicators** - Who's prompting (1 day)
-  - `typing:start` / `typing:stop` events
-  - "User is typing..." below prompt input
-
-### Phase 3c: Session Orchestration (2-3 weeks)
-
-**Goal:** Complete the core fork/spawn workflow for parallel session management.
+**Orchestration (2-3 weeks):**
 
 - [ ] **Session forking UI** - Fork sessions at decision points
   - Wire fork button to `/sessions/:id/fork` API
@@ -40,6 +36,25 @@ See [context/explorations/social-features.md](context/explorations/social-featur
   - React Flow edges between parent/child/forked sessions
   - Different edge styles (solid spawn, dashed fork)
   - Click edge to see fork/spawn context
+
+**Presence indicators (1-2 weeks):**
+
+- [ ] **Session viewers** - Who's viewing which sessions
+  - `viewing:session` events
+  - Mini avatar badges on session cards
+  - Tooltip showing viewer names
+
+- [ ] **Typing indicators** - Who's prompting
+  - `typing:start` / `typing:stop` events
+  - "User is typing..." below prompt input
+
+**MCP Phase 3 (2-3 weeks):**
+
+- [ ] **SDK integration** - Pass MCP servers to agent
+  - Convert Agor configs to SDK format
+  - Enable agents to use configured MCP tools
+- [ ] **Import/export** - Auto-discover `.mcp.json` from Claude Code
+- [ ] **Testing & discovery** - Verify connectivity, auto-detect capabilities
 
 ### Phase 4: Distribution & Packaging (Q2-Q4 2025)
 
@@ -78,23 +93,50 @@ See [context/explorations/single-package.md](context/explorations/single-package
 
 See [context/explorations/](context/explorations/) for detailed designs:
 
-- **OAuth & organizations** ([multiplayer-auth.md](context/explorations/multiplayer-auth.md)) - GitHub/Google login, team workspaces, RBAC
-- **Multi-agent support** ([agent-interface.md](context/concepts/agent-integration.md)) - Cursor, Codex, Gemini
+- **OAuth & organizations** - GitHub/Google login, team workspaces, RBAC
+- **Multi-agent support** ([agent-integration.md](context/concepts/agent-integration.md)) - Cursor, Gemini
 - **Cloud deployment** - PostgreSQL migration, Turso/Supabase, hosted version
+- **Worktree UX** ([worktree-ux-design.md](context/explorations/worktree-ux-design.md)) - Git worktree management UI
 
-# Critical path
+---
 
-- test/improve Codex sdk integration
-- attach proper git sha to tasks: what was the latest commit when the task was created, mark whether -dirty or not
-- integrate concepts and reports in the information architecture
-- proper tool uses for codex, also improve storybook for various common tools, start thinking about the todo tool and the write (diff) tool too!
-- write doc website
+# Critical Path
 
-# Nice to have
+**Agent Integration:**
 
-- get Gemini to work
-- allow attaching a PR link to the session metadata, add a text field to the "session settings"
-- show token count and $ (if it applies) per task/session
-- concept management (CRUD/CLI) shows as readonly - many-to-many per session
-- report management + production system
-- `@`-trigerred autocomplete ?
+- ✅ Claude Agent SDK - live execution with streaming
+- ✅ Codex SDK - beta integration with permission modes
+- ⏳ **Improve Codex SDK integration** - test/refine permission handling, tool uses
+- [ ] **Get Gemini to work** - integrate Gemini SDK similar to Claude/Codex
+
+**Information Architecture:**
+
+- ⏳ **Git state tracking** - attach proper git sha to tasks (latest commit when created, mark -dirty)
+- ⏳ **Concepts & Reports** - integrate in UI/CLI as first-class primitives
+  - Concept management (CRUD/CLI) - many-to-many per session, shows as readonly
+  - Report management + production system
+
+**Tool Visualization:**
+
+- ✅ Task-centric conversation UI
+- ✅ Tool blocks with semantic grouping
+- ⏳ **Improve tool blocks** - better Storybook coverage for common tools
+- ⏳ **Todo tool visualization** - render task list with checkboxes
+- ⏳ **Write (diff) tool** - show file changes with syntax highlighting
+
+**Distribution:**
+
+- [ ] **Doc website** - Nextra-based documentation site (see [docs-website.md](context/explorations/docs-website.md))
+  - User guides (getting started, features, workflows)
+  - Auto-generated REST API docs (OpenAPI)
+  - CLI reference (oclif self-documenting)
+  - Architecture docs (adapted from concepts/)
+  - Deploy to docs.agor.dev (Vercel)
+
+# Nice to Have
+
+- ✅ PR/Issue URL fields in session metadata
+- [ ] **Token count & cost** - show $ per task/session (when applicable)
+- [ ] **`@`-triggered autocomplete** - mention sessions, repos, concepts
+- [ ] **Session viewers** - mini avatar badges on cards showing who's viewing
+- [ ] **Typing indicators** - "User is typing..." in prompt input
