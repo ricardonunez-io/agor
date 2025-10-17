@@ -43,8 +43,8 @@ export const SessionSettingsModal: React.FC<SessionSettingsModalProps> = ({
   // Reset form values when modal opens or props change
   React.useEffect(() => {
     if (open) {
-      // Get default permission mode based on agent type
-      const defaultPermissionMode = session.agent === 'codex' ? 'auto' : 'acceptEdits';
+      // Get default permission mode based on agentic tool type
+      const defaultPermissionMode = session.agentic_tool === 'codex' ? 'auto' : 'acceptEdits';
 
       form.setFieldsValue({
         title: session.description || '',
@@ -61,7 +61,7 @@ export const SessionSettingsModal: React.FC<SessionSettingsModalProps> = ({
   }, [
     open,
     session.description,
-    session.agent,
+    session.agentic_tool,
     sessionMcpServerIds,
     session.model_config,
     session.permission_config?.mode,
@@ -161,7 +161,8 @@ export const SessionSettingsModal: React.FC<SessionSettingsModalProps> = ({
           mcpServerIds: sessionMcpServerIds,
           modelConfig: session.model_config,
           permissionMode:
-            session.permission_config?.mode || (session.agent === 'codex' ? 'auto' : 'acceptEdits'),
+            session.permission_config?.mode ||
+            (session.agentic_tool === 'codex' ? 'auto' : 'acceptEdits'),
           issue_url: session.issue_url || '',
           pull_request_url: session.pull_request_url || '',
           custom_context: session.custom_context
@@ -204,17 +205,17 @@ export const SessionSettingsModal: React.FC<SessionSettingsModalProps> = ({
 
         <Form.Item
           name="modelConfig"
-          label={session.agent === 'codex' ? 'Codex Model' : 'Claude Model'}
+          label={session.agentic_tool === 'codex' ? 'Codex Model' : 'Claude Model'}
         >
-          <ModelSelector agent={session.agent} />
+          <ModelSelector agentic_tool={session.agentic_tool} />
         </Form.Item>
 
         <Form.Item
           name="permissionMode"
           label="Permission Mode"
-          help="Control how the agent handles tool execution approvals"
+          help="Control how the agentic tool handles tool execution approvals"
         >
-          <PermissionModeSelector agent={session.agent} />
+          <PermissionModeSelector agentic_tool={session.agentic_tool} />
         </Form.Item>
 
         <Divider />

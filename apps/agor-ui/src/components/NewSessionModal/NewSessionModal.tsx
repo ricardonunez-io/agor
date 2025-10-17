@@ -321,7 +321,9 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                       (selectedAgent as CoreAgentName) || 'claude-code'
                     )}
                   >
-                    <PermissionModeSelector agent={(selectedAgent as AgentName) || 'claude-code'} />
+                    <PermissionModeSelector
+                      agentic_tool={(selectedAgent as AgentName) || 'claude-code'}
+                    />
                   </Form.Item>
 
                   <Form.Item

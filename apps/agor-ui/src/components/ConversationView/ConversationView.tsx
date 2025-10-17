@@ -31,9 +31,9 @@ export interface ConversationViewProps {
   sessionId: SessionID | null;
 
   /**
-   * Agent/tool name for showing tool icon
+   * Agentic tool name for showing tool icon
    */
-  agent?: string;
+  agentic_tool?: string;
 
   /**
    * All users for emoji avatars
@@ -65,7 +65,7 @@ export interface ConversationViewProps {
 export const ConversationView: React.FC<ConversationViewProps> = ({
   client,
   sessionId,
-  agent,
+  agentic_tool,
   users = [],
   currentUserId,
   onScrollRef,
@@ -172,7 +172,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           key={task.task_id}
           task={task}
           messages={taskMessages}
-          agent={agent}
+          agentic_tool={agentic_tool}
           users={users}
           currentUserId={currentUserId}
           // Expand only the last task by default

@@ -39,7 +39,7 @@ const SessionHeader = ({ session, onClick, showCounts = true }: SessionHeaderPro
       codex: '💻',
       gemini: '💎',
     };
-    return agentIcons[session.agent] || '🤖';
+    return agentIcons[session.agentic_tool] || '🤖';
   };
 
   const isForked = !!session.genealogy.forked_from_session_id;
@@ -77,7 +77,7 @@ const SessionHeader = ({ session, onClick, showCounts = true }: SessionHeaderPro
         <Space size={token.sizeUnit} align="center">
           <span style={{ fontSize: 20, lineHeight: 1 }}>{getAgentIcon()}</span>
           <Text strong style={{ textTransform: 'capitalize' }}>
-            {session.agent}
+            {session.agentic_tool}
           </Text>
           {session.status === 'running' ? (
             <Spin indicator={<LoadingOutlined spin style={{ fontSize: 12 }} />} />

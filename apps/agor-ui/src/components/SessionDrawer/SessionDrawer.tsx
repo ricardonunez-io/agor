@@ -91,7 +91,7 @@ const SessionDrawer = ({
   }, []);
 
   const [permissionMode, setPermissionMode] = React.useState<PermissionMode>(
-    session?.permission_config?.mode || getDefaultPermissionMode(session?.agent)
+    session?.permission_config?.mode || getDefaultPermissionMode(session?.agentic_tool)
   );
   const [scrollToBottom, setScrollToBottom] = React.useState<(() => void) | null>(null);
 
@@ -99,11 +99,11 @@ const SessionDrawer = ({
   React.useEffect(() => {
     if (session?.permission_config?.mode) {
       setPermissionMode(session.permission_config.mode);
-    } else if (session?.agent) {
-      // Set default based on agent type if no permission mode is configured
-      setPermissionMode(getDefaultPermissionMode(session.agent));
+    } else if (session?.agentic_tool) {
+      // Set default based on agentic tool type if no permission mode is configured
+      setPermissionMode(getDefaultPermissionMode(session.agentic_tool));
     }
-  }, [session?.permission_config?.mode, session?.agent, getDefaultPermissionMode]);
+  }, [session?.permission_config?.mode, session?.agentic_tool, getDefaultPermissionMode]);
 
   // Scroll to bottom when drawer opens
   React.useEffect(() => {
@@ -177,11 +177,11 @@ const SessionDrawer = ({
     <Drawer
       title={
         <Space size={12} align="center">
-          <ToolIcon tool={session.agent} size={40} />
+          <ToolIcon tool={session.agentic_tool} size={40} />
           <div>
             <div>
               <Text strong style={{ fontSize: 16 }}>
-                {session.agent}
+                {session.agentic_tool}
               </Text>
               <Badge
                 status={getStatusColor()}
@@ -303,7 +303,7 @@ const SessionDrawer = ({
         <ConversationView
           client={client}
           sessionId={session.session_id}
-          agent={session.agent}
+          agentic_tool={session.agentic_tool}
           users={users}
           currentUserId={currentUserId}
           onScrollRef={setScrollToBottom}
@@ -345,11 +345,11 @@ const SessionDrawer = ({
               <ToolCountPill count={session.tool_use_count} />
             </Space>
             <Space size={8}>
-              {/* Permission Mode Selector - Agent-specific options */}
+              {/* Permission Mode Selector - Agentic tool-specific options */}
               <PermissionModeSelector
                 value={permissionMode}
                 onChange={handlePermissionModeChange}
-                agent={session.agent}
+                agentic_tool={session.agentic_tool}
                 compact
                 size="small"
                 width={200}

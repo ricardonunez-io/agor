@@ -40,7 +40,7 @@ export const SessionListDrawer: React.FC<SessionListDrawerProps> = ({
   const filteredSessions = boardSessions.filter(
     session =>
       session.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      session.agent.toLowerCase().includes(searchQuery.toLowerCase())
+      session.agentic_tool.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const getStatusColor = (status: Session['status']) => {
@@ -132,17 +132,17 @@ export const SessionListDrawer: React.FC<SessionListDrawerProps> = ({
               }}
             >
               <List.Item.Meta
-                avatar={<span style={{ fontSize: 24 }}>{getAgentIcon(session.agent)}</span>}
+                avatar={<span style={{ fontSize: 24 }}>{getAgentIcon(session.agentic_tool)}</span>}
                 title={
                   <Space size={8}>
-                    <Text strong>{session.description || session.agent}</Text>
+                    <Text strong>{session.description || session.agentic_tool}</Text>
                     <Badge status={getStatusColor(session.status)} />
                   </Space>
                 }
                 description={
                   <Space direction="vertical" size={2} style={{ width: '100%' }}>
                     <Text type="secondary" style={{ fontSize: 12 }}>
-                      {session.agent} • {session.tasks.length}{' '}
+                      {session.agentic_tool} • {session.tasks.length}{' '}
                       {session.tasks.length === 1 ? 'task' : 'tasks'}
                     </Text>
                     <Text type="secondary" style={{ fontSize: 12 }}>

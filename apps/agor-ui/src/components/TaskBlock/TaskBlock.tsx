@@ -45,7 +45,7 @@ type PermissionScope = 'once' | 'session' | 'project';
 interface TaskBlockProps {
   task: Task;
   messages: Message[];
-  agent?: string;
+  agentic_tool?: string;
   users?: User[];
   currentUserId?: string;
   defaultExpanded?: boolean;
@@ -133,7 +133,7 @@ function groupMessagesIntoBlocks(messages: Message[]): Block[] {
 export const TaskBlock: React.FC<TaskBlockProps> = ({
   task,
   messages,
-  agent,
+  agentic_tool,
   users = [],
   currentUserId,
   defaultExpanded = false,
@@ -272,7 +272,7 @@ export const TaskBlock: React.FC<TaskBlockProps> = ({
                     <MessageBlock
                       key={block.message.message_id}
                       message={block.message}
-                      agent={agent}
+                      agentic_tool={agentic_tool}
                       users={users}
                       currentUserId={task.created_by}
                       isTaskRunning={task.status === 'running'}
@@ -293,8 +293,8 @@ export const TaskBlock: React.FC<TaskBlockProps> = ({
                   <Bubble
                     placement="start"
                     avatar={
-                      agent ? (
-                        <ToolIcon tool={agent} size={32} />
+                      agentic_tool ? (
+                        <ToolIcon tool={agentic_tool} size={32} />
                       ) : (
                         <Avatar
                           icon={<RobotOutlined />}

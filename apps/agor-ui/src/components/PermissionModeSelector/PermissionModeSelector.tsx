@@ -13,7 +13,7 @@ const { Text } = Typography;
 export interface PermissionModeSelectorProps {
   value?: PermissionMode;
   onChange?: (value: PermissionMode) => void;
-  agent?: 'claude-code' | 'cursor' | 'codex' | 'gemini';
+  agentic_tool?: 'claude-code' | 'cursor' | 'codex' | 'gemini';
   /** If true, renders as a compact Select dropdown instead of Radio buttons */
   compact?: boolean;
   /** Size for compact mode */
@@ -101,16 +101,16 @@ const CODEX_MODES: {
 export const PermissionModeSelector: React.FC<PermissionModeSelectorProps> = ({
   value = 'auto',
   onChange,
-  agent = 'claude-code',
+  agentic_tool = 'claude-code',
   compact = false,
   size = 'middle',
   width = 200,
 }) => {
-  // Select modes based on agent type
-  const modes = agent === 'codex' ? CODEX_MODES : CLAUDE_CODE_MODES;
+  // Select modes based on agentic tool type
+  const modes = agentic_tool === 'codex' ? CODEX_MODES : CLAUDE_CODE_MODES;
 
-  // Get default value based on agent type
-  const defaultValue = agent === 'codex' ? 'auto' : 'acceptEdits';
+  // Get default value based on agentic tool type
+  const defaultValue = agentic_tool === 'codex' ? 'auto' : 'acceptEdits';
   const effectiveValue = value || defaultValue;
 
   // Compact mode: render as Select dropdown

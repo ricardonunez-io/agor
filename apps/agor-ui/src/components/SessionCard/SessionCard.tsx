@@ -143,10 +143,10 @@ const SessionCard = ({
       >
         <Space size={8} align="center">
           <div className="drag-handle" style={{ display: 'flex', alignItems: 'center' }}>
-            <ToolIcon tool={session.agent} size={32} />
+            <ToolIcon tool={session.agentic_tool} size={32} />
           </div>
           <Text strong className="nodrag">
-            {session.agent}
+            {session.agentic_tool}
           </Text>
           {session.status === 'running' ? (
             <Spin indicator={<LoadingOutlined spin style={{ fontSize: 14 }} />} />

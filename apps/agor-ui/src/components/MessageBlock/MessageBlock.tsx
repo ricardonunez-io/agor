@@ -44,7 +44,7 @@ interface MessageBlockProps {
   users?: User[];
   currentUserId?: string;
   isTaskRunning?: boolean; // Whether the task is running (for loading state)
-  agent?: string; // Agent/tool name for showing tool icon
+  agentic_tool?: string; // Agentic tool name for showing tool icon
 }
 
 export const MessageBlock: React.FC<MessageBlockProps> = ({
@@ -52,7 +52,7 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({
   users = [],
   currentUserId,
   isTaskRunning = false,
-  agent,
+  agentic_tool,
 }) => {
   const { token } = theme.useToken();
   const isUser = message.role === 'user';
@@ -162,8 +162,8 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({
                 <Avatar style={{ backgroundColor: token.colorPrimary, fontSize: '20px' }}>
                   {userEmoji}
                 </Avatar>
-              ) : agent ? (
-                <ToolIcon tool={agent} size={32} />
+              ) : agentic_tool ? (
+                <ToolIcon tool={agentic_tool} size={32} />
               ) : (
                 <Avatar icon={<RobotOutlined />} style={{ backgroundColor: token.colorSuccess }} />
               )
@@ -201,8 +201,8 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({
           <Bubble
             placement="start"
             avatar={
-              agent ? (
-                <ToolIcon tool={agent} size={32} />
+              agentic_tool ? (
+                <ToolIcon tool={agentic_tool} size={32} />
               ) : (
                 <Avatar icon={<RobotOutlined />} style={{ backgroundColor: token.colorSuccess }} />
               )

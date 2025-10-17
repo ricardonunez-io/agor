@@ -13,7 +13,8 @@ export interface ModelConfig {
 export interface ModelSelectorProps {
   value?: ModelConfig;
   onChange?: (config: ModelConfig) => void;
-  agent?: 'claude-code' | 'cursor' | 'codex' | 'gemini';
+  agent?: 'claude-code' | 'cursor' | 'codex' | 'gemini'; // Kept as 'agent' for backwards compat in prop name
+  agentic_tool?: 'claude-code' | 'cursor' | 'codex' | 'gemini';
 }
 
 // Codex model options
@@ -40,10 +41,12 @@ const CODEX_MODEL_OPTIONS = [
 export const ModelSelector: React.FC<ModelSelectorProps> = ({
   value,
   onChange,
-  agent = 'claude-code',
+  agent,
+  agentic_tool,
 }) => {
-  // Determine which model list to use based on agent
-  const isCodex = agent === 'codex';
+  // Determine which model list to use based on agentic_tool (with backwards compat for agent prop)
+  const effectiveTool = agentic_tool || agent || 'claude-code';
+  const isCodex = effectiveTool === 'codex';
   const modelList = isCodex ? CODEX_MODEL_OPTIONS : AVAILABLE_CLAUDE_MODEL_ALIASES;
 
   // Determine initial mode based on whether the value is in the aliases list
