@@ -22,6 +22,7 @@ This directory contains modular knowledge files that document Agor's concepts, a
 - **[llm-enrichment.md](concepts/llm-enrichment.md)** - AI-powered session analysis, summaries, pattern detection, quality insights
 - **[websockets.md](concepts/websockets.md)** - Real-time communication with FeathersJS/Socket.io, progressive streaming, future scalability
 - **[agent-integration.md](concepts/agent-integration.md)** - Claude Agent SDK integration, session continuity, live execution
+- **[agentic-coding-tool-integrations.md](concepts/agentic-coding-tool-integrations.md)** - Feature comparison matrix for Claude Code, Codex, and Gemini integrations
 - **[auth.md](concepts/auth.md)** - Authentication & authorization, anonymous-first, JWT/Local strategies, user attribution
 - **[multiplayer.md](concepts/multiplayer.md)** - Real-time collaboration, facepile, cursor swarm, presence indicators
 - **[board-objects.md](concepts/board-objects.md)** - Board layout system, zones, session pinning, zone triggers with Handlebars
@@ -47,11 +48,19 @@ Experimental ideas and designs not yet crystallized into concepts. These represe
 - **[single-package.md](explorations/single-package.md)** - Distribution strategy (bundled CLI + daemon + UI into single npm package)
 - **[docs-website.md](explorations/docs-website.md)** - Documentation website with Nextra (user guides, REST API reference, MDX support)
 
-**Agent SDK Research:**
+**Onboarding & UX:**
 
-- **[gemini.md](explorations/gemini.md)** - Google Gemini CLI SDK discovery and integration analysis
+- **[init-experience.md](explorations/init-experience.md)** - Init flow, auth checking, API key management, tool availability UI patterns
 
 **Lifecycle:** `explorations/` → `concepts/` when design is validated and ready to be official
+
+### Archives
+
+Historical documentation and completed research preserved for reference:
+
+- **[gemini-integration-research.md](archives/gemini-integration-research.md)** - Gemini CLI SDK discovery process, API analysis, and integration decisions (completed Oct 2025)
+
+**Purpose:** Archives preserve the research journey and decision-making context for completed features. They're valuable for understanding "why" things were built certain ways.
 
 ### Primitives (Deep Dives)
 
