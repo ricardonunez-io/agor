@@ -282,27 +282,29 @@ Session A (Claude Code, feature-auth worktree)
 
 ## Product Philosophy & Roadmap
 
-**Current Phase: Multiplayer Foundation Complete**
+**Current Phase: Core Platform Complete** ✅
 
 - ✅ Real-time collaboration (cursor broadcasting, facepiles, presence)
 - ✅ Spatial canvas with zones and session pinning
-- ✅ Multi-agent support (Claude Code, Codex, Gemini SDKs)
+- ✅ Multi-agent support (Claude Code, Codex SDKs, Gemini in progress)
 - ✅ User authentication and board management
-- ✅ MCP server configuration and database schema
+- ✅ **MCP integration** – settings UI, session-level selection, Claude SDK hookup
+- ✅ **Zone triggers** – drop sessions on zones to launch templated workflows
+- ✅ **Git worktree management** – visual labels, isolated workspaces per session
 
 **Near-Term Roadmap:**
 
+- 🔄 **Gemini SDK Integration** – complete the agent trio (in progress)
 - 🔄 **Session Forking UI** – interactive genealogy visualization
 - 🧾 **Reports** – automated summaries after each task
-- 📚 **Concept Management** – structured context system
-- 🧠 **MCP Integration** – shared configuration across agents
-- ⚙️ **Zone Triggers** – spatial workflow automation
+- 📚 **Concept Management** – structured context system UI
 
 **Future Vision:**
 
 - 🌍 **Federated Boards** – share, remix, and learn from others
 - 🤖 **Cross-Agent Orchestration** – hybrid Claude–Codex–Gemini workflows
 - 📊 **Knowledge Maps** – visualize all AI interactions across projects
+- 🎯 **Advanced Zone Triggers** – conditional workflows, multi-step pipelines
 
 ---
 

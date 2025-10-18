@@ -216,11 +216,23 @@ pnpm agor session load-claude <session-id>
 
 ## 🧭 Roadmap Highlights
 
-- **🔄 Session Forking UI** – interactive genealogy visualization
-- **🧾 Reports** – automated summaries after each task
-- **📚 Concept Management** – structured context system
-- **🧠 MCP Integration** – shared configuration across agents
-- **🌍 Federated Boards** – share, remix, and learn from others
+**✅ Shipped:**
+
+- **Zone Triggers** – drop sessions on zones to launch templated workflows
+- **MCP Integration** – settings UI, session-level selection, working with Claude SDK
+- **Git Worktrees** – visual labels, isolated workspaces per session
+- **Multiplayer** – real-time cursors, facepiles, presence indicators
+
+**🔄 In Progress:**
+
+- **Gemini Integration** – completing the agent trio
+
+**📋 Coming Soon:**
+
+- **Session Forking UI** – interactive genealogy visualization
+- **Reports** – automated summaries after each task
+- **Concept Management** – structured context system
+- **Federated Boards** – share, remix, and learn from others
 
 ---
 

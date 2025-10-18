@@ -440,7 +440,7 @@ pnpm agor repo list
 
 ## Implementation Status
 
-**✅ Phase 2 Complete (Multi-User Foundation + Multiplayer):**
+**✅ Phase 2 Complete (Multi-User Foundation + Multiplayer + Core Features):**
 
 - Database schema with all tables (sessions, tasks, messages, repos, boards, users, mcp_servers, board_objects)
 - FeathersJS daemon with REST + WebSocket broadcasting
@@ -451,8 +451,20 @@ pnpm agor repo list
   - Real-time cursor broadcasting and rendering (100ms throttle)
   - Presence indicators with stale cursor cleanup
   - Remote cursors visible in canvas and minimap
-- Board zones for visual organization (create, resize, pin sessions)
-- MCP server configuration and database schema
+- **Zone triggers:** ✅
+  - Create, resize, color, and configure zones on canvas
+  - Pin/unpin sessions to zones
+  - Drop sessions on zones to trigger templated prompts
+  - Visual organization with kanban-style workflows
+- **MCP integration:** ✅
+  - MCP server configuration UI in settings modal
+  - Session-level MCP server selection
+  - Database schema and CRUD operations
+  - Hooked into Claude Agent SDK
+- **Git worktree management:** ✅
+  - Worktree creation and tracking
+  - Visual worktree labels in session headers
+  - Isolated git workspaces per session
 - Claude Agent SDK integration with CLAUDE.md auto-loading
 - OpenAI Codex SDK integration (beta, with permission system)
 - React Flow canvas with drag-and-drop sessions and zones
@@ -464,11 +476,11 @@ pnpm agor repo list
 
 **🔄 Phase 3 Next Steps:**
 
-- MCP server UI integration (settings modal, session enablement)
-- Hook MCP servers to Claude Agent SDK
+- Gemini SDK integration (in progress)
 - Session forking UI and genealogy visualization
 - Concept management and report generation
 - Enhanced Codex permission modes (untrusted, on-request, on-failure, never)
+- Automated report generation after task completion
 
 See `PROJECT.md` for detailed roadmap.
 

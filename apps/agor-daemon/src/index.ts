@@ -19,7 +19,7 @@ import {
   TaskRepository,
 } from '@agor/core/db';
 import { type PermissionDecision, PermissionService } from '@agor/core/permissions';
-import { ClaudeTool, CodexTool } from '@agor/core/tools';
+import { ClaudeTool, CodexTool, GeminiTool } from '@agor/core/tools';
 import type { SessionID, User } from '@agor/core/types';
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { AuthenticationService, JWTStrategy } from '@feathersjs/authentication';
@@ -535,6 +535,22 @@ async function main() {
     console.warn('   Run: agor config set credentials.OPENAI_API_KEY <your-key>');
     console.warn('   Or set OPENAI_API_KEY environment variable');
   }
+
+  // Initialize GeminiTool (uses GEMINI_API_KEY from environment)
+  const geminiApiKey = config.credentials?.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  const geminiTool = new GeminiTool(
+    messagesRepo,
+    sessionsRepo,
+    geminiApiKey,
+    app.service('messages'),
+    app.service('tasks')
+  );
+
+  if (!geminiApiKey) {
+    console.warn('⚠️  No GEMINI_API_KEY found - Gemini sessions will fail');
+    console.warn('   Run: agor config set credentials.GEMINI_API_KEY <your-key>');
+    console.warn('   Or set GEMINI_API_KEY environment variable');
+  }
   // NOTE: Do NOT set process.env.OPENAI_API_KEY here for the same reason as ANTHROPIC_API_KEY
   // Let the Codex CLI use its own auth system
 
@@ -677,7 +693,7 @@ async function main() {
           assistantMessageIds: import('@agor/core/types').MessageID[];
         }>;
 
-        if (session.agent === 'codex') {
+        if (session.agentic_tool === 'codex') {
           // Use CodexTool for Codex sessions
           executeMethod = useStreaming
             ? codexTool.executePromptWithStreaming(
@@ -688,6 +704,22 @@ async function main() {
                 streamingCallbacks
               )
             : codexTool.executePrompt(
+                id as SessionID,
+                data.prompt,
+                task.task_id,
+                data.permissionMode
+              );
+        } else if (session.agentic_tool === 'gemini') {
+          // Use GeminiTool for Gemini sessions
+          executeMethod = useStreaming
+            ? geminiTool.executePromptWithStreaming(
+                id as SessionID,
+                data.prompt,
+                task.task_id,
+                data.permissionMode,
+                streamingCallbacks
+              )
+            : geminiTool.executePrompt(
                 id as SessionID,
                 data.prompt,
                 task.task_id,

@@ -35,16 +35,17 @@ export const mockAgentGemini: Agent = {
   id: 'gemini' as AgentID,
   name: 'gemini',
   icon: '💎',
-  installed: false,
-  description: 'Google Gemini - Multimodal AI for code and data analysis (Coming Soon)',
-  installable: false,
+  installed: true,
+  version: '0.9.0',
+  description: 'Google Gemini - Fast, cost-effective coding agent with multimodal capabilities',
+  installable: true,
 };
 
 export const mockAgents: Agent[] = [
   mockAgentClaudecode,
   mockAgentCodex,
+  mockAgentGemini, // Position 3 - promoted!
   mockAgentCursor,
-  mockAgentGemini,
 ];
 
 export const mockInstalledAgents = mockAgents.filter(agent => agent.installed);
