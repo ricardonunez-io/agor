@@ -100,12 +100,6 @@ export type BoardID = UUID;
 export type AgenticToolID = UUID;
 
 /**
- * Agent identifier (deprecated, use AgenticToolID)
- * @deprecated Use AgenticToolID instead
- */
-export type AgentID = UUID;
-
-/**
  * Message identifier
  *
  * Uniquely identifies a message in a conversation.

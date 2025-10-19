@@ -1,6 +1,5 @@
 // src/types/index.ts
 
-export * from './agent';
 export * from './agentic-tool';
 export * from './board';
 export * from './context';
