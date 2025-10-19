@@ -5,9 +5,11 @@ import type { ReportPath, ReportTemplate } from './report';
 export const TaskStatus = {
   CREATED: 'created',
   RUNNING: 'running',
+  STOPPING: 'stopping', // Stop requested, waiting for SDK to halt
   AWAITING_PERMISSION: 'awaiting_permission',
   COMPLETED: 'completed',
   FAILED: 'failed',
+  STOPPED: 'stopped', // User-requested stop (distinct from failed)
 } as const;
 
 export type TaskStatus = (typeof TaskStatus)[keyof typeof TaskStatus];

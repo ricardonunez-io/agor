@@ -343,4 +343,43 @@ export class GeminiTool implements ITool {
       assistantMessageIds,
     };
   }
+
+  /**
+   * Stop currently executing task in session
+   *
+   * Uses AbortController to gracefully cancel the streaming request.
+   *
+   * @param sessionId - Session identifier
+   * @param taskId - Optional task ID (not used for Gemini, session-level stop)
+   * @returns Success status and reason if failed
+   */
+  async stopTask(
+    sessionId: string,
+    taskId?: string
+  ): Promise<{
+    success: boolean;
+    partialResult?: Partial<{ taskId: string; status: 'completed' | 'failed' | 'cancelled' }>;
+    reason?: string;
+  }> {
+    if (!this.promptService) {
+      return {
+        success: false,
+        reason: 'GeminiTool not initialized with prompt service',
+      };
+    }
+
+    const result = this.promptService.stopTask(sessionId as SessionID);
+
+    if (result.success) {
+      return {
+        success: true,
+        partialResult: {
+          taskId: taskId || 'unknown',
+          status: 'cancelled',
+        },
+      };
+    }
+
+    return result;
+  }
 }

@@ -113,7 +113,15 @@ export const tasks = sqliteTable(
     created_at: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     completed_at: integer('completed_at', { mode: 'timestamp_ms' }),
     status: text('status', {
-      enum: ['created', 'running', 'awaiting_permission', 'completed', 'failed'],
+      enum: [
+        'created',
+        'running',
+        'stopping',
+        'awaiting_permission',
+        'completed',
+        'failed',
+        'stopped',
+      ],
     }).notNull(),
 
     // User attribution

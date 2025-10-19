@@ -206,6 +206,9 @@ export function useAuth(): UseAuthReturn {
         loading: false,
         error: isConnectionError ? 'Connection lost - waiting for daemon...' : null,
       });
+
+      // CRITICAL: Close the client connection to prevent leaks
+      client.io.close();
     }
   }, []);
 
@@ -319,6 +322,8 @@ export function useAuth(): UseAuthReturn {
           loading: false,
           error: 'Session expired, please login again',
         });
+        // CRITICAL: Close the client connection to prevent leaks
+        client.io.close();
       }
     }, REFRESH_INTERVAL);
 
@@ -407,6 +412,8 @@ export function useAuth(): UseAuthReturn {
         loading: false,
         error: errorMessage,
       }));
+      // CRITICAL: Close the client connection to prevent leaks
+      client.io.close();
       return false;
     }
   };

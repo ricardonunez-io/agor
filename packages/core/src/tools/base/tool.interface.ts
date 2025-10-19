@@ -149,4 +149,30 @@ export interface ITool {
    * Creates focused subtask session with minimal context
    */
   spawnChildSession?(parentSessionId: string, prompt: string): Promise<SessionHandle>;
+
+  // ============================================================
+  // Task Lifecycle Control (if supportsLiveExecution)
+  // ============================================================
+
+  /**
+   * Stop currently executing task in session
+   *
+   * Gracefully terminates the agent's current execution.
+   * Implementation varies by SDK:
+   * - Claude Agent SDK: Call interrupt() on Query object
+   * - Gemini SDK: Call abort() on AbortController
+   * - Codex SDK: Set stop flag and break event loop
+   *
+   * @param sessionId - Session identifier
+   * @param taskId - Optional task ID to stop (if multiple tasks running)
+   * @returns Success status and partial results if available
+   */
+  stopTask?(
+    sessionId: string,
+    taskId?: string
+  ): Promise<{
+    success: boolean;
+    partialResult?: Partial<TaskResult>;
+    reason?: string;
+  }>;
 }

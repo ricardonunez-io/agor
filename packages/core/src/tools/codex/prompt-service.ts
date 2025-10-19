@@ -88,6 +88,7 @@ export type CodexStreamEvent =
 export class CodexPromptService {
   private codex: Codex;
   private lastApprovalPolicy: string | null = null;
+  private stopRequested = new Map<SessionID, boolean>();
 
   constructor(
     _messagesRepo: MessagesRepository,
@@ -341,6 +342,13 @@ approval_policy = "${approvalPolicy}"
       let allToolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = [];
 
       for await (const event of events) {
+        // Check if stop was requested
+        if (this.stopRequested.get(sessionId)) {
+          console.log(`🛑 Stop requested for session ${sessionId}, breaking event loop`);
+          this.stopRequested.delete(sessionId);
+          break;
+        }
+
         // Log ALL events to understand what we're getting
         console.debug('🔔 Codex event type:', event.type, 'keys:', Object.keys(event));
 
@@ -537,5 +545,22 @@ approval_policy = "${approvalPolicy}"
       outputTokens,
       threadId,
     };
+  }
+
+  /**
+   * Stop currently executing task
+   *
+   * Sets a stop flag that is checked in the event loop.
+   * The loop will break on the next iteration, stopping execution gracefully.
+   *
+   * @param sessionId - Session identifier
+   * @returns Success status
+   */
+  stopTask(sessionId: SessionID): { success: boolean; reason?: string } {
+    // Set stop flag
+    this.stopRequested.set(sessionId, true);
+    console.log(`🛑 Stop requested for Codex session ${sessionId}`);
+
+    return { success: true };
   }
 }

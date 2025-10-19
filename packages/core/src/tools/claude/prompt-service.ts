@@ -81,6 +81,13 @@ export class ClaudePromptService {
   /** Enable token-level streaming from Claude Agent SDK */
   private static readonly ENABLE_TOKEN_STREAMING = true;
 
+  /** Store active Query objects per session for interruption */
+  // biome-ignore lint/suspicious/noExplicitAny: Query type from SDK is complex
+  private activeQueries = new Map<SessionID, any>();
+
+  /** Track stop requests for immediate loop breaking */
+  private stopRequested = new Map<SessionID, boolean>();
+
   constructor(
     _messagesRepo: MessagesRepository,
     private sessionsRepo: SessionRepository,
@@ -616,6 +623,13 @@ export class ClaudePromptService {
 
     console.log('✅ query() call returned, got async generator');
 
+    // Store query object for potential interruption (Claude SDK has native interrupt() method)
+    this.activeQueries.set(sessionId, result);
+    console.log(
+      `   📌 Stored query for session ${sessionId}, has interrupt: ${typeof result.interrupt === 'function'}`
+    );
+    console.log(`   📌 Total active queries: ${this.activeQueries.size}`);
+
     return { query: result, resolvedModel: model };
   }
 
@@ -755,7 +769,18 @@ export class ClaudePromptService {
 
     for await (const msg of result) {
       messageCount++;
-      console.log(`   [Message ${messageCount}] type: ${msg.type}`);
+
+      // Check if stop was requested (for immediate loop breaking)
+      if (this.stopRequested.get(sessionId)) {
+        console.log(`🛑 Stop requested for session ${sessionId}, breaking event loop`);
+        this.stopRequested.delete(sessionId);
+        break;
+      }
+
+      // Only log non-stream events to reduce verbosity
+      if (msg.type !== 'stream_event') {
+        console.log(`   [Message ${messageCount}] type: ${msg.type}`);
+      }
 
       // Capture SDK session_id from first message that has it
       if (!capturedAgentSessionId && 'session_id' in msg && msg.session_id) {
@@ -771,7 +796,7 @@ export class ClaudePromptService {
         // Extract text from content_block_delta events
         if (event?.type === 'content_block_delta' && event?.delta?.type === 'text_delta') {
           const textChunk = event.delta.text;
-          console.debug(`   📝 [Token stream] ${textChunk.length} chars`);
+          // Removed verbose token stream logging
 
           // Yield partial chunk immediately (enables real-time streaming)
           yield {
@@ -808,6 +833,9 @@ export class ClaudePromptService {
     }
 
     console.log(`✅ Response complete: ${messageCount} total messages`);
+
+    // Clean up query reference
+    this.activeQueries.delete(sessionId);
   }
 
   /**
@@ -842,7 +870,10 @@ export class ClaudePromptService {
 
     for await (const msg of result) {
       messageCount++;
-      console.log(`   [Message ${messageCount}] type: ${msg.type}`);
+      // Only log non-stream events to reduce verbosity
+      if (msg.type !== 'stream_event') {
+        console.log(`   [Message ${messageCount}] type: ${msg.type}`);
+      }
 
       if (msg.type === 'assistant') {
         const contentBlocks = this.processContentBlocks(msg.message?.content, messageCount);
@@ -871,11 +902,68 @@ export class ClaudePromptService {
       `✅ Response complete: ${assistantMessages.length} assistant messages, ${messageCount} total messages`
     );
 
+    // Clean up query reference
+    this.activeQueries.delete(sessionId);
+
     // TODO: Extract token counts from Agent SDK result metadata
     return {
       messages: assistantMessages,
       inputTokens: 0, // Agent SDK doesn't expose this yet
       outputTokens: 0,
     };
+  }
+
+  /**
+   * Stop currently executing task
+   *
+   * Uses Claude Agent SDK's native interrupt() method to gracefully stop execution.
+   * This is the same mechanism used by the Escape key in Claude Code CLI.
+   *
+   * @param sessionId - Session identifier
+   * @returns Success status
+   */
+  async stopTask(sessionId: SessionID): Promise<{ success: boolean; reason?: string }> {
+    console.log(`🛑 stopTask called for session ${sessionId}`);
+    console.log(`   Active queries count: ${this.activeQueries.size}`);
+    console.log(`   Active query keys:`, Array.from(this.activeQueries.keys()));
+
+    const queryObj = this.activeQueries.get(sessionId);
+    console.log(`   Query object found: ${!!queryObj}`);
+    console.log(
+      `   Query has interrupt method: ${queryObj && typeof queryObj.interrupt === 'function'}`
+    );
+
+    if (!queryObj) {
+      console.log(`   ❌ No active query found for session ${sessionId}`);
+      return {
+        success: false,
+        reason: 'No active task found for this session',
+      };
+    }
+
+    try {
+      console.log(`   Setting stop flag for immediate loop break...`);
+      // Set stop flag first for immediate loop breaking
+      this.stopRequested.set(sessionId, true);
+
+      console.log(`   Calling interrupt()...`);
+      // Call native interrupt() method on Query object
+      // This is exactly what the Escape key uses in Claude Code CLI
+      await queryObj.interrupt();
+      console.log(`🛑 Interrupted Claude execution for session ${sessionId}`);
+
+      // Clean up query reference
+      this.activeQueries.delete(sessionId);
+
+      return { success: true };
+    } catch (error) {
+      console.error(`❌ Failed to interrupt Claude execution:`, error);
+      // Clean up stop flag on error
+      this.stopRequested.delete(sessionId);
+      return {
+        success: false,
+        reason: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
   }
 }

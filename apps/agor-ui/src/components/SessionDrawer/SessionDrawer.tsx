@@ -124,6 +124,32 @@ const SessionDrawer = ({
     }
   };
 
+  const [isStopping, setIsStopping] = React.useState(false);
+
+  const handleStop = async () => {
+    if (!session || !client || isStopping) {
+      if (isStopping) {
+        console.log('⏳ Stop already in progress, ignoring duplicate request');
+      }
+      return;
+    }
+
+    try {
+      setIsStopping(true);
+      console.log(`🛑 Stopping execution for session ${session.session_id.substring(0, 8)}...`);
+
+      // Call the stop endpoint using FeathersJS client
+      await client.service(`sessions/${session.session_id}/stop`).create({});
+
+      console.log('✅ Stop request sent successfully');
+    } catch (error) {
+      console.error('❌ Failed to stop execution:', error);
+    } finally {
+      // Reset after a short delay to allow WebSocket state updates
+      setTimeout(() => setIsStopping(false), 2000);
+    }
+  };
+
   const handleFork = () => {
     if (inputValue.trim()) {
       onFork?.(inputValue);
@@ -369,14 +395,21 @@ const SessionDrawer = ({
               />
               {isRunning && <Spin size="small" />}
               <Button.Group>
-                <Tooltip title="Stop Execution (Coming Soon)">
+                <Tooltip
+                  title={
+                    isStopping
+                      ? 'Stopping...'
+                      : isRunning
+                        ? 'Stop Execution'
+                        : 'No active execution'
+                  }
+                >
                   <Button
                     danger
                     icon={<StopOutlined />}
-                    onClick={() => {
-                      // TODO: Implement stop functionality
-                    }}
-                    disabled={!isRunning}
+                    onClick={handleStop}
+                    disabled={!isRunning || isStopping}
+                    loading={isStopping}
                   />
                 </Tooltip>
                 <Tooltip title={isRunning ? 'Session is running...' : 'Fork Session'}>

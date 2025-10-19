@@ -440,4 +440,43 @@ export class ClaudeTool implements ITool {
       assistantMessageIds,
     };
   }
+
+  /**
+   * Stop currently executing task in session
+   *
+   * Uses Claude Agent SDK's native interrupt() method to gracefully stop execution.
+   *
+   * @param sessionId - Session identifier
+   * @param taskId - Optional task ID (not used for Claude, session-level stop)
+   * @returns Success status and reason if failed
+   */
+  async stopTask(
+    sessionId: string,
+    taskId?: string
+  ): Promise<{
+    success: boolean;
+    partialResult?: Partial<{ taskId: string; status: 'completed' | 'failed' | 'cancelled' }>;
+    reason?: string;
+  }> {
+    if (!this.promptService) {
+      return {
+        success: false,
+        reason: 'ClaudeTool not initialized with prompt service',
+      };
+    }
+
+    const result = await this.promptService.stopTask(sessionId as SessionID);
+
+    if (result.success) {
+      return {
+        success: true,
+        partialResult: {
+          taskId: taskId || 'unknown',
+          status: 'cancelled',
+        },
+      };
+    }
+
+    return result;
+  }
 }

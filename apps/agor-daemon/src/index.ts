@@ -798,9 +798,14 @@ async function main() {
               const totalMessages = 1 + result.assistantMessageIds.length; // user + assistants
 
               // Check current task status - don't overwrite terminal states
-              // (e.g., 'failed' from denied permission, 'awaiting_permission' still pending)
+              // (e.g., 'failed' from denied permission, 'awaiting_permission' still pending, 'stopping'/'stopped' from user cancel)
               const currentTask = await tasksService.get(task.task_id);
-              if (currentTask.status === 'failed' || currentTask.status === 'awaiting_permission') {
+              if (
+                currentTask.status === 'failed' ||
+                currentTask.status === 'awaiting_permission' ||
+                currentTask.status === 'stopping' ||
+                currentTask.status === 'stopped'
+              ) {
                 console.log(
                   `⚠️  Task ${task.task_id} already in terminal state: ${currentTask.status} - not marking as completed`
                 );
@@ -879,6 +884,136 @@ async function main() {
         status: 'running',
         streaming: useStreaming, // Inform client whether streaming is enabled
       };
+    },
+  });
+
+  // Stop execution endpoint
+  app.use('/sessions/:id/stop', {
+    async create(_data: unknown, params: RouteParams) {
+      const id = params.route?.id;
+      if (!id) throw new Error('Session ID required');
+
+      console.log(`🛑 [Daemon] Stop request for session ${id.substring(0, 8)}`);
+
+      // Get session to find which tool to use
+      const session = await sessionsService.get(id, params);
+      console.log(`   Session agent: ${session.agentic_tool}`);
+      console.log(`   Session status: ${session.status}`);
+
+      // Check if session is actually running
+      if (session.status !== 'running') {
+        console.log(`   ⚠️  Session not running, cannot stop`);
+        return {
+          success: false,
+          reason: `Session is not running (status: ${session.status})`,
+        };
+      }
+
+      // Find the currently running task(s)
+      // Use find query instead of mapping over all tasks for better performance
+      const runningTasks = await tasksService.find({
+        query: {
+          session_id: id,
+          status: { $in: ['running', 'awaiting_permission'] },
+          $limit: 10,
+        },
+      });
+
+      // Extract data array if paginated
+      const runningTasksArray = Array.isArray(runningTasks)
+        ? runningTasks
+        : runningTasks.data || [];
+
+      console.log(`   📋 Found ${runningTasksArray.length} running task(s)`);
+
+      // PHASE 1: Immediately update status to 'stopping' (UI feedback before SDK call)
+      if (runningTasksArray.length > 0) {
+        const latestTask = runningTasksArray[runningTasksArray.length - 1];
+        console.log(`   🔄 Updating task ${latestTask.task_id.substring(0, 8)} to stopping...`);
+
+        try {
+          const updatedTask = await Promise.race([
+            tasksService.patch(latestTask.task_id, {
+              // biome-ignore lint/suspicious/noExplicitAny: Task status type being extended with new stopping/stopped values
+              status: 'stopping' as any,
+            }),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Task patch timeout')), 5000)
+            ),
+          ]);
+          // biome-ignore lint/suspicious/noExplicitAny: Task type from service doesn't include new status values yet
+          console.log(`   ✅ Task patched, new status: ${(updatedTask as any).status}`);
+          console.log(`   📡 WebSocket 'patched' event should have been emitted`);
+        } catch (error) {
+          console.error(`   ❌ Failed to patch task:`, error);
+          // Continue anyway, we'll still try to stop the SDK
+        }
+      }
+
+      // PHASE 2: Route to appropriate tool based on session agent and call stopTask
+      let result: {
+        success: boolean;
+        partialResult?: Partial<{ taskId: string; status: 'completed' | 'failed' | 'cancelled' }>;
+        reason?: string;
+      };
+
+      console.log(`   🔀 Routing to tool: ${session.agentic_tool || 'claude-code (default)'}`);
+      console.log(`   🔍 claudeTool.stopTask exists: ${typeof claudeTool.stopTask}`);
+
+      if (session.agentic_tool === 'codex') {
+        console.log(`   ➡️  Calling codexTool.stopTask(${id})`);
+        result = (await codexTool.stopTask?.(id)) || {
+          success: false,
+          reason: 'stopTask not implemented',
+        };
+      } else if (session.agentic_tool === 'gemini') {
+        console.log(`   ➡️  Calling geminiTool.stopTask(${id})`);
+        result = (await geminiTool.stopTask?.(id)) || {
+          success: false,
+          reason: 'stopTask not implemented',
+        };
+      } else {
+        // Claude Code (default)
+        console.log(`   ➡️  Calling claudeTool.stopTask(${id})`);
+        result = (await claudeTool.stopTask?.(id)) || {
+          success: false,
+          reason: 'stopTask not implemented',
+        };
+      }
+
+      console.log(`   📊 Stop result:`, result);
+
+      // PHASE 3: Update final status based on stop result
+      if (result.success) {
+        // Update session status back to idle
+        await sessionsService.patch(id, {
+          status: 'idle',
+        });
+
+        // Update task status to 'stopped'
+        if (runningTasksArray.length > 0) {
+          const latestTask = runningTasksArray[runningTasksArray.length - 1];
+          await tasksService.patch(latestTask.task_id, {
+            status: 'stopped',
+            message_range: {
+              ...latestTask.message_range,
+              end_timestamp: new Date().toISOString(),
+            },
+          });
+          console.log(`   ✅ Marked task ${latestTask.task_id} as stopped`);
+        }
+      } else {
+        // Stop failed, revert to running
+        if (runningTasksArray.length > 0) {
+          const latestTask = runningTasksArray[runningTasksArray.length - 1];
+          await tasksService.patch(latestTask.task_id, {
+            status: 'running', // Revert to running
+          });
+          console.log(`   ❌ Stop failed, reverted task ${latestTask.task_id} to running`);
+        }
+      }
+
+      return result;
     },
   });
 

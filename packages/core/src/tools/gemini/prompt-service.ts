@@ -62,6 +62,7 @@ export type GeminiStreamEvent =
 
 export class GeminiPromptService {
   private sessionClients = new Map<SessionID, GeminiClient>();
+  private activeControllers = new Map<SessionID, AbortController>();
 
   constructor(
     private messagesRepo: MessagesRepository,
@@ -100,6 +101,7 @@ export class GeminiPromptService {
 
     // Create abort controller for cancellation support
     const abortController = new AbortController();
+    this.activeControllers.set(sessionId, abortController);
 
     // Generate unique prompt ID for this turn
     const promptId = `${sessionId}-${Date.now()}`;
@@ -232,8 +234,17 @@ export class GeminiPromptService {
         }
       }
     } catch (error) {
+      // Check if error is from abort
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log(`🛑 Gemini execution stopped for session ${sessionId}`);
+        // Don't re-throw abort errors - this is expected behavior
+        return;
+      }
       console.error('Gemini streaming error:', error);
       throw error;
+    } finally {
+      // Clean up abort controller
+      this.activeControllers.delete(sessionId);
     }
   }
 
@@ -368,6 +379,30 @@ export class GeminiPromptService {
     // Store history in session for future restoration
     // For now, we rely on messagesRepo - future optimization could cache history
     console.debug(`📝 Session ${sessionId} history updated: ${history.length} turns`);
+  }
+
+  /**
+   * Stop currently executing task
+   *
+   * Calls abort() on the AbortController to gracefully stop streaming.
+   *
+   * @param sessionId - Session identifier
+   * @returns Success status
+   */
+  stopTask(sessionId: SessionID): { success: boolean; reason?: string } {
+    const controller = this.activeControllers.get(sessionId);
+    if (!controller) {
+      return {
+        success: false,
+        reason: 'No active task found for this session',
+      };
+    }
+
+    // Abort the streaming request
+    controller.abort();
+    console.log(`🛑 Stopping Gemini task for session ${sessionId}`);
+
+    return { success: true };
   }
 
   /**

@@ -19,8 +19,10 @@ import {
   LoadingOutlined,
   LockOutlined,
   MessageOutlined,
+  MinusCircleOutlined,
   RightOutlined,
   RobotOutlined,
+  StopOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
 import { Bubble } from '@ant-design/x';
@@ -153,6 +155,10 @@ export const TaskBlock: React.FC<TaskBlockProps> = ({
         return (
           <Spin indicator={<LoadingOutlined spin style={{ fontSize: 16, color: '#1890ff' }} />} />
         );
+      case 'stopping':
+        return <StopOutlined style={{ color: '#faad14' }} />; // Orange while stopping
+      case 'stopped':
+        return <MinusCircleOutlined style={{ color: '#ff7a45' }} />; // Orange-red for stopped
       case 'awaiting_permission':
         return <LockOutlined style={{ color: '#faad14' }} />;
       case 'failed':
@@ -168,6 +174,10 @@ export const TaskBlock: React.FC<TaskBlockProps> = ({
         return 'success';
       case 'running':
         return 'processing';
+      case 'stopping':
+        return 'warning'; // Orange while stopping
+      case 'stopped':
+        return 'warning'; // Orange for stopped (distinct from failed)
       case 'awaiting_permission':
         return 'warning';
       case 'failed':
