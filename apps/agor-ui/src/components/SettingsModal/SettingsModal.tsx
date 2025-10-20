@@ -8,6 +8,7 @@ import type {
   UpdateMCPServerInput,
   UpdateUserInput,
   User,
+  Worktree,
 } from '@agor/core/types';
 import { Modal, Tabs } from 'antd';
 import { BoardsTable } from './BoardsTable';
@@ -15,6 +16,7 @@ import { ContextTable } from './ContextTable';
 import { MCPServersTable } from './MCPServersTable';
 import { ReposTable } from './ReposTable';
 import { UsersTable } from './UsersTable';
+import { WorktreesTable } from './WorktreesTable';
 
 export interface SettingsModalProps {
   open: boolean;
@@ -22,6 +24,7 @@ export interface SettingsModalProps {
   client: Application | null;
   boards: Board[];
   repos: Repo[];
+  worktrees: Worktree[];
   users: User[];
   mcpServers: MCPServer[];
   onCreateBoard?: (board: Partial<Board>) => void;
@@ -29,7 +32,7 @@ export interface SettingsModalProps {
   onDeleteBoard?: (boardId: string) => void;
   onCreateRepo?: (data: { url: string; slug: string }) => void;
   onDeleteRepo?: (repoId: string) => void;
-  onDeleteWorktree?: (repoId: string, worktreeName: string) => void;
+  onDeleteWorktree?: (worktreeId: string) => void;
   onCreateWorktree?: (
     repoId: string,
     data: { name: string; ref: string; createBranch: boolean }
@@ -48,6 +51,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   client,
   boards,
   repos,
+  worktrees,
   users,
   mcpServers,
   onCreateBoard,
@@ -93,13 +97,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {
             key: 'repos',
             label: 'Repositories',
+            children: <ReposTable repos={repos} onCreate={onCreateRepo} onDelete={onDeleteRepo} />,
+          },
+          {
+            key: 'worktrees',
+            label: 'Worktrees',
             children: (
-              <ReposTable
+              <WorktreesTable
+                worktrees={worktrees}
                 repos={repos}
-                onCreate={onCreateRepo}
-                onDelete={onDeleteRepo}
-                onDeleteWorktree={onDeleteWorktree}
-                onCreateWorktree={onCreateWorktree}
+                onDelete={onDeleteWorktree}
+                onCreate={onCreateWorktree}
               />
             ),
           },

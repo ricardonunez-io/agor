@@ -52,6 +52,7 @@ function AppContent() {
     tasks,
     boards,
     repos,
+    worktrees,
     users,
     mcpServers,
     sessionMcpServerIds,
@@ -451,11 +452,11 @@ function AppContent() {
     }
   };
 
-  const handleDeleteWorktree = async (repoId: string, worktreeName: string) => {
+  const handleDeleteWorktree = async (worktreeId: string) => {
     if (!client) return;
     try {
-      // Use custom route: DELETE /repos/:id/worktrees/:name
-      await client.service(`repos/${repoId}/worktrees`).remove(worktreeName);
+      // Use worktrees service: DELETE /worktrees/:id
+      await client.service('worktrees').remove(worktreeId);
       message.success('Worktree deleted successfully!');
     } catch (error) {
       message.error(
@@ -472,10 +473,16 @@ function AppContent() {
     try {
       message.loading({ content: 'Creating worktree...', key: 'create-worktree', duration: 0 });
 
+      // Find the repo to get its default branch
+      const repo = repos.find(r => r.repo_id === repoId);
+      const sourceBranch = repo?.default_branch || 'main';
+
       await client.service(`repos/${repoId}/worktrees`).create({
         name: data.name,
         ref: data.ref,
         createBranch: data.createBranch,
+        pullLatest: true, // Always fetch latest from remote
+        sourceBranch, // Base new branch on default branch
       });
 
       message.success({ content: 'Worktree created successfully!', key: 'create-worktree' });
@@ -576,6 +583,7 @@ function AppContent() {
       availableAgents={mockAgents}
       boards={boards}
       repos={repos}
+      worktrees={worktrees}
       users={users}
       mcpServers={mcpServers}
       sessionMcpServerIds={sessionMcpServerIds}

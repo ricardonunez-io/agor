@@ -27,7 +27,6 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
    */
   private rowToSession(row: SessionRow): Session {
     const genealogyData = row.data.genealogy || { children: [] };
-    const repoData = row.data.repo;
 
     return {
       session_id: row.session_id as UUID,
@@ -38,22 +37,9 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
         ? new Date(row.updated_at).toISOString()
         : new Date(row.created_at).toISOString(),
       created_by: row.created_by,
+      worktree_id: row.worktree_id as UUID,
       ...row.data,
       tasks: row.data.tasks.map(id => id as UUID),
-      repo: repoData
-        ? {
-            ...repoData,
-            repo_id: repoData.repo_id as UUID | undefined,
-            repo_slug: repoData.repo_slug,
-            worktree_name: repoData.worktree_name,
-            cwd: repoData.cwd,
-            managed_worktree: repoData.managed_worktree,
-          }
-        : {
-            // Default for imported sessions without repo context
-            cwd: process.cwd(),
-            managed_worktree: false,
-          },
       genealogy: {
         parent_session_id: row.parent_session_id as UUID | undefined,
         forked_from_session_id: row.forked_from_session_id as UUID | undefined,
@@ -72,35 +58,9 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
     const now = Date.now();
     const sessionId = session.session_id ?? generateId();
 
-    // DEBUG: Log what we're about to convert
-    console.log(`🔧 [sessionToInsert] Converting session to insert format:`);
-    console.log(`   session.permission_config: ${JSON.stringify(session.permission_config)}`);
-
-    // Compute CWD based on worktree configuration
-    let cwd: string;
-
-    if (session.repo?.managed_worktree && session.repo.repo_slug && session.repo.worktree_name) {
-      // For managed worktrees, use ~/.agor/worktrees/{repo}/{worktree}
-      const homeDir = process.env.HOME || process.env.USERPROFILE || '~';
-      cwd = `${homeDir}/.agor/worktrees/${session.repo.repo_slug}/${session.repo.worktree_name}`;
-    } else if (session.repo?.cwd) {
-      // Use explicitly provided CWD
-      cwd = session.repo.cwd;
-    } else {
-      // Fall back to process.cwd()
-      cwd = process.cwd();
+    if (!session.worktree_id) {
+      throw new RepositoryError('Session must have a worktree_id');
     }
-
-    // Ensure repo has a CWD
-    const repo = session.repo
-      ? {
-          ...session.repo,
-          cwd,
-        }
-      : {
-          cwd,
-          managed_worktree: false,
-        };
 
     return {
       session_id: sessionId,
@@ -112,12 +72,12 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
       board_id: null, // Board ID tracked separately in boards.sessions array
       parent_session_id: session.genealogy?.parent_session_id ?? null,
       forked_from_session_id: session.genealogy?.forked_from_session_id ?? null,
+      worktree_id: session.worktree_id,
       data: {
         agentic_tool_version: session.agentic_tool_version,
         sdk_session_id: session.sdk_session_id, // Preserve SDK session ID for conversation continuity
         title: session.title,
         description: session.description,
-        repo,
         git_state: session.git_state ?? {
           ref: 'main',
           base_sha: '',

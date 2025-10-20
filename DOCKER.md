@@ -154,6 +154,20 @@ Each instance gets its own named volume:
 - `agor-data-2` (instance 2)
 - `agor-data-3` (instance 3)
 
+### SSH Keys (Git Authentication)
+
+```yaml
+volumes:
+  - ~/.ssh:/root/.ssh:ro # SSH keys for git operations (read-only)
+```
+
+**Why needed:**
+
+- Enables git clone/fetch/push with SSH URLs (`git@github.com:...`)
+- Uses your host machine's SSH keys (same as `gh` CLI)
+- Read-only (`:ro`) for security - container can't modify your keys
+- **Dev only** - when running locally (non-Docker), your SSH keys work automatically
+
 **To inspect data:**
 
 ```bash

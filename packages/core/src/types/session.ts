@@ -2,8 +2,7 @@
 
 import type { AgenticToolName } from './agentic-tool';
 import type { ContextFilePath } from './context';
-import type { SessionID, TaskID } from './id';
-import type { SessionRepoContext } from './repo';
+import type { SessionID, TaskID, WorktreeID } from './id';
 
 export type SessionStatus = 'idle' | 'running' | 'completed' | 'failed';
 
@@ -76,8 +75,8 @@ export interface Session {
   /** User ID of the user who created this session */
   created_by: string;
 
-  // Repository context (required)
-  repo: SessionRepoContext;
+  /** Worktree ID - all sessions must be associated with an Agor-managed worktree */
+  worktree_id: WorktreeID;
 
   // Git state
   git_state: {

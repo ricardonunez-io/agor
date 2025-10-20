@@ -1,9 +1,29 @@
 # Worktree-Centric Architecture: PRD
 
-**Status:** PRD (Product Requirements Document)
+**Status:** 🚧 In Progress (Phase 0 Complete, Phase 1 Started)
 **Created:** 2025-01-19
+**Last Updated:** 2025-01-19
 **Author:** Claude Code (with Max)
 **Epic:** Worktree-First Design + Data Model Normalization
+
+---
+
+## Current Progress
+
+**Phase 0 (Data Model):** ✅ **COMPLETE**
+
+- ✅ Worktrees table created with full schema
+- ✅ Sessions reference worktrees via FK
+- ✅ WorktreesService (REST + WebSocket) operational
+- ✅ UI updated (separate Repositories and Worktrees tabs)
+
+**Phase 1 (Worktree Modal UI):** 🚧 **IN PROGRESS**
+
+- ✅ Settings → Worktrees tab with table view
+- ⏳ WorktreeModal component (5 tabs)
+- ⏳ Parent component integration
+
+**Next Up:** Complete Phase 1, then Environment Execution (Phase 2)
 
 ---
 
@@ -15,13 +35,13 @@
 
 **Deliverables:**
 
-1. Normalize worktrees into dedicated database table (from nested JSON arrays)
-2. Build Worktree Modal (central hub for all worktree context)
-3. Add Settings → Worktrees top-level tab
-4. Integrate environments, concepts, and sessions into worktree context
-5. Web-based terminal (xterm.js + node-pty)
+1. ✅ Normalize worktrees into dedicated database table (from nested JSON arrays)
+2. ⏳ Build Worktree Modal (central hub for all worktree context)
+3. ✅ Add Settings → Worktrees top-level tab
+4. ⏳ Integrate environments, concepts, and sessions into worktree context
+5. ⏳ Web-based terminal (xterm.js + node-pty)
 
-**Timeline:** 4 weeks (4 phases)
+**Timeline:** 4 weeks (4 phases) - Started 2025-01-19
 
 **Impact:**
 
@@ -959,84 +979,111 @@ export function TerminalModal({ worktreeId, onClose }) {
 
 ## 5. Implementation Phases
 
-### Phase 0: Data Model Migration (~1 week)
+### Phase 0: Data Model Migration ✅ **COMPLETE**
 
 **Goal:** Normalize worktrees into dedicated table
 
-**Tasks:**
+**Status:** ✅ Complete (2025-01-19)
 
-1. **Create worktrees table** (schema.ts)
+**Completed Tasks:**
+
+1. ✅ **Create worktrees table** (schema.ts)
    - `worktree_id`, `repo_id`, `name`, `ref`, `data`, etc.
-   - Indexes on repo_id, name, ref, created_at
+   - Indexes on repo_id, name, ref, created_at, updated_at
    - UNIQUE(repo_id, name)
+   - Full JSON blob for git state, environment, work context
 
-2. **Migration script** (migrate.ts)
-   - Read all repos
-   - Extract `repos.data.worktrees` arrays
-   - Insert into worktrees table
-   - Remove worktrees from repos.data (optional cleanup)
+2. ✅ **Update sessions schema**
+   - Added `sessions.worktree_id` foreign key with onDelete: 'set null'
+   - Added index on worktree_id for fast lookups
 
-3. **Update sessions schema**
-   - Add `sessions.worktree_id` foreign key
-   - Populate from `sessions.data.repo.worktree_name`
+3. ✅ **Create WorktreesRepository**
+   - Full CRUD operations with short ID support
+   - Query by repo_id filter
+   - Helper methods: `addSession`, `removeSession`, `findByRepoAndName`
+   - Proper error handling (EntityNotFoundError, AmbiguousIdError)
 
-4. **Create WorktreesService**
-   - CRUD operations on worktrees table
-   - Query by repo_id, name, ref, etc.
+4. ✅ **Create WorktreesService** (FeathersJS)
+   - REST + WebSocket support at `/worktrees`
+   - Pagination (default: 50, max: 100)
+   - Custom methods: `addSession`, `removeSession`, `updateEnvironment`
+   - Registered in daemon with proper event emission
 
-5. **Update ReposService**
-   - Remove worktrees from Repo type
-   - Optional: Add `$populate=worktrees` to load worktrees on demand
+5. ✅ **Update ReposService**
+   - Removed `worktrees` array from Repo type
+   - Added `environment_config` for repo-level templates
+   - Deprecated `addWorktree` and `removeWorktree` methods
 
-6. **Update types** (types/repo.ts)
-   - Export `Worktree` interface
-   - Remove `worktrees: WorktreeConfig[]` from `Repo`
-   - Add new fields to Worktree (issue_url, pr_url, notes, environment_instance)
+6. ✅ **Update types** (types/worktree.ts)
+   - Created `Worktree` interface with all fields
+   - Created `WorktreeID` branded type
+   - Created `WorktreeEnvironmentInstance` type
+   - Created `RepoEnvironmentConfig` type
+   - Removed `worktrees` from Repo interface
+
+7. ✅ **Update UI components**
+   - Updated `ReposTable` to remove worktree management
+   - Updated `WorktreesTable` to use new Worktree type and worktrees service
+   - Added Worktrees tab to Settings modal
+   - Clean separation: Repositories tab vs Worktrees tab
 
 **Acceptance Criteria:**
 
-- ✅ All existing worktrees migrated to table
-- ✅ Sessions reference worktrees via worktree_id
+- ✅ Worktrees normalized into dedicated table
+- ✅ Sessions can reference worktrees via worktree_id FK
 - ✅ Can query worktrees independently of repos
-- ✅ No data loss
+- ✅ Backend service fully functional
+- ✅ UI components updated and functional
+- ✅ Core package builds successfully
+- ⚠️ Migration script not needed (pre-launch, can nuke DB)
 
 ---
 
-### Phase 1: Worktree Modal UI (~1 week)
+### Phase 1: Worktree Modal UI (~1 week) 🚧 **IN PROGRESS**
 
 **Goal:** Build worktree-centric UI (no environment execution yet)
 
-**Tasks:**
+**Status:** 🚧 Partially Complete
 
-1. **Create WorktreeModal component**
-   - General tab (metadata, issue/PR, sessions)
+**Completed Tasks:**
+
+1. ✅ **Add Worktrees tab to Settings**
+   - Table view with columns: Name, Repository, Branch, Sessions, Path, Actions
+   - Delete functionality with session count warning
+   - Empty states for no repos and no worktrees
+
+**Remaining Tasks:**
+
+2. ⏳ **Create WorktreeModal component**
+   - General tab (metadata, issue/PR, notes, sessions)
    - Environment tab (show config read-only, edit variables)
    - Concepts tab (list markdown files)
    - Sessions tab (list active/past sessions)
    - Repo tab (link to repo settings)
 
-2. **Add Worktrees tab to Settings**
-   - Table view with columns: Name, Branch, Env Status, Sessions, Last Used
+3. ⏳ **Update WorktreesTable**
    - Click row → Open WorktreeModal
-   - "+ Create" button → CreateWorktreeModal
+   - "+ Create Worktree" button → CreateWorktreeModal
 
-3. **Update SessionHeader**
+4. ⏳ **Update SessionHeader**
    - Make "Worktree: feat-auth" clickable → Opens WorktreeModal
 
-4. **Backend services**
+5. ⏳ **Backend services**
    - WorktreeConceptsService (list markdown files from worktree path)
-   - Update WorktreesService with new fields (issue_url, pr_url, notes)
+   - Worktrees already support: issue_url, pr_url, notes, environment_instance
 
-5. **Database columns**
-   - Ensure worktrees.data includes: issue_url, pr_url, notes, environment_instance
+6. ⏳ **Wire up parent component**
+   - Fetch worktrees from `/worktrees` service
+   - Pass to SettingsModal
+   - Implement delete handler
 
 **Acceptance Criteria:**
 
-- ✅ Settings → Worktrees tab exists
-- ✅ Can open Worktree Modal from multiple places
-- ✅ All 5 tabs render correctly
-- ✅ Can edit issue_url, pr_url, notes
-- ✅ Can browse concept files
+- ✅ Settings → Worktrees tab exists (table view)
+- ⏳ Can open Worktree Modal from multiple places
+- ⏳ All 5 tabs render correctly
+- ⏳ Can edit issue_url, pr_url, notes
+- ⏳ Can browse concept files
 
 ---
 

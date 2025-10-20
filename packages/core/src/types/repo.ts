@@ -1,5 +1,6 @@
 // src/types/repo.ts
 import type { SessionID, UUID } from './id';
+import type { RepoEnvironmentConfig } from './worktree';
 
 /**
  * URL-friendly identifier for repositories and worktrees
@@ -25,11 +26,8 @@ export type WorktreeName = string;
 /**
  * Git repository managed by Agor
  *
- * Repositories can be:
- * 1. Agor-managed: Cloned as bare repo to ~/.agor/repos/{slug}
- * 2. User-managed: External repo that sessions reference
- *
- * Agor-managed repos enable worktree creation and parallel development.
+ * All repositories are cloned as bare repos to ~/.agor/repos/{slug}
+ * and managed by Agor for worktree creation and parallel development.
  */
 export interface Repo {
   /** Unique repository identifier (UUIDv7) */
@@ -55,39 +53,20 @@ export interface Repo {
   name: string;
 
   /**
-   * Git remote URL (if cloned by Agor)
+   * Git remote URL
    *
    * Examples:
    * - "https://github.com/user/repo.git"
    * - "git@github.com:user/repo.git"
-   *
-   * Undefined for user-managed repos without remotes.
    */
-  remote_url?: string;
+  remote_url: string;
 
   /**
-   * Local path to repository
+   * Local path to bare repository
    *
-   * For Agor-managed repos: ~/.agor/repos/{slug} (bare clone)
-   * For user-managed repos: User's existing repo path
+   * Always: ~/.agor/repos/{slug}
    */
   local_path: string;
-
-  /**
-   * Whether Agor manages this repository
-   *
-   * true:  Cloned by Agor, supports worktree management
-   * false: User's existing repo, Agor only tracks sessions
-   */
-  managed_by_agor: boolean;
-
-  /**
-   * Active worktrees for this repository
-   *
-   * Only populated for Agor-managed repos.
-   * Empty array for user-managed repos.
-   */
-  worktrees: WorktreeConfig[];
 
   /**
    * Default branch name
@@ -96,6 +75,14 @@ export interface Repo {
    * Used when creating new worktrees without explicit ref.
    */
   default_branch?: string;
+
+  /**
+   * Environment configuration template (optional)
+   *
+   * Defines how to run environments for all worktrees in this repo.
+   * Each worktree creates an instance with specific variable values.
+   */
+  environment_config?: RepoEnvironmentConfig;
 
   /** Repository metadata */
   created_at: string;
@@ -172,52 +159,4 @@ export interface WorktreeConfig {
   /** Worktree metadata */
   created_at: string;
   last_used: string;
-}
-
-/**
- * Session's repository context
- *
- * Links a session to either:
- * 1. Agor-managed repo + worktree
- * 2. User's existing directory (with optional git repo)
- */
-export interface SessionRepoContext {
-  /**
-   * Repository ID (if Agor-managed)
-   *
-   * Undefined for sessions in user-managed directories.
-   */
-  repo_id?: UUID;
-
-  /**
-   * Repository slug (if Agor-managed)
-   *
-   * Enables quick CLI references without UUID lookup.
-   */
-  repo_slug?: RepoSlug;
-
-  /**
-   * Worktree name (if using Agor-managed worktree)
-   *
-   * Undefined if session uses user's directory.
-   */
-  worktree_name?: WorktreeName;
-
-  /**
-   * Working directory (absolute path)
-   *
-   * For Agor-managed: ~/.agor/worktrees/{repo-slug}/{worktree-name}
-   * For user-managed: User's current working directory
-   *
-   * This is where the agent CLI executes.
-   */
-  cwd: string;
-
-  /**
-   * Whether this session uses Agor-managed worktree
-   *
-   * true:  Session in ~/.agor/worktrees/
-   * false: Session in user's directory
-   */
-  managed_worktree: boolean;
 }

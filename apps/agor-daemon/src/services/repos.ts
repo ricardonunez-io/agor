@@ -6,8 +6,9 @@
  */
 
 import { type Database, RepoRepository } from '@agor/core/db';
+import type { Application } from '@agor/core/feathers';
 import { cloneRepo, getWorktreePath, createWorktree as gitCreateWorktree } from '@agor/core/git';
-import type { QueryParams, Repo } from '@agor/core/types';
+import type { QueryParams, Repo, Worktree } from '@agor/core/types';
 import { DrizzleService } from '../adapters/drizzle';
 
 /**
@@ -23,8 +24,9 @@ export type RepoParams = QueryParams<{
  */
 export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams> {
   private repoRepo: RepoRepository;
+  private app: Application;
 
-  constructor(db: Database) {
+  constructor(db: Database, app: Application) {
     const repoRepo = new RepoRepository(db);
     super(repoRepo, {
       id: 'repo_id',
@@ -35,6 +37,7 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
     });
 
     this.repoRepo = repoRepo;
+    this.app = app;
   }
 
   /**
@@ -106,8 +109,8 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
       throw new Error(`Repository '${data.slug}' already exists in database`);
     }
 
-    // Clone using git-utils
-    const result = await cloneRepo({ url: data.url });
+    // Clone using git-utils (as bare repo for worktree management)
+    const result = await cloneRepo({ url: data.url, bare: true });
 
     // Create database record
     return this.create(
@@ -137,7 +140,7 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
       sourceBranch?: string;
     },
     params?: RepoParams
-  ): Promise<Repo> {
+  ): Promise<Worktree> {
     const repo = await this.get(id, params);
 
     // Generate worktree path
@@ -153,32 +156,24 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
       data.sourceBranch
     );
 
-    // Get current worktrees and add new one with proper new_branch flag
-    const worktrees = repo.worktrees || [];
-    return this.patch(
-      id,
-      {
-        worktrees: [
-          ...worktrees,
-          {
-            name: data.name,
-            path: worktreePath,
-            ref: data.ref,
-            new_branch: data.createBranch ?? false,
-            sessions: [],
-            created_at: new Date().toISOString(),
-            last_used: new Date().toISOString(),
-          },
-        ],
-      },
-      params
-    ) as Promise<Repo>;
+    // Create worktree record in database using the service (broadcasts WebSocket event)
+    const worktreesService = this.app.service('worktrees');
+    return worktreesService.create({
+      repo_id: repo.repo_id,
+      name: data.name,
+      path: worktreePath,
+      ref: data.ref,
+      base_ref: data.sourceBranch,
+      new_branch: data.createBranch ?? false,
+      sessions: [],
+      last_used: new Date().toISOString(),
+    }) as Promise<Worktree>;
   }
 }
 
 /**
  * Service factory function
  */
-export function createReposService(db: Database): ReposService {
-  return new ReposService(db);
+export function createReposService(db: Database, app: Application): ReposService {
+  return new ReposService(db, app);
 }

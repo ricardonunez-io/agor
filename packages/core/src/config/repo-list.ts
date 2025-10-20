@@ -63,18 +63,9 @@ export function getRepoReferenceOptions(repos: Repo[]): RepoReferenceOption[] {
       description: `${repo.name} (bare repo)`,
     });
 
-    // Add worktree options
-    for (const worktree of repo.worktrees) {
-      const ref = `${repo.slug}:${worktree.name}`;
-      options.push({
-        label: ref,
-        value: ref,
-        type: 'managed-worktree',
-        slug: repo.slug,
-        worktree: worktree.name,
-        description: `${repo.name} @ ${worktree.ref}`,
-      });
-    }
+    // TODO: Add worktree options (requires fetching from worktrees table)
+    // Worktrees are now first-class entities in their own table
+    // This will need to be updated to accept worktrees as a separate parameter
   }
 
   return options;
@@ -116,18 +107,9 @@ export function getGroupedRepoReferenceOptions(
       description: `${repo.name} (bare repo)`,
     });
 
-    // Add worktree options
-    for (const worktree of repo.worktrees) {
-      const ref = `${repo.slug}:${worktree.name}`;
-      options.push({
-        label: ref,
-        value: ref,
-        type: 'managed-worktree',
-        slug: repo.slug,
-        worktree: worktree.name,
-        description: `${repo.name} @ ${worktree.ref}`,
-      });
-    }
+    // TODO: Add worktree options (requires fetching from worktrees table)
+    // Worktrees are now first-class entities in their own table
+    // This will need to be updated to accept worktrees as a separate parameter
 
     grouped[repo.slug] = options;
   }
@@ -146,12 +128,7 @@ export function getDefaultRepoReference(repos: Repo[]): string | undefined {
 
   const firstRepo = repos[0];
 
-  // Prefer first worktree if available
-  if (firstRepo.worktrees.length > 0) {
-    const firstWorktree = firstRepo.worktrees[0];
-    return `${firstRepo.slug}:${firstWorktree.name}`;
-  }
-
-  // Fallback to bare repo
+  // TODO: Update to fetch worktrees from worktrees table
+  // For now, just return the bare repo
   return firstRepo.slug;
 }

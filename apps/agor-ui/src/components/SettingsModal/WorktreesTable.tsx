@@ -1,74 +1,127 @@
-import type { Repo } from '@agor/core/types';
-import { BranchesOutlined, DeleteOutlined } from '@ant-design/icons';
-import { Button, Popconfirm, Space, Table, Tag, Typography } from 'antd';
+import type { Repo, Worktree } from '@agor/core/types';
+import { BranchesOutlined, DeleteOutlined, FolderOutlined, PlusOutlined } from '@ant-design/icons';
+import {
+  Button,
+  Checkbox,
+  Empty,
+  Form,
+  Input,
+  Modal,
+  Popconfirm,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from 'antd';
+import { useState } from 'react';
 
 const { Text } = Typography;
 
 interface WorktreesTableProps {
+  worktrees: Worktree[];
   repos: Repo[];
-  onDelete?: (repoId: string, worktreeName: string) => void;
+  onDelete?: (worktreeId: string) => void;
+  onCreate?: (repoId: string, data: { name: string; ref: string; createBranch: boolean }) => void;
 }
 
-interface WorktreeRow {
-  key: string;
-  repoId: string;
-  repoSlug: string;
-  worktreeName: string;
-  ref: string;
-  path: string;
-  sessions: string[];
-  newBranch: boolean;
-}
+export const WorktreesTable: React.FC<WorktreesTableProps> = ({
+  worktrees,
+  repos,
+  onDelete,
+  onCreate,
+}) => {
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [form] = Form.useForm();
+  const [useSameBranchName, setUseSameBranchName] = useState(true);
+  const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
 
-export const WorktreesTable: React.FC<WorktreesTableProps> = ({ repos, onDelete }) => {
-  // Flatten worktrees from all repos into rows
-  const worktreeRows: WorktreeRow[] = repos.flatMap(repo =>
-    (repo.worktrees || []).map(worktree => ({
-      key: `${repo.repo_id}-${worktree.name}`,
-      repoId: repo.repo_id,
-      repoSlug: repo.slug,
-      worktreeName: worktree.name,
-      ref: worktree.ref,
-      path: worktree.path,
-      sessions: worktree.sessions,
-      newBranch: worktree.new_branch,
-    }))
-  );
+  // Helper to get repo name from repo_id
+  const getRepoName = (repoId: string): string => {
+    const repo = repos.find(r => r.repo_id === repoId);
+    return repo?.name || 'Unknown Repo';
+  };
 
-  const handleDelete = (repoId: string, worktreeName: string) => {
-    onDelete?.(repoId, worktreeName);
+  // Get selected repo's default branch
+  const getDefaultBranch = (): string => {
+    if (!selectedRepoId) return 'main';
+    const repo = repos.find(r => r.repo_id === selectedRepoId);
+    return repo?.default_branch || 'main';
+  };
+
+  const handleDelete = (worktreeId: string) => {
+    onDelete?.(worktreeId);
+  };
+
+  const handleCreate = async () => {
+    try {
+      const values = await form.validateFields();
+      const branchName = useSameBranchName ? values.name : values.branchName;
+
+      onCreate?.(values.repoId, {
+        name: values.name,
+        ref: branchName,
+        createBranch: true, // Always create new branch based on default branch
+      });
+      setCreateModalOpen(false);
+      form.resetFields();
+      setUseSameBranchName(true);
+      setSelectedRepoId(null);
+    } catch (error) {
+      console.error('Validation failed:', error);
+    }
+  };
+
+  const handleCancel = () => {
+    setCreateModalOpen(false);
+    form.resetFields();
+    setUseSameBranchName(true);
+    setSelectedRepoId(null);
   };
 
   const columns = [
     {
-      title: 'Repository',
-      dataIndex: 'repoSlug',
-      key: 'repoSlug',
-      width: 150,
-      render: (slug: string) => (
-        <Text code style={{ fontSize: 12 }}>
-          {slug}
-        </Text>
+      title: 'Name',
+      dataIndex: 'name',
+      key: 'name',
+      render: (name: string, record: Worktree) => (
+        <Space>
+          <BranchesOutlined />
+          <Text strong>{name}</Text>
+          {record.new_branch && (
+            <Tag color="green" style={{ fontSize: 11 }}>
+              New Branch
+            </Tag>
+          )}
+        </Space>
       ),
     },
     {
-      title: 'Worktree',
-      key: 'worktree',
-      render: (_: unknown, row: WorktreeRow) => (
-        <Space direction="vertical" size={4}>
-          <Space>
-            <BranchesOutlined />
-            <Text strong>{row.worktreeName}</Text>
-            {row.newBranch && (
-              <Tag color="green" style={{ fontSize: 11 }}>
-                New Branch
-              </Tag>
-            )}
-          </Space>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {row.ref}
-          </Text>
+      title: 'Repository',
+      dataIndex: 'repo_id',
+      key: 'repo_id',
+      render: (repoId: string) => (
+        <Space>
+          <FolderOutlined />
+          <Text>{getRepoName(repoId)}</Text>
         </Space>
+      ),
+    },
+    {
+      title: 'Branch',
+      dataIndex: 'ref',
+      key: 'ref',
+      render: (ref: string) => <Text code>{ref}</Text>,
+    },
+    {
+      title: 'Sessions',
+      dataIndex: 'sessions',
+      key: 'sessions',
+      width: 100,
+      render: (sessions: string[]) => (
+        <Text type="secondary">
+          {sessions?.length || 0} {sessions?.length === 1 ? 'session' : 'sessions'}
+        </Text>
       ),
     },
     {
@@ -76,36 +129,29 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({ repos, onDelete 
       dataIndex: 'path',
       key: 'path',
       render: (path: string) => (
-        <Text type="secondary" code style={{ fontSize: 11 }}>
+        <Text code style={{ fontSize: 11 }}>
           {path}
         </Text>
       ),
     },
     {
-      title: 'Sessions',
-      dataIndex: 'sessions',
-      key: 'sessions',
-      width: 100,
-      render: (sessions: string[]) => sessions?.length || 0,
-    },
-    {
       title: 'Actions',
       key: 'actions',
       width: 80,
-      render: (_: unknown, row: WorktreeRow) => (
+      render: (_: unknown, record: Worktree) => (
         <Popconfirm
           title="Delete worktree?"
           description={
             <>
-              <p>Are you sure you want to delete worktree "{row.worktreeName}"?</p>
-              {row.sessions.length > 0 && (
+              <p>Are you sure you want to delete worktree "{record.name}"?</p>
+              {record.sessions.length > 0 && (
                 <p style={{ color: '#ff4d4f' }}>
-                  ⚠️ {row.sessions.length} session(s) reference this worktree.
+                  ⚠️ {record.sessions.length} session(s) reference this worktree.
                 </p>
               )}
             </>
           }
-          onConfirm={() => handleDelete(row.repoId, row.worktreeName)}
+          onConfirm={() => handleDelete(record.worktree_id)}
           okText="Delete"
           cancelText="Cancel"
           okButtonProps={{ danger: true }}
@@ -117,21 +163,123 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({ repos, onDelete 
   ];
 
   return (
-    <div style={{ padding: '0 24px' }}>
-      <div style={{ marginBottom: 16 }}>
+    <Space direction="vertical" size="middle" style={{ width: '100%', padding: '0 24px' }}>
+      <Space style={{ width: '100%', justifyContent: 'space-between' }}>
         <Text type="secondary">
-          Worktrees are created when you create a new session with "New Worktree" or "Clone
-          Repository" mode.
+          Manage git worktrees for isolated development contexts across sessions.
         </Text>
-      </div>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => setCreateModalOpen(true)}
+          disabled={repos.length === 0}
+        >
+          Create Worktree
+        </Button>
+      </Space>
 
-      <Table
-        dataSource={worktreeRows}
-        columns={columns}
-        rowKey="key"
-        pagination={false}
-        size="small"
-      />
-    </div>
+      {!worktrees && <Empty description="Loading worktrees..." />}
+
+      {worktrees && repos.length === 0 && (
+        <Empty description="No repositories configured">
+          <Text type="secondary">
+            Create a repository first in the Repositories tab to enable worktrees.
+          </Text>
+        </Empty>
+      )}
+
+      {repos.length > 0 && worktrees.length === 0 && (
+        <Empty description="No worktrees yet">
+          <Text type="secondary">
+            Worktrees will appear here once created from sessions or the CLI.
+          </Text>
+        </Empty>
+      )}
+
+      {worktrees.length > 0 && (
+        <Table
+          dataSource={worktrees}
+          columns={columns}
+          rowKey="worktree_id"
+          pagination={{ pageSize: 10 }}
+          size="small"
+        />
+      )}
+
+      <Modal
+        title="Create Worktree"
+        open={createModalOpen}
+        onOk={handleCreate}
+        onCancel={handleCancel}
+        okText="Create"
+      >
+        <Form form={form} layout="vertical">
+          <Form.Item
+            name="repoId"
+            label="Repository"
+            rules={[{ required: true, message: 'Please select a repository' }]}
+          >
+            <Select
+              placeholder="Select a repository"
+              showSearch
+              filterOption={(input, option) =>
+                (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+              }
+              options={repos.map(repo => ({
+                value: repo.repo_id,
+                label: repo.name,
+              }))}
+              onChange={value => setSelectedRepoId(value)}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="name"
+            label="Worktree Name"
+            rules={[
+              { required: true, message: 'Please enter a worktree name' },
+              {
+                pattern: /^[a-z0-9-]+$/,
+                message: 'Only lowercase letters, numbers, and hyphens allowed',
+              },
+            ]}
+            tooltip="URL-friendly name (e.g., 'feat-auth', 'fix-cors')"
+          >
+            <Input placeholder="feat-auth" />
+          </Form.Item>
+
+          <Form.Item>
+            <Checkbox
+              checked={useSameBranchName}
+              onChange={e => setUseSameBranchName(e.target.checked)}
+            >
+              Use worktree name as branch name
+            </Checkbox>
+          </Form.Item>
+
+          {!useSameBranchName && (
+            <Form.Item
+              name="branchName"
+              label="Branch Name"
+              rules={[{ required: true, message: 'Please enter branch name' }]}
+            >
+              <Input placeholder="feature/auth" />
+            </Form.Item>
+          )}
+
+          <Typography.Paragraph type="secondary">
+            <strong>What will happen:</strong>
+            <br />• Fetch latest from <Text code>origin/{getDefaultBranch()}</Text>
+            <br />• Create new branch{' '}
+            <Text code>{useSameBranchName ? '<worktree-name>' : '<branch-name>'}</Text> based on{' '}
+            <Text code>{getDefaultBranch()}</Text>
+            <br />• Worktree location:{' '}
+            <Text code>
+              ~/.agor/worktrees/{'<repo>'}/<Text italic>{'<name>'}</Text>
+            </Text>
+          </Typography.Paragraph>
+        </Form>
+      </Modal>
+    </Space>
   );
 };

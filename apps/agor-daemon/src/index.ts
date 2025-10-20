@@ -73,6 +73,7 @@ import { createSessionMCPServersService } from './services/session-mcp-servers';
 import { createSessionsService } from './services/sessions';
 import { createTasksService } from './services/tasks';
 import { createUsersService } from './services/users';
+import { createWorktreesService } from './services/worktrees';
 import { AnonymousStrategy } from './strategies/anonymous';
 
 /**
@@ -269,7 +270,13 @@ async function main() {
   });
 
   app.use('/boards', createBoardsService(db));
-  app.use('/repos', createReposService(db));
+
+  // Register worktrees service first (repos service needs to access it)
+  app.use('/worktrees', createWorktreesService(db));
+
+  // Register repos service (accesses worktrees via app.service('worktrees'))
+  app.use('/repos', createReposService(db, app));
+
   app.use('/mcp-servers', createMCPServersService(db));
 
   // Register context service (read-only filesystem browser)

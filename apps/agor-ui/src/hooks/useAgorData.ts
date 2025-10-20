@@ -5,7 +5,7 @@
  */
 
 import type { AgorClient } from '@agor/core/api';
-import type { Board, MCPServer, Repo, Session, Task, User } from '@agor/core/types';
+import type { Board, MCPServer, Repo, Session, Task, User, Worktree } from '@agor/core/types';
 import { useCallback, useEffect, useState } from 'react';
 
 interface UseAgorDataResult {
@@ -13,6 +13,7 @@ interface UseAgorDataResult {
   tasks: Record<string, Task[]>;
   boards: Board[];
   repos: Repo[];
+  worktrees: Worktree[];
   users: User[];
   mcpServers: MCPServer[];
   sessionMcpServerIds: Record<string, string[]>; // Map: sessionId -> mcpServerIds[]
@@ -32,6 +33,7 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
   const [tasks, setTasks] = useState<Record<string, Task[]>>({});
   const [boards, setBoards] = useState<Board[]>([]);
   const [repos, setRepos] = useState<Repo[]>([]);
+  const [worktrees, setWorktrees] = useState<Worktree[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
   const [sessionMcpServerIds, setSessionMcpServerIds] = useState<Record<string, string[]>>({});
@@ -48,12 +50,13 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
       setLoading(true);
       setError(null);
 
-      // Fetch sessions, tasks, boards, repos, users, mcp servers, session-mcp relationships in parallel
+      // Fetch sessions, tasks, boards, repos, worktrees, users, mcp servers, session-mcp relationships in parallel
       const [
         sessionsResult,
         tasksResult,
         boardsResult,
         reposResult,
+        worktreesResult,
         usersResult,
         mcpServersResult,
         sessionMcpResult,
@@ -62,6 +65,7 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
         client.service('tasks').find({ query: { $limit: 500 } }), // Fetch up to 500 tasks
         client.service('boards').find(),
         client.service('repos').find(),
+        client.service('worktrees').find(),
         client.service('users').find(),
         client.service('mcp-servers').find(),
         client.service('session-mcp-servers').find(),
@@ -72,6 +76,7 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
       const tasksList = Array.isArray(tasksResult) ? tasksResult : tasksResult.data;
       const boardsList = Array.isArray(boardsResult) ? boardsResult : boardsResult.data;
       const reposList = Array.isArray(reposResult) ? reposResult : reposResult.data;
+      const worktreesList = Array.isArray(worktreesResult) ? worktreesResult : worktreesResult.data;
       const usersList = Array.isArray(usersResult) ? usersResult : usersResult.data;
       const mcpServersList = Array.isArray(mcpServersResult)
         ? mcpServersResult
@@ -94,6 +99,7 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
 
       setBoards(boardsList);
       setRepos(reposList);
+      setWorktrees(worktreesList);
       setUsers(usersList);
       setMcpServers(mcpServersList);
 
@@ -203,6 +209,23 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
     reposService.on('updated', handleRepoPatched);
     reposService.on('removed', handleRepoRemoved);
 
+    // Subscribe to worktree events
+    const worktreesService = client.service('worktrees');
+    const handleWorktreeCreated = (worktree: Worktree) => {
+      setWorktrees(prev => [...prev, worktree]);
+    };
+    const handleWorktreePatched = (worktree: Worktree) => {
+      setWorktrees(prev => prev.map(w => (w.worktree_id === worktree.worktree_id ? worktree : w)));
+    };
+    const handleWorktreeRemoved = (worktree: Worktree) => {
+      setWorktrees(prev => prev.filter(w => w.worktree_id !== worktree.worktree_id));
+    };
+
+    worktreesService.on('created', handleWorktreeCreated);
+    worktreesService.on('patched', handleWorktreePatched);
+    worktreesService.on('updated', handleWorktreePatched);
+    worktreesService.on('removed', handleWorktreeRemoved);
+
     // Subscribe to user events
     const usersService = client.service('users');
     const handleUserCreated = (user: User) => {
@@ -288,6 +311,11 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
       reposService.removeListener('updated', handleRepoPatched);
       reposService.removeListener('removed', handleRepoRemoved);
 
+      worktreesService.removeListener('created', handleWorktreeCreated);
+      worktreesService.removeListener('patched', handleWorktreePatched);
+      worktreesService.removeListener('updated', handleWorktreePatched);
+      worktreesService.removeListener('removed', handleWorktreeRemoved);
+
       usersService.removeListener('created', handleUserCreated);
       usersService.removeListener('patched', handleUserPatched);
       usersService.removeListener('updated', handleUserPatched);
@@ -308,6 +336,7 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
     tasks,
     boards,
     repos,
+    worktrees,
     users,
     mcpServers,
     sessionMcpServerIds,

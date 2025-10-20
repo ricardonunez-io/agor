@@ -27,6 +27,8 @@ services:
       - .:/app
       # Persist database/config (unique per project name)
       - agor-data:/root/.agor
+      # Mount SSH keys for git authentication (dev only)
+      - ~/.ssh:/root/.ssh:ro
     stdin_open: true
     tty: true
 

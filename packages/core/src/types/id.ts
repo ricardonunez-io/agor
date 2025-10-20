@@ -121,6 +121,16 @@ export type MessageID = UUID;
 export type UserID = UUID;
 
 /**
+ * Worktree identifier
+ *
+ * Uniquely identifies a git worktree (isolated work context).
+ *
+ * @example
+ * const worktreeId: WorktreeID = "0193g1h2-3i4j-7k5l-a8f3-9d2e1c4b5a6f";
+ */
+export type WorktreeID = UUID;
+
+/**
  * Note: Concepts and Reports use file paths as identifiers, not UUIDs.
  *
  * - Concepts: ConceptPath (e.g., "core.md", "explorations/cli.md")

@@ -6,6 +6,7 @@ import type {
   Repo,
   UpdateUserInput,
   User,
+  Worktree,
 } from '@agor/core/types';
 import { Layout } from 'antd';
 import { useState } from 'react';
@@ -35,6 +36,7 @@ export interface AppProps {
   availableAgents: Agent[];
   boards: Board[];
   repos: Repo[];
+  worktrees: Worktree[];
   users: User[]; // All users for multiplayer metadata
   mcpServers: MCPServer[];
   sessionMcpServerIds: Record<string, string[]>; // Map: sessionId -> mcpServerIds[]
@@ -52,7 +54,7 @@ export interface AppProps {
   onDeleteBoard?: (boardId: string) => void;
   onCreateRepo?: (data: { url: string; slug: string }) => void;
   onDeleteRepo?: (repoId: string) => void;
-  onDeleteWorktree?: (repoId: string, worktreeName: string) => void;
+  onDeleteWorktree?: (worktreeId: string) => void;
   onCreateWorktree?: (
     repoId: string,
     data: { name: string; ref: string; createBranch: boolean }
@@ -75,6 +77,7 @@ export const App: React.FC<AppProps> = ({
   availableAgents,
   boards,
   repos,
+  worktrees,
   users,
   mcpServers,
   sessionMcpServerIds,
@@ -296,6 +299,7 @@ export const App: React.FC<AppProps> = ({
         client={client}
         boards={boards}
         repos={repos}
+        worktrees={worktrees}
         users={users}
         mcpServers={mcpServers}
         onCreateBoard={onCreateBoard}

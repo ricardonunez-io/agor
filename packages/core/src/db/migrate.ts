@@ -44,7 +44,7 @@ async function tablesExist(db: Database): Promise<boolean> {
   try {
     const result = await db.run(sql`
       SELECT name FROM sqlite_master
-      WHERE type='table' AND name IN ('sessions', 'tasks', 'boards', 'repos', 'messages', 'users')
+      WHERE type='table' AND name IN ('sessions', 'tasks', 'boards', 'repos', 'worktrees', 'messages', 'users')
     `);
     return result.rows.length > 0;
   } catch (error) {
@@ -75,7 +75,9 @@ async function createInitialSchema(db: Database): Promise<void> {
         board_id TEXT,
         parent_session_id TEXT,
         forked_from_session_id TEXT,
-        data TEXT NOT NULL
+        worktree_id TEXT NOT NULL,
+        data TEXT NOT NULL,
+        FOREIGN KEY (worktree_id) REFERENCES worktrees(worktree_id) ON DELETE RESTRICT
       )
     `);
 
@@ -89,6 +91,10 @@ async function createInitialSchema(db: Database): Promise<void> {
 
     await db.run(sql`
       CREATE INDEX IF NOT EXISTS sessions_board_idx ON sessions(board_id)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS sessions_worktree_idx ON sessions(worktree_id)
     `);
 
     await db.run(sql`
@@ -163,6 +169,45 @@ async function createInitialSchema(db: Database): Promise<void> {
 
     await db.run(sql`
       CREATE INDEX IF NOT EXISTS repos_slug_idx ON repos(slug)
+    `);
+
+    // Worktrees table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS worktrees (
+        worktree_id TEXT PRIMARY KEY,
+        repo_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER,
+        created_by TEXT NOT NULL DEFAULT 'anonymous',
+        name TEXT NOT NULL,
+        ref TEXT NOT NULL,
+        data TEXT NOT NULL,
+        FOREIGN KEY (repo_id) REFERENCES repos(repo_id) ON DELETE CASCADE
+      )
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS worktrees_repo_idx ON worktrees(repo_id)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS worktrees_name_idx ON worktrees(name)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS worktrees_ref_idx ON worktrees(ref)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS worktrees_created_idx ON worktrees(created_at)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS worktrees_updated_idx ON worktrees(updated_at)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS worktrees_repo_name_unique ON worktrees(repo_id, name)
     `);
 
     // Messages table

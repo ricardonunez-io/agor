@@ -16,3 +16,4 @@ export * from './task';
 export * from './ui';
 export * from './user';
 export * from './utils';
+export * from './worktree';

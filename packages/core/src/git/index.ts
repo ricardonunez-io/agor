@@ -4,6 +4,7 @@
  * Provides Git operations for repo management and worktree isolation
  */
 
+import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -16,7 +17,6 @@ import { simpleGit } from 'simple-git';
  * Needed because daemon may not have git in PATH.
  */
 function getGitBinary(): string | undefined {
-  const { existsSync } = require('node:fs');
   const commonPaths = [
     '/opt/homebrew/bin/git', // Homebrew on Apple Silicon
     '/usr/local/bin/git', // Homebrew on Intel
@@ -38,12 +38,26 @@ function getGitBinary(): string | undefined {
  *
  * Automatically detects git binary path for consistent behavior
  * across different environments (native, Docker, etc.)
+ *
+ * **SSH Host Key Checking:**
+ * Always disabled by default to prevent interactive prompts.
+ * Agor is an automation tool and should not require user interaction for SSH operations.
+ *
+ * @param baseDir - Base directory for git operations
  */
 function createGit(baseDir?: string) {
   const gitBinary = getGitBinary();
+
+  // Always disable strict host key checking for SSH operations
+  // This prevents interactive prompts for unknown hosts in automated environments
+  const config = [
+    'core.sshCommand=ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
+  ];
+
   return simpleGit({
     baseDir,
     binary: gitBinary,
+    config,
   });
 }
 
@@ -93,6 +107,9 @@ export function extractRepoName(url: string): string {
 /**
  * Clone a Git repository to ~/.agor/repos/<name>
  *
+ * If the repository already exists and is valid, returns existing repo info.
+ * If directory exists but is not a valid repo, throws an error with suggestion to delete.
+ *
  * @param options - Clone options
  * @returns Clone result with path and metadata
  */
@@ -105,13 +122,35 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
   await mkdir(reposDir, { recursive: true });
 
   // Check if target directory already exists
-  const { existsSync } = await import('node:fs');
   if (existsSync(targetPath)) {
-    throw new Error(`Repository directory already exists: ${targetPath}`);
+    // Check if it's a valid git repository
+    const isValid = await isGitRepo(targetPath);
+
+    if (isValid) {
+      // Repository already exists and is valid - just use it!
+      console.log(`Repository already exists at ${targetPath}, using existing clone`);
+
+      const repoGit = createGit(targetPath);
+      const branches = await repoGit.branch();
+      const defaultBranch = branches.current || 'main';
+
+      return {
+        path: targetPath,
+        repoName,
+        defaultBranch,
+      };
+    } else {
+      // Directory exists but is not a valid git repo
+      throw new Error(
+        `Directory exists but is not a valid git repository: ${targetPath}\n` +
+          `Please delete this directory manually and try again.`
+      );
+    }
   }
 
-  // Configure git with progress tracking
+  // Create git instance (SSH host key checking is always disabled)
   const git = createGit();
+
   if (options.onProgress) {
     git.outputHandler((_command, stdout, stderr) => {
       // Note: Progress tracking through outputHandler is limited
@@ -227,14 +266,20 @@ export async function createWorktree(
 ): Promise<void> {
   const git = createGit(repoPath);
 
-  // Pull latest from remote if requested and ref is a branch name (not SHA)
-  if (pullLatest && !ref.match(/^[0-9a-f]{7,40}$/)) {
-    const refToPull = sourceBranch || ref;
+  let fetchSucceeded = false;
+
+  // Pull latest from remote if requested
+  if (pullLatest) {
     try {
-      await git.fetch(['origin', refToPull]);
+      // Fetch all branches to ensure remote tracking branches exist
+      await git.fetch(['origin']);
+      fetchSucceeded = true;
+      console.log('✅ Fetched latest from origin');
     } catch (error) {
-      // Ignore fetch errors (branch might not exist on remote yet)
-      console.warn(`Failed to fetch ${refToPull} from origin:`, error);
+      console.warn(
+        '⚠️  Failed to fetch from origin (will use local refs):',
+        error instanceof Error ? error.message : String(error)
+      );
     }
   }
 
@@ -242,10 +287,10 @@ export async function createWorktree(
 
   if (createBranch) {
     args.push('-b', ref);
-    // Use origin/sourceBranch as base if pullLatest is enabled
-    if (pullLatest && sourceBranch) {
-      args.push(`origin/${sourceBranch}`);
-    } else if (sourceBranch) {
+    // Use sourceBranch as base
+    if (sourceBranch) {
+      // For bare repos cloned with --bare, git creates local branches directly (not remote tracking branches)
+      // So we use the branch name directly (e.g., 'main'), not 'origin/main'
       args.push(sourceBranch);
     }
   } else {

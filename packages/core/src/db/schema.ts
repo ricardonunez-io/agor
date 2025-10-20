@@ -32,6 +32,13 @@ export const sessions = sqliteTable(
     parent_session_id: text('parent_session_id', { length: 36 }),
     forked_from_session_id: text('forked_from_session_id', { length: 36 }),
 
+    // Worktree reference (REQUIRED: all sessions must have a worktree)
+    worktree_id: text('worktree_id', { length: 36 })
+      .notNull()
+      .references(() => worktrees.worktree_id, {
+        onDelete: 'restrict', // Prevent deleting worktrees with active sessions
+      }),
+
     // JSON blob for everything else (cross-DB via json() type)
     data: text('data', { mode: 'json' })
       .$type<{
@@ -39,15 +46,6 @@ export const sessions = sqliteTable(
         sdk_session_id?: string; // SDK session ID for conversation continuity (Claude Agent SDK, Codex SDK, etc.)
         title?: string; // Session title (user-provided or auto-generated)
         description?: string; // Legacy field, may contain first prompt
-
-        // Repository context
-        repo?: {
-          repo_id?: string;
-          repo_slug?: string;
-          worktree_name?: string;
-          cwd: string;
-          managed_worktree: boolean;
-        };
 
         // Git state
         git_state: Session['git_state'];
@@ -94,6 +92,7 @@ export const sessions = sqliteTable(
     statusIdx: index('sessions_status_idx').on(table.status),
     agenticToolIdx: index('sessions_agentic_tool_idx').on(table.agentic_tool),
     boardIdx: index('sessions_board_idx').on(table.board_id),
+    worktreeIdx: index('sessions_worktree_idx').on(table.worktree_id),
     createdIdx: index('sessions_created_idx').on(table.created_at),
     parentIdx: index('sessions_parent_idx').on(table.parent_session_id),
     forkedIdx: index('sessions_forked_idx').on(table.forked_from_session_id),
@@ -237,6 +236,8 @@ export const boards = sqliteTable(
 
 /**
  * Repos table - Git repositories managed by Agor
+ *
+ * All repos are cloned as bare repos to ~/.agor/repos/{slug}
  */
 export const repos = sqliteTable(
   'repos',
@@ -251,16 +252,108 @@ export const repos = sqliteTable(
     data: text('data', { mode: 'json' })
       .$type<{
         name: string;
-        remote_url?: string;
-        local_path: string;
-        managed_by_agor: boolean;
+        remote_url: string; // Required: all repos are cloned from a remote
+        local_path: string; // Always ~/.agor/repos/{slug}
         default_branch?: string;
-        worktrees: WorktreeConfig[];
+        environment_config?: {
+          up_command: string;
+          down_command: string;
+          template_vars: string[];
+          health_check?: {
+            type: 'http' | 'tcp' | 'process';
+            url_template?: string;
+            port_var?: string;
+          };
+        };
       }>()
       .notNull(),
   },
   table => ({
     slugIdx: index('repos_slug_idx').on(table.slug),
+  })
+);
+
+/**
+ * Worktrees table - Git worktrees for isolated development contexts
+ *
+ * First-class entities for managing work contexts across sessions.
+ * Each worktree is an isolated git working directory with its own branch,
+ * environment configuration, and persistent work state.
+ */
+export const worktrees = sqliteTable(
+  'worktrees',
+  {
+    // Primary identity
+    worktree_id: text('worktree_id', { length: 36 }).primaryKey(),
+    repo_id: text('repo_id', { length: 36 })
+      .notNull()
+      .references(() => repos.repo_id, { onDelete: 'cascade' }),
+    created_at: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updated_at: integer('updated_at', { mode: 'timestamp_ms' }),
+
+    // User attribution
+    created_by: text('created_by', { length: 36 }).notNull().default('anonymous'),
+
+    // Materialized for queries
+    name: text('name').notNull(), // "feat-auth", "main"
+    ref: text('ref').notNull(), // Current branch/tag/commit
+
+    // JSON blob for everything else
+    data: text('data', { mode: 'json' })
+      .$type<{
+        // File system
+        path: string; // Absolute path to worktree directory
+
+        // Git state (current)
+        base_ref?: string; // Branch this diverged from (e.g., "main")
+        base_sha?: string; // SHA at worktree creation
+        last_commit_sha?: string; // Latest commit
+        tracking_branch?: string; // Remote tracking branch
+        new_branch: boolean; // Created by Agor?
+
+        // Work context (persistent across sessions)
+        issue_url?: string; // GitHub/GitLab issue
+        pull_request_url?: string; // PR link
+        notes?: string; // Freeform user notes
+
+        // Environment instance
+        environment_instance?: {
+          variables: Record<string, string | number>;
+          status: 'stopped' | 'starting' | 'running' | 'stopping' | 'error';
+          process?: {
+            pid?: number;
+            started_at?: string;
+            uptime?: string;
+          };
+          last_health_check?: {
+            timestamp: string;
+            status: 'healthy' | 'unhealthy' | 'unknown';
+            message?: string;
+          };
+          access_urls?: Array<{
+            name: string;
+            url: string;
+          }>;
+          logs?: string[];
+        };
+
+        // Sessions using this worktree
+        sessions: string[]; // SessionID[]
+        last_used: string; // ISO timestamp
+
+        // Custom context for templates
+        custom_context?: Record<string, unknown>;
+      }>()
+      .notNull(),
+  },
+  table => ({
+    repoIdx: index('worktrees_repo_idx').on(table.repo_id),
+    nameIdx: index('worktrees_name_idx').on(table.name),
+    refIdx: index('worktrees_ref_idx').on(table.ref),
+    createdIdx: index('worktrees_created_idx').on(table.created_at),
+    updatedIdx: index('worktrees_updated_idx').on(table.updated_at),
+    // Composite unique constraint (repo + name)
+    uniqueRepoName: index('worktrees_repo_name_unique').on(table.repo_id, table.name),
   })
 );
 
@@ -431,6 +524,8 @@ export type BoardRow = typeof boards.$inferSelect;
 export type BoardInsert = typeof boards.$inferInsert;
 export type RepoRow = typeof repos.$inferSelect;
 export type RepoInsert = typeof repos.$inferInsert;
+export type WorktreeRow = typeof worktrees.$inferSelect;
+export type WorktreeInsert = typeof worktrees.$inferInsert;
 export type UserRow = typeof users.$inferSelect;
 export type UserInsert = typeof users.$inferInsert;
 export type MCPServerRow = typeof mcpServers.$inferSelect;

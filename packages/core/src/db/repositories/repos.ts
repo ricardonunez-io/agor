@@ -48,6 +48,10 @@ export class RepoRepository implements BaseRepository<Repo, Partial<Repo>> {
       throw new RepositoryError('slug is required when creating a repo');
     }
 
+    if (!repo.remote_url) {
+      throw new RepositoryError('Repo must have a remote_url');
+    }
+
     return {
       repo_id: repoId,
       slug: repo.slug,
@@ -57,9 +61,8 @@ export class RepoRepository implements BaseRepository<Repo, Partial<Repo>> {
         name: repo.name ?? repo.slug,
         remote_url: repo.remote_url,
         local_path: repo.local_path ?? '',
-        managed_by_agor: repo.managed_by_agor ?? false,
         default_branch: repo.default_branch,
-        worktrees: repo.worktrees ?? [],
+        environment_config: repo.environment_config,
       },
     };
   }
@@ -173,23 +176,12 @@ export class RepoRepository implements BaseRepository<Repo, Partial<Repo>> {
   }
 
   /**
-   * Find managed repos only
+   * Find managed repos only (DEPRECATED: all repos are managed now)
+   *
+   * Kept for backwards compatibility - returns all repos.
    */
   async findManaged(): Promise<Repo[]> {
-    try {
-      const rows = await this.db
-        .select()
-        .from(repos)
-        .where(sql`json_extract(${repos.data}, '$.managed_by_agor') = 1`)
-        .all();
-
-      return rows.map(row => this.rowToRepo(row));
-    } catch (error) {
-      throw new RepositoryError(
-        `Failed to find managed repos: ${error instanceof Error ? error.message : String(error)}`,
-        error
-      );
-    }
+    return this.findAll();
   }
 
   /**
@@ -255,56 +247,19 @@ export class RepoRepository implements BaseRepository<Repo, Partial<Repo>> {
   }
 
   /**
-   * Add worktree to repo
+   * @deprecated Worktrees are now first-class entities in their own table.
+   * Use WorktreeRepository instead.
    */
-  async addWorktree(repoId: string, worktree: Repo['worktrees'][0]): Promise<Repo> {
-    try {
-      const repo = await this.findById(repoId);
-      if (!repo) {
-        throw new EntityNotFoundError('Repo', repoId);
-      }
-
-      // Check if worktree with same name already exists
-      const existingIndex = repo.worktrees.findIndex(w => w.name === worktree.name);
-      if (existingIndex >= 0) {
-        // Update existing worktree
-        repo.worktrees[existingIndex] = worktree;
-      } else {
-        // Add new worktree
-        repo.worktrees.push(worktree);
-      }
-
-      return this.update(repoId, { worktrees: repo.worktrees });
-    } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      if (error instanceof EntityNotFoundError) throw error;
-      throw new RepositoryError(
-        `Failed to add worktree: ${error instanceof Error ? error.message : String(error)}`,
-        error
-      );
-    }
+  async addWorktree(): Promise<never> {
+    throw new Error('addWorktree is deprecated. Use WorktreeRepository.create() instead.');
   }
 
   /**
-   * Remove worktree from repo
+   * @deprecated Worktrees are now first-class entities in their own table.
+   * Use WorktreeRepository instead.
    */
-  async removeWorktree(repoId: string, worktreeName: string): Promise<Repo> {
-    try {
-      const repo = await this.findById(repoId);
-      if (!repo) {
-        throw new EntityNotFoundError('Repo', repoId);
-      }
-
-      repo.worktrees = repo.worktrees.filter(w => w.name !== worktreeName);
-      return this.update(repoId, { worktrees: repo.worktrees });
-    } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      if (error instanceof EntityNotFoundError) throw error;
-      throw new RepositoryError(
-        `Failed to remove worktree: ${error instanceof Error ? error.message : String(error)}`,
-        error
-      );
-    }
+  async removeWorktree(): Promise<never> {
+    throw new Error('removeWorktree is deprecated. Use WorktreeRepository.delete() instead.');
   }
 
   /**
