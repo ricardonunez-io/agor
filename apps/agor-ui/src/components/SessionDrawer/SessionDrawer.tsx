@@ -100,20 +100,16 @@ const SessionDrawer = ({
   const { token } = theme.useToken();
   const [inputValue, setInputValue] = React.useState('');
 
-  // Early return if no session (drawer should not be open without a session)
-  if (!session) {
-    return null;
-  }
-
   // Get agent-aware default permission mode (wrapped in useCallback for hook deps)
   const getDefaultPermissionMode = React.useCallback((agent?: string): PermissionMode => {
     return agent === 'codex' ? 'auto' : 'acceptEdits';
   }, []);
 
   const [permissionMode, setPermissionMode] = React.useState<PermissionMode>(
-    session.permission_config?.mode || getDefaultPermissionMode(session.agentic_tool)
+    session?.permission_config?.mode || getDefaultPermissionMode(session?.agentic_tool)
   );
   const [scrollToBottom, setScrollToBottom] = React.useState<(() => void) | null>(null);
+  const [isStopping, setIsStopping] = React.useState(false);
 
   // Update permission mode when session changes
   React.useEffect(() => {
@@ -135,14 +131,18 @@ const SessionDrawer = ({
     }
   }, [open, scrollToBottom]);
 
+  // Early return if no session (drawer should not be open without a session)
+  // IMPORTANT: Must be after all hooks to satisfy Rules of Hooks
+  if (!session) {
+    return null;
+  }
+
   const handleSendPrompt = () => {
     if (inputValue.trim()) {
       onSendPrompt?.(inputValue, permissionMode);
       setInputValue('');
     }
   };
-
-  const [isStopping, setIsStopping] = React.useState(false);
 
   const handleStop = async () => {
     if (!session || !client || isStopping) {
@@ -208,9 +208,6 @@ const SessionDrawer = ({
         return 'default';
     }
   };
-
-  // Early return if no session
-  if (!session) return null;
 
   const isForked = !!session.genealogy.forked_from_session_id;
   const isSpawned = !!session.genealogy.parent_session_id;
