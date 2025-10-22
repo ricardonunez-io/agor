@@ -25,7 +25,7 @@ import {
 } from '@ant-design/icons';
 import type { ThoughtChainProps } from '@ant-design/x';
 import { ThoughtChain } from '@ant-design/x';
-import { Space, Tag, Tooltip, Typography, theme } from 'antd';
+import { Space, Spin, Tag, Tooltip, Typography, theme } from 'antd';
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import { MarkdownRenderer } from '../MarkdownRenderer';
