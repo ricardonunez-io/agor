@@ -451,6 +451,10 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
 
       const isHealthy = response.ok;
 
+      console.log(
+        `🏥 Health check response for ${worktree.name}: HTTP ${response.status} ${response.statusText} (${isHealthy ? 'healthy' : 'unhealthy'})`
+      );
+
       return await this.updateEnvironment(
         id,
         {
@@ -472,6 +476,8 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
             ? 'Timeout'
             : error.message
           : 'Unknown error';
+
+      console.log(`🏥 Health check failed for ${worktree.name}: ${message}`);
 
       return await this.updateEnvironment(
         id,
