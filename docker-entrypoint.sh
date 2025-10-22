@@ -49,8 +49,8 @@ DAEMON_PID=$!
 sleep 3
 
 # Start UI in foreground (this keeps container alive)
-echo "🎨 Starting UI on port ${VITE_PORT:-5173}..."
-pnpm --filter agor-ui dev --host 0.0.0.0 --port "${VITE_PORT:-5173}"
+echo "🎨 Starting UI on port ${UI_PORT:-5173}..."
+pnpm --filter agor-ui dev --host 0.0.0.0 --port "${UI_PORT:-5173}"
 
 # If UI exits, kill daemon too
 kill $DAEMON_PID 2>/dev/null || true
