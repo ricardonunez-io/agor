@@ -20,7 +20,7 @@ import type {
   SDKSystemMessage,
   SDKUserMessage,
   SDKUserMessageReplay,
-} from '@anthropic-ai/claude-agent-sdk/sdkTypes';
+} from '@anthropic-ai/claude-agent-sdk/sdk';
 import type { SessionID } from '../../types';
 import { MessageRole } from '../../types';
 
@@ -33,6 +33,9 @@ interface ContentBlock {
   is_error?: boolean;
   content?: unknown;
   tool_use_id?: string;
+  id?: string;
+  name?: string;
+  input?: Record<string, unknown>;
   [key: string]: unknown;
 }
 
@@ -349,31 +352,36 @@ export class SDKMessageProcessor {
       });
 
       // Capture model from message_start event
-      if (event.message?.model) {
-        this.state.resolvedModel = event.message.model;
+      const message = event.message as { model?: string } | undefined;
+      if (message?.model) {
+        this.state.resolvedModel = message.model;
       }
     }
 
     // Content block start (text or tool use)
     if (event?.type === 'content_block_start') {
-      const block = event.content_block;
-      const blockIndex = event.index;
+      const block = event.content_block as
+        | { type?: string; name?: string; id?: string }
+        | undefined;
+      const blockIndex = event.index as number;
 
       if (block?.type === 'tool_use') {
-        console.debug(`🔧 Tool start: ${block.name} (${block.id})`);
+        const toolName = block.name as string;
+        const toolId = block.id as string;
+        console.debug(`🔧 Tool start: ${toolName} (${toolId})`);
 
         // Track this tool use block
         this.state.contentBlockStack.push({
           index: blockIndex,
           type: 'tool_use',
-          toolUseId: block.id,
-          toolName: block.name,
+          toolUseId: toolId,
+          toolName: toolName,
         });
 
         events.push({
           type: 'tool_start',
-          toolName: block.name,
-          toolUseId: block.id,
+          toolName: toolName,
+          toolUseId: toolId,
           agentSessionId: this.state.capturedAgentSessionId,
         });
       } else if (block?.type === 'text') {
@@ -387,18 +395,24 @@ export class SDKMessageProcessor {
 
     // Content block delta (streaming text or tool input)
     if (event?.type === 'content_block_delta') {
-      if (event.delta?.type === 'text_delta') {
-        const textChunk = event.delta.text;
+      const delta = event.delta as
+        | { type?: string; text?: string; partial_json?: string }
+        | undefined;
+      if (delta?.type === 'text_delta') {
+        const textChunk = delta.text as string;
         events.push({
           type: 'partial',
           textChunk,
           agentSessionId: this.state.capturedAgentSessionId,
           resolvedModel: this.state.resolvedModel,
         });
-      } else if (event.delta?.type === 'input_json_delta') {
+      } else if (delta?.type === 'input_json_delta') {
         // Tool input is being streamed - log for now
         // Could emit tool_input_chunk event if we want to show tool args as they build
-        console.debug(`🔧 Tool input chunk: ${event.delta.partial_json?.substring(0, 50)}...`);
+        const partialJson = delta.partial_json;
+        if (partialJson) {
+          console.debug(`🔧 Tool input chunk: ${partialJson.substring(0, 50)}...`);
+        }
       }
     }
 
@@ -539,9 +553,10 @@ export class SDKMessageProcessor {
           input: block.input,
         };
       } else {
+        // Return block as-is for other types (tool_result, etc.)
         return {
-          type: block.type,
           ...block,
+          type: block.type,
         };
       }
     });

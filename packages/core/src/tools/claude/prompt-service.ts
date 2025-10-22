@@ -13,7 +13,7 @@ import type {
   HookJSONOutput,
   PermissionMode,
   PreToolUseHookInput,
-} from '@anthropic-ai/claude-agent-sdk/sdkTypes';
+} from '@anthropic-ai/claude-agent-sdk/sdk';
 import type { MCPServerRepository } from '../../db/repositories/mcp-servers';
 import type { MessagesRepository } from '../../db/repositories/messages';
 import type { SessionMCPServerRepository } from '../../db/repositories/session-mcp-servers';
@@ -210,9 +210,15 @@ export class ClaudePromptService {
 
         // Update permission request message with approval/denial
         if (this.messagesService) {
-          await this.messagesService.patch(permissionMessage.message_id, {
+          const baseContent =
+            typeof permissionMessage.content === 'object' &&
+            !Array.isArray(permissionMessage.content)
+              ? permissionMessage.content
+              : {};
+          // biome-ignore lint/suspicious/noExplicitAny: FeathersJS service has patch method but type definition is incomplete
+          await (this.messagesService as any).patch(permissionMessage.message_id, {
             content: {
-              ...permissionMessage.content,
+              ...(baseContent as Record<string, unknown>),
               status: decision.allow ? PermissionStatus.APPROVED : PermissionStatus.DENIED,
               scope: decision.remember ? decision.scope : undefined,
               approved_by: decision.decidedBy,
@@ -375,6 +381,7 @@ export class ClaudePromptService {
     // biome-ignore lint/suspicious/noExplicitAny: SDK Message types include user, assistant, stream_event, result, etc.
     query: AsyncGenerator<any, any, unknown>;
     resolvedModel: string;
+    getStderr: () => string;
   }> {
     const session = await this.sessionsRepo.findById(sessionId);
     if (!session) {

@@ -6,8 +6,8 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install pnpm and AI coding agent CLIs (matches Dockerfile.dev)
-RUN npm install -g pnpm@9.15.1 @anthropic-ai/claude-code @google/gemini-cli @openai/codex
+# Install pnpm and AI coding agent CLIs (always get latest versions)
+RUN npm install -g pnpm@latest @anthropic-ai/claude-code@latest @google/gemini-cli@latest @openai/codex@latest
 
 # Set working directory
 WORKDIR /workspace
