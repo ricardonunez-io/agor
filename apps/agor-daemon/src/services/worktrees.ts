@@ -290,11 +290,6 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     const worktree = await this.get(id, params);
     const repo = (await this.app.service('repos').get(worktree.repo_id)) as Repo;
 
-    // Check if running
-    if (worktree.environment_instance?.status !== 'running') {
-      throw new Error('Environment is not running');
-    }
-
     // Set status to 'stopping'
     await this.updateEnvironment(
       id,

@@ -81,6 +81,13 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
   );
   const [processInfo, setProcessInfo] = useState(worktree.environment_instance?.process);
 
+  // Sync state when worktree prop changes
+  useEffect(() => {
+    setEnvStatus(worktree.environment_instance?.status || 'stopped');
+    setLastHealthCheck(worktree.environment_instance?.last_health_check);
+    setProcessInfo(worktree.environment_instance?.process);
+  }, [worktree]);
+
   // WebSocket listener for real-time environment updates
   useEffect(() => {
     if (!client) return;
@@ -679,7 +686,6 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
                       size="small"
                       icon={isStopping ? <LoadingOutlined /> : <PoweroffOutlined />}
                       onClick={handleStop}
-                      disabled={envStatus === 'stopped' || isStopping}
                       loading={isStopping}
                       danger
                     >
