@@ -48,6 +48,8 @@ export interface SettingsModalProps {
       pullLatest: boolean;
     }
   ) => Promise<void>;
+  onStartEnvironment?: (worktreeId: string) => void;
+  onStopEnvironment?: (worktreeId: string) => void;
   onCreateUser?: (data: CreateUserInput) => void;
   onUpdateUser?: (userId: string, updates: UpdateUserInput) => void;
   onDeleteUser?: (userId: string) => void;
@@ -75,6 +77,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onDeleteWorktree,
   onUpdateWorktree,
   onCreateWorktree,
+  onStartEnvironment,
+  onStopEnvironment,
   onCreateUser,
   onUpdateUser,
   onDeleteUser,
@@ -143,6 +147,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   onDelete={onDeleteWorktree}
                   onCreate={onCreateWorktree}
                   onRowClick={handleWorktreeRowClick}
+                  onStartEnvironment={onStartEnvironment}
+                  onStopEnvironment={onStopEnvironment}
                 />
               </div>
             ),

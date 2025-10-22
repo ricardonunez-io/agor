@@ -6,9 +6,12 @@ import {
   DeleteOutlined,
   EditOutlined,
   FolderOutlined,
+  GlobalOutlined,
   LoadingOutlined,
   MinusCircleOutlined,
+  PlayCircleOutlined,
   PlusOutlined,
+  PoweroffOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
 import {
@@ -46,6 +49,8 @@ interface WorktreesTableProps {
     }
   ) => void;
   onRowClick?: (worktree: Worktree) => void;
+  onStartEnvironment?: (worktreeId: string) => void;
+  onStopEnvironment?: (worktreeId: string) => void;
 }
 
 export const WorktreesTable: React.FC<WorktreesTableProps> = ({
@@ -54,6 +59,8 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
   onDelete,
   onCreate,
   onRowClick,
+  onStartEnvironment,
+  onStopEnvironment,
 }) => {
   const { token } = theme.useToken();
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -189,9 +196,66 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
     {
       title: 'Env',
       key: 'env',
-      width: 50,
+      width: 120,
       align: 'center' as const,
-      render: (_: unknown, record: Worktree) => getEnvStatusIcon(record),
+      render: (_: unknown, record: Worktree) => {
+        const status = record.environment_instance?.status;
+        const healthStatus = record.environment_instance?.last_health_check?.status;
+        const repo = repos.find(r => r.repo_id === record.repo_id);
+        const hasEnvConfig = !!repo?.environment_config;
+
+        const isRunningOrHealthy =
+          status === 'running' || status === 'starting' || healthStatus === 'healthy';
+
+        return (
+          <Space size="small">
+            {getEnvStatusIcon(record)}
+            {hasEnvConfig && (
+              <>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<PlayCircleOutlined />}
+                  disabled={isRunningOrHealthy}
+                  onClick={e => {
+                    e.stopPropagation();
+                    onStartEnvironment?.(record.worktree_id);
+                  }}
+                  style={{ padding: '0 4px' }}
+                />
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<PoweroffOutlined />}
+                  onClick={e => {
+                    e.stopPropagation();
+                    onStopEnvironment?.(record.worktree_id);
+                  }}
+                  style={{ padding: '0 4px' }}
+                />
+                {repo.environment_config?.health_check?.url_template && (
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<GlobalOutlined />}
+                    onClick={e => {
+                      e.stopPropagation();
+                      // Render the URL template with worktree context
+                      const url = repo.environment_config.health_check.url_template
+                        .replace(/\{\{worktree\.unique_id\}\}/g, String(record.worktree_unique_id))
+                        .replace(/\{\{worktree\.name\}\}/g, record.name)
+                        .replace(/\{\{worktree\.path\}\}/g, record.path)
+                        .replace(/\{\{repo\.slug\}\}/g, repo.slug);
+                      window.open(url, '_blank');
+                    }}
+                    style={{ padding: '0 4px' }}
+                  />
+                )}
+              </>
+            )}
+          </Space>
+        );
+      },
     },
     {
       title: 'Repo',
