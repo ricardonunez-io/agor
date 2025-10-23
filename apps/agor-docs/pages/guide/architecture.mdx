@@ -19,18 +19,7 @@ graph TB
     subgraph "Agor Daemon"
         Feathers[FeathersJS Server]
 
-        subgraph Services
-            Sessions[Sessions]
-            Tasks[Tasks]
-            Messages[Messages]
-            Boards[Boards]
-            Worktrees[Worktrees]
-            Repos[Repos]
-            Users[Users]
-            MCP[MCP Servers]
-            Context[Context Files]
-            Health[Health Monitor]
-        end
+        Services[Sessions, Tasks, Messages<br/>Boards, Worktrees, Repos<br/>Users, MCP, Context, Health]
 
         AgentSDKs[Agent SDKs<br/>Claude, Codex, Gemini]
 
