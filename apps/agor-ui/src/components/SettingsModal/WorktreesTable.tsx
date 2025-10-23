@@ -23,7 +23,6 @@ import {
   Form,
   Input,
   Modal,
-  Popconfirm,
   Select,
   Space,
   Table,
@@ -32,13 +31,14 @@ import {
   theme,
 } from 'antd';
 import { useState } from 'react';
+import { DeleteWorktreePopconfirm } from '../DeleteWorktreePopconfirm';
 
 const { Text } = Typography;
 
 interface WorktreesTableProps {
   worktrees: Worktree[];
   repos: Repo[];
-  onDelete?: (worktreeId: string) => void;
+  onDelete?: (worktreeId: string, deleteFromFilesystem: boolean) => void;
   onCreate?: (
     repoId: string,
     data: {
@@ -150,8 +150,8 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
     form.setFieldValue('sourceBranch', defaultBranch);
   };
 
-  const handleDelete = (worktreeId: string) => {
-    onDelete?.(worktreeId);
+  const handleDelete = (worktreeId: string, deleteFromFilesystem: boolean) => {
+    onDelete?.(worktreeId, deleteFromFilesystem);
   };
 
   const handleCreate = async () => {
@@ -320,25 +320,12 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
               onRowClick?.(record);
             }}
           />
-          <Popconfirm
-            title="Delete worktree?"
-            description={
-              <>
-                <p>Are you sure you want to delete worktree "{record.name}"?</p>
-                {record.sessions.length > 0 && (
-                  <p style={{ color: '#ff4d4f' }}>
-                    ⚠️ {record.sessions.length} session(s) reference this worktree.
-                  </p>
-                )}
-              </>
+          <DeleteWorktreePopconfirm
+            worktree={record}
+            sessionCount={record.sessions.length}
+            onConfirm={deleteFromFilesystem =>
+              handleDelete(record.worktree_id, deleteFromFilesystem)
             }
-            onConfirm={e => {
-              e?.stopPropagation();
-              handleDelete(record.worktree_id);
-            }}
-            okText="Delete"
-            cancelText="Cancel"
-            okButtonProps={{ danger: true }}
           >
             <Button
               type="text"
@@ -347,7 +334,7 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
               danger
               onClick={e => e.stopPropagation()}
             />
-          </Popconfirm>
+          </DeleteWorktreePopconfirm>
         </Space>
       ),
     },

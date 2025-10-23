@@ -1,18 +1,8 @@
 import type { Repo, Session, Worktree } from '@agor/core/types';
 import { DeleteOutlined, EditOutlined, FolderOutlined, LinkOutlined } from '@ant-design/icons';
-import {
-  Button,
-  Checkbox,
-  Descriptions,
-  Input,
-  message,
-  Popconfirm,
-  Space,
-  Tag,
-  Typography,
-  theme,
-} from 'antd';
+import { Button, Descriptions, Input, message, Space, Tag, Typography, theme } from 'antd';
 import { useEffect, useState } from 'react';
+import { DeleteWorktreePopconfirm } from '../../DeleteWorktreePopconfirm';
 
 const { Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -40,9 +30,6 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
   const [issueUrl, setIssueUrl] = useState(worktree.issue_url || '');
   const [prUrl, setPrUrl] = useState(worktree.pull_request_url || '');
   const [notes, setNotes] = useState(worktree.notes || '');
-
-  // Delete dialog state
-  const [deleteFromFilesystem, setDeleteFromFilesystem] = useState(true);
 
   // Sync local state with prop changes (from WebSocket updates)
   useEffect(() => {
@@ -75,7 +62,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
     message.success('Notes updated');
   };
 
-  const handleDelete = () => {
+  const handleDelete = (deleteFromFilesystem: boolean) => {
     onDelete?.(worktree.worktree_id, deleteFromFilesystem);
   };
 
@@ -308,37 +295,15 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
 
         {/* Actions */}
         <Space>
-          <Popconfirm
-            title="Delete worktree?"
-            description={
-              <div style={{ maxWidth: 400 }}>
-                <p>Are you sure you want to delete worktree "{worktree.name}"?</p>
-                {sessions.length > 0 && (
-                  <p style={{ color: '#ff4d4f' }}>
-                    ⚠️ {sessions.length} session(s) reference this worktree.
-                  </p>
-                )}
-                <Checkbox
-                  checked={deleteFromFilesystem}
-                  onChange={e => setDeleteFromFilesystem(e.target.checked)}
-                  style={{ marginTop: 8 }}
-                >
-                  Also delete worktree from filesystem
-                </Checkbox>
-                <p style={{ color: token.colorTextSecondary, marginTop: 4, marginBottom: 0 }}>
-                  Path: {worktree.path}
-                </p>
-              </div>
-            }
+          <DeleteWorktreePopconfirm
+            worktree={worktree}
+            sessionCount={sessions.length}
             onConfirm={handleDelete}
-            okText="Delete"
-            cancelText="Cancel"
-            okButtonProps={{ danger: true }}
           >
             <Button danger icon={<DeleteOutlined />}>
               Delete Worktree
             </Button>
-          </Popconfirm>
+          </DeleteWorktreePopconfirm>
           {/* TODO: Add "Open in Terminal" button once terminal integration is ready */}
         </Space>
       </Space>
