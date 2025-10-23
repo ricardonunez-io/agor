@@ -1,0 +1,36 @@
+# Development Guide
+
+Developer documentation for contributing to Agor.
+
+## Project Structure
+
+```
+agor/
+├── apps/
+│   ├── agor-daemon/    # FeathersJS backend
+│   ├── agor-cli/       # CLI tool
+│   └── agor-ui/        # React UI
+├── packages/
+│   └── core/           # Shared types and utilities
+└── context/            # Architecture docs
+```
+
+## Development Workflow
+
+```bash
+# Terminal 1: Daemon
+cd apps/agor-daemon && pnpm dev
+
+# Terminal 2: UI
+cd apps/agor-ui && pnpm dev
+```
+
+## Tech Stack
+
+- **Backend:** FeathersJS, Drizzle ORM, LibSQL
+- **Frontend:** React 18, TypeScript, Ant Design, React Flow
+- **CLI:** oclif, chalk, cli-table3
+
+## Contributing
+
+See [CLAUDE.md](https://github.com/mistercrunch/agor/blob/main/CLAUDE.md) for detailed development guidelines.

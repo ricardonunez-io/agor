@@ -1,0 +1,94 @@
+# Docker Guide
+
+Complete guide to running Agor with Docker.
+
+## Quick Start
+
+```bash
+docker compose up
+```
+
+This starts:
+- Daemon (backend) on :3030
+- UI (frontend) on :5173
+- Auto-initialization with admin user
+
+## Configuration
+
+### Environment Variables
+
+Agor respects the following environment variables for port configuration:
+
+- `PORT` - Daemon port (default: 3030)
+- `VITE_PORT` - UI port (default: 5173)
+- `VITE_DAEMON_URL` - Full daemon URL for UI (e.g., `http://localhost:3030`)
+- `VITE_DAEMON_PORT` - Daemon port for UI (alternative to full URL)
+- `VITE_DAEMON_HOST` - Daemon host for UI
+
+## Running Multiple Instances in Parallel
+
+If you're using git worktrees like Agor does internally and want to run multiple instances of Agor in parallel (e.g., one per feature branch), you can use Docker Compose's project name flag and custom ports.
+
+### Example: Running Main + Feature Branch
+
+**Terminal 1 - Main branch:**
+```bash
+cd ~/code/agor
+docker compose up
+# Runs on ports 3030 (daemon) and 5173 (UI)
+```
+
+**Terminal 2 - Feature branch:**
+```bash
+cd ~/code/agor-feature-auth
+PORT=4030 VITE_PORT=5174 docker compose -p agor-feature-auth up
+# Runs on ports 4030 (daemon) and 5174 (UI)
+```
+
+**Terminal 3 - Another feature:**
+```bash
+cd ~/code/agor-feature-payments
+PORT=5030 VITE_PORT=5175 docker compose -p agor-feature-payments up
+# Runs on ports 5030 (daemon) and 5175 (UI)
+```
+
+### Port Naming Convention
+
+When running multiple instances, use sequential ports to avoid conflicts:
+
+| Instance | Daemon Port | UI Port | Project Name |
+|----------|-------------|---------|--------------|
+| Main | 3030 | 5173 | agor (default) |
+| Feature 1 | 4030 | 5174 | agor-feature-auth |
+| Feature 2 | 5030 | 5175 | agor-feature-boards |
+| Feature 3 | 6030 | 5176 | agor-feature-search |
+
+### Why Use `-p` Flag?
+
+The `-p` (project name) flag ensures each instance has:
+- **Isolated Docker volumes** - Separate databases per instance
+- **Unique container names** - No naming conflicts
+- **Independent networks** - No port binding conflicts
+
+Without `-p`, Docker Compose would try to reuse the same containers and volumes, causing conflicts.
+
+### Accessing Multiple Instances
+
+Once running, you can access each instance in your browser:
+
+- Main: http://localhost:5173
+- Feature 1: http://localhost:5174
+- Feature 2: http://localhost:5175
+- Feature 3: http://localhost:5176
+
+### Cleaning Up
+
+To stop and remove a specific instance:
+
+```bash
+# Stop containers
+docker compose -p agor-feature-auth down
+
+# Stop and remove volumes (deletes database)
+docker compose -p agor-feature-auth down -v
+```

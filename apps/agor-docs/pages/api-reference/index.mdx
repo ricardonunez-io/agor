@@ -1,0 +1,77 @@
+# API Reference
+
+Complete REST API documentation for the Agor daemon - auto-generated from TypeScript types.
+
+## What's Here
+
+- **[REST Endpoints](/api-reference/rest)** - HTTP API reference for all FeathersJS services
+- **[WebSocket Events](/api-reference/websockets)** - Real-time event documentation
+
+For TypeScript type definitions and source code:
+- **TypeScript types**: [`packages/core/src/types`](https://github.com/mistercrunch/agor/tree/main/packages/core/src/types)
+- **Service implementations**: [`apps/agor-daemon/src/services`](https://github.com/mistercrunch/agor/tree/main/apps/agor-daemon/src/services)
+
+## Base URL
+
+```
+http://localhost:3030
+```
+
+## Authentication
+
+Agor uses JWT-based authentication:
+
+```bash
+Authorization: Bearer <your-token>
+```
+
+**Anonymous Mode:** For local development, anonymous authentication is enabled by default (no token required).
+
+## Core Services
+
+- **Sessions** - AI agent session management with genealogy (fork/spawn)
+- **Tasks** - Work units within sessions tracking prompts and execution
+- **Messages** - Conversation messages with streaming support
+- **Repositories** - Git repository management and worktree operations
+- **Boards** - Spatial organization of sessions with zones and triggers
+- **Users** - User account management and authentication
+- **MCP Servers** - Model Context Protocol server configurations
+- **Worktrees** - Git worktree isolation for sessions
+
+## Response Format
+
+All FeathersJS endpoints return data in this format:
+
+```typescript
+// Single resource
+{
+  data: { id: '...', ... }
+}
+
+// List of resources (paginated)
+{
+  data: [{ id: '...', ... }],
+  total: 100,
+  limit: 50,
+  skip: 0
+}
+```
+
+## FeathersJS Services
+
+Agor uses [FeathersJS](https://feathersjs.com/) for its API layer. All endpoints follow RESTful conventions:
+
+- `GET /service` - List items (paginated)
+- `GET /service/:id` - Get single item
+- `POST /service` - Create new item
+- `PATCH /service/:id` - Update item
+- `DELETE /service/:id` - Delete item
+
+Available services:
+- `/sessions` - AI agent sessions
+- `/tasks` - Work units
+- `/messages` - Conversation history
+- `/repos` - Git repositories
+- `/boards` - Session boards
+- `/users` - User accounts
+- `/mcp-servers` - MCP server configs

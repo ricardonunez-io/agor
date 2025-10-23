@@ -1,0 +1,41 @@
+# CLI Reference
+
+Command-line interface for Agor.
+
+## Installation
+
+The CLI is included when you install Agor:
+
+```bash
+pnpm install
+pnpm agor --help
+```
+
+## Available Commands
+
+- [Session Commands](/cli/session)
+- [Repository Commands](/cli/repo)
+- [Board Commands](/cli/board)
+- [User Commands](/cli/user)
+- [Configuration Commands](/cli/config)
+
+## Global Options
+
+- `--help` - Show help for any command
+- `--version` - Show CLI version
+
+## Examples
+
+```bash
+# List all sessions
+pnpm agor session list
+
+# Load a Claude Code session
+pnpm agor session load-claude <session-id>
+
+# Add a repository
+pnpm agor repo add https://github.com/user/repo
+
+# Show configuration
+pnpm agor config
+```

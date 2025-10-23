@@ -1,0 +1,282 @@
+# REST API Endpoints
+
+All REST endpoints follow FeathersJS conventions with full CRUD support.
+
+## Sessions
+
+### `GET /sessions`
+
+List all sessions with optional filtering.
+
+**Query Parameters:**
+- `$limit` - Number of results (default: 50)
+- `$skip` - Pagination offset
+- `status` - Filter by status: `idle`, `running`, `completed`, `failed`
+- `agentic_tool` - Filter by agent: `claude`, `codex`, `gemini`
+
+**Example:**
+```bash
+curl http://localhost:3030/sessions?status=running&$limit=10
+```
+
+### `POST /sessions`
+
+Create a new session.
+
+**Request Body:**
+```json
+{
+  "agentic_tool": "claude",
+  "worktree_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "title": "My Session"
+}
+```
+
+### `GET /sessions/:id`
+
+Get session details by ID.
+
+### `PATCH /sessions/:id`
+
+Update a session.
+
+### `DELETE /sessions/:id`
+
+Delete a session.
+
+### `POST /sessions/:id/prompt`
+
+Execute a prompt in a session.
+
+**Request Body:**
+```json
+{
+  "prompt": "Help me implement a feature",
+  "stream": true,
+  "permissionMode": "on-request"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "taskId": "01234567-89ab-cdef-0123-456789abcdef",
+  "status": "running",
+  "streaming": true
+}
+```
+
+---
+
+## Tasks
+
+### `GET /tasks`
+
+List tasks with filtering.
+
+**Query Parameters:**
+- `session_id` - Filter by session
+- `status` - Filter by status
+- `$limit` - Results limit
+
+### `POST /tasks`
+
+Create a new task.
+
+### `GET /tasks/:id`
+
+Get task details.
+
+### `PATCH /tasks/:id`
+
+Update a task.
+
+---
+
+## Messages
+
+### `GET /messages`
+
+List messages in a session.
+
+**Query Parameters:**
+- `session_id` - **Required** - Session to fetch messages from
+- `task_id` - Optional task filter
+- `$limit` - Results limit
+
+### `POST /messages`
+
+Create a message.
+
+**Request Body:**
+```json
+{
+  "session_id": "...",
+  "task_id": "...",
+  "type": "user",
+  "role": "user",
+  "content": "Hello"
+}
+```
+
+---
+
+## Repositories
+
+### `GET /repos`
+
+List registered repositories.
+
+### `POST /repos/clone`
+
+Clone and register a repository.
+
+**Request Body:**
+```json
+{
+  "url": "https://github.com/user/repo.git",
+  "name": "my-repo"
+}
+```
+
+### `GET /repos/:id`
+
+Get repository details.
+
+### `POST /repos/:id/worktrees`
+
+Create a git worktree.
+
+**Request Body:**
+```json
+{
+  "name": "feature-branch",
+  "ref": "main",
+  "createBranch": true
+}
+```
+
+---
+
+## Boards
+
+### `GET /boards`
+
+List all boards.
+
+### `POST /boards`
+
+Create a new board.
+
+**Request Body:**
+```json
+{
+  "name": "My Board",
+  "description": "Development board"
+}
+```
+
+### `GET /boards/:id`
+
+Get board details with session layout.
+
+### `PATCH /boards/:id`
+
+Update board layout or settings.
+
+---
+
+## Users
+
+### `GET /users`
+
+List users.
+
+### `POST /users`
+
+Create a user account.
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "secure-password",
+  "name": "John Doe"
+}
+```
+
+### `GET /users/:id`
+
+Get user details.
+
+---
+
+## MCP Servers
+
+### `GET /mcp-servers`
+
+List MCP server configurations.
+
+### `POST /mcp-servers`
+
+Create MCP server config.
+
+**Request Body:**
+```json
+{
+  "name": "My MCP Server",
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+  "env": {}
+}
+```
+
+### `GET /mcp-servers/:id`
+
+Get MCP server details.
+
+### `PATCH /mcp-servers/:id`
+
+Update MCP server config.
+
+### `DELETE /mcp-servers/:id`
+
+Delete MCP server.
+
+---
+
+## Authentication
+
+### `POST /authentication`
+
+Authenticate with email/password or anonymous mode.
+
+**Request Body (Email/Password):**
+```json
+{
+  "strategy": "local",
+  "email": "user@example.com",
+  "password": "password"
+}
+```
+
+**Request Body (Anonymous):**
+```json
+{
+  "strategy": "anonymous"
+}
+```
+
+**Response:**
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "...",
+  "user": {
+    "user_id": "...",
+    "email": "user@example.com",
+    "name": "John Doe"
+  }
+}
+```
