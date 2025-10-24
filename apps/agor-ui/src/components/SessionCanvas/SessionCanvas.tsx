@@ -1,5 +1,5 @@
 import type { AgorClient } from '@agor/core/api';
-import type { BoardID, MCPServer, User, ZoneTrigger } from '@agor/core/types';
+import type { BoardID, MCPServer, User, WorktreeID, ZoneTrigger } from '@agor/core/types';
 import { BorderOutlined, DeleteOutlined, SelectOutlined } from '@ant-design/icons';
 import { Modal, Typography } from 'antd';
 import Handlebars from 'handlebars';
@@ -252,10 +252,6 @@ const SessionCanvas = ({
       eraserMode: activeTool === 'eraser',
     });
 
-  // Memoize board layout to prevent unnecessary re-renders
-  // Layout changes when actual layout data changes, not just board object reference
-  const boardLayout = useMemo(() => board?.layout, [board?.layout]);
-
   // Extract zone labels - memoized to only change when labels actually change
   const zoneLabels = useMemo(() => {
     if (!board?.objects) return {};
@@ -267,52 +263,6 @@ const SessionCanvas = ({
     });
     return labels;
   }, [board?.objects]);
-
-  // Handler to unpin a session from its zone
-  const handleUnpin = useCallback(
-    async (sessionId: string) => {
-      if (!board || !client) return;
-
-      const currentLayout = board.layout?.[sessionId];
-      if (!currentLayout?.parentId) return;
-
-      // Get session position from board.layout
-      const sessionLayout = board.layout?.[sessionId];
-      // Get parent zone position from board.objects (zones are board objects, not in layout)
-      const parentZone = board.objects?.[currentLayout.parentId];
-
-      if (!sessionLayout || !parentZone) {
-        console.error('Cannot unpin: missing layout data', {
-          sessionLayout: !!sessionLayout,
-          parentZone: !!parentZone,
-          parentId: currentLayout.parentId,
-        });
-        return;
-      }
-
-      // Calculate absolute position from relative position
-      // Session's layout position is relative to parent zone, so add zone's position
-      const absoluteX = sessionLayout.x + parentZone.x;
-      const absoluteY = sessionLayout.y + parentZone.y;
-
-      // Update layout without parentId
-      const newLayout = {
-        ...board.layout,
-        [sessionId]: {
-          x: absoluteX,
-          y: absoluteY,
-          parentId: undefined,
-        },
-      };
-
-      await client.service('boards').patch(board.board_id, {
-        layout: newLayout,
-      });
-
-      console.log(`📍 Manually unpinned session ${sessionId.substring(0, 8)}`);
-    },
-    [board, client]
-  );
 
   // Handler to unpin a worktree from its zone
   const handleUnpinWorktree = useCallback(
@@ -1168,7 +1118,7 @@ const SessionCanvas = ({
         (() => {
           // Pre-render the template for display in modal
           const session = sessions.find(s => s.session_id === triggerModal.sessionId);
-          let renderedPromptPreview = triggerModal.trigger.text;
+          let renderedPromptPreview = triggerModal.trigger.template;
 
           if (session) {
             try {
@@ -1205,7 +1155,7 @@ const SessionCanvas = ({
                       context: {},
                     },
               };
-              const template = Handlebars.compile(triggerModal.trigger.text);
+              const template = Handlebars.compile(triggerModal.trigger.template);
               renderedPromptPreview = template(context);
             } catch (error) {
               console.error('Template render error for preview:', error);
@@ -1276,38 +1226,23 @@ const SessionCanvas = ({
                   // Render template with Handlebars
                   let renderedPrompt: string;
                   try {
-                    const template = Handlebars.compile(trigger.text);
+                    const template = Handlebars.compile(trigger.template);
                     renderedPrompt = template(context);
                     console.log('📝 Rendered template:', renderedPrompt);
                   } catch (templateError) {
                     console.error('❌ Handlebars template error:', templateError);
-                    // Fallback to raw text if template fails
-                    renderedPrompt = trigger.text;
+                    // Fallback to raw template if template fails
+                    renderedPrompt = trigger.template;
                   }
 
-                  // All trigger types now use the unified prompt endpoint
-                  // This ensures consistent behavior: task creation, agent invocation, streaming, etc.
-                  switch (trigger.type) {
-                    case 'prompt':
-                    case 'task':
-                    case 'subtask': {
-                      // Prefix subtasks for clarity
-                      const prompt =
-                        trigger.type === 'subtask' ? `[Subtask] ${renderedPrompt}` : renderedPrompt;
+                  // Send rendered prompt to session
+                  await client.service(`sessions/${sessionId}/prompt`).create({
+                    prompt: renderedPrompt,
+                  });
 
-                      await client.service(`sessions/${sessionId}/prompt`).create({
-                        prompt,
-                      });
-
-                      console.log(
-                        `✨ ${trigger.type} triggered for session ${sessionId.substring(0, 8)}: ${prompt.substring(0, 50)}...`
-                      );
-                      break;
-                    }
-
-                    default:
-                      console.warn(`⚠️  Unknown trigger type: ${trigger.type}`);
-                  }
+                  console.log(
+                    `✨ Zone trigger executed for session ${sessionId.substring(0, 8)}: ${renderedPrompt.substring(0, 50)}...`
+                  );
                 } catch (error) {
                   console.error('❌ Failed to execute trigger:', error);
                 } finally {

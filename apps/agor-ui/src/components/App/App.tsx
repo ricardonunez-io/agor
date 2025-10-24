@@ -304,7 +304,6 @@ export const App: React.FC<AppProps> = ({
         user={user}
         activeUsers={allActiveUsers}
         currentUserId={user?.user_id}
-        onMenuClick={() => setListDrawerOpen(true)}
         onSettingsClick={() => setSettingsOpen(true)}
         onTerminalClick={() => setTerminalOpen(true)}
         onLogout={onLogout}
