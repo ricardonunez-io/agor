@@ -26,6 +26,10 @@ This directory contains modular knowledge files that document Agor's concepts, a
 - **[auth.md](concepts/auth.md)** - Authentication & authorization, anonymous-first, JWT/Local strategies, user attribution
 - **[multiplayer.md](concepts/multiplayer.md)** - Real-time collaboration, facepile, cursor swarm, presence indicators
 - **[board-objects.md](concepts/board-objects.md)** - Board layout system, zones, session pinning, zone triggers with Handlebars
+- **[worktree-centric-prd.md](concepts/worktree-centric-prd.md)** - Worktree normalization (dedicated table), WorktreeModal design with 5 tabs, environment management
+- **[worktree-board-design.md](concepts/worktree-board-design.md)** - Worktree-centric boards, WorktreeCard design, zone trigger UX with session selection
+- **[worktree-board-migration-plan.md](concepts/worktree-board-migration-plan.md)** - High-level migration plan from session-centric to worktree-centric boards
+- **[session-worktree-attribute-migration.md](concepts/session-worktree-attribute-migration.md)** - Data attribute migration analysis (issue_url, pull_request_url, etc.)
 - **[mcp-integration.md](concepts/mcp-integration.md)** - MCP server management, CRUD UI/CLI, session-level selection
 - **[permissions.md](concepts/permissions.md)** - Permission system, task-centric approval, audit trails
 
@@ -35,7 +39,6 @@ Experimental ideas and designs not yet crystallized into concepts. These represe
 
 **Future Features:**
 
-- **[worktree-ux-design.md](explorations/worktree-ux-design.md)** - Git worktree UI/UX design
 - **[native-cli-feature-gaps.md](explorations/native-cli-feature-gaps.md)** - Feature comparison between native agent CLIs and SDK capabilities
 
 **Orchestration & Coordination:**
