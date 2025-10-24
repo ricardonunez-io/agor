@@ -24,6 +24,9 @@ export interface BoardEntityObject {
   /** Position on canvas */
   position: { x: number; y: number };
 
+  /** Zone this worktree is pinned to (optional) */
+  zone_id?: string;
+
   /** When this entity was added to the board */
   created_at: string;
 }
@@ -44,18 +47,22 @@ export interface TextBoardObject {
 }
 
 /**
- * Zone trigger types
+ * Zone trigger behavior modes for worktree drops
  */
-export type ZoneTriggerType = 'prompt' | 'task' | 'subtask';
+export type ZoneTriggerBehavior = 'always_new' | 'show_picker';
 
 /**
- * Zone trigger configuration
+ * Zone trigger configuration for worktree drops
+ *
+ * When a worktree is dropped on a zone with a trigger:
+ * - 'always_new': Automatically create new root session and apply trigger
+ * - 'show_picker': Open modal to select existing session or create new one
  */
 export interface ZoneTrigger {
-  /** Type of trigger action */
-  type: ZoneTriggerType;
-  /** The prompt text or task description to execute */
-  text: string;
+  /** Handlebars template for the prompt */
+  template: string;
+  /** Trigger behavior mode (default: 'show_picker') */
+  behavior: ZoneTriggerBehavior;
 }
 
 /**

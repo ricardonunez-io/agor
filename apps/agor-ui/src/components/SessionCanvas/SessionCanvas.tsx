@@ -28,6 +28,7 @@ import WorktreeCard from '../WorktreeCard';
 import { ZoneNode } from './canvas/BoardObjectNodes';
 import { CursorNode } from './canvas/CursorNode';
 import { useBoardObjects } from './canvas/useBoardObjects';
+import { ZoneTriggerModal } from './canvas/ZoneTriggerModal';
 
 const { Paragraph } = Typography;
 
@@ -48,6 +49,7 @@ interface SessionCanvasProps {
   onSessionDelete?: (sessionId: string) => void;
   onUpdateSessionMcpServers?: (sessionId: string, mcpServerIds: string[]) => void;
   onOpenSettings?: (sessionId: string) => void;
+  onCreateSessionForWorktree?: (worktreeId: string) => void;
   onOpenWorktree?: (worktreeId: string) => void;
   onDeleteWorktree?: (worktreeId: string, deleteFromFilesystem: boolean) => void;
 }
@@ -100,6 +102,7 @@ interface WorktreeNodeData {
   currentUserId?: string;
   onTaskClick?: (taskId: string) => void;
   onSessionClick?: (sessionId: string) => void;
+  onCreateSession?: (worktreeId: string) => void;
   onDelete?: (worktreeId: string) => void;
   onOpenSettings?: (worktreeId: string) => void;
   onUnpin?: (worktreeId: string) => void;
@@ -122,6 +125,7 @@ const WorktreeNode = ({ data }: { data: WorktreeNodeData }) => {
         currentUserId={data.currentUserId}
         onTaskClick={data.onTaskClick}
         onSessionClick={data.onSessionClick}
+        onCreateSession={data.onCreateSession}
         onDelete={data.onDelete}
         onOpenSettings={data.onOpenSettings}
         onUnpin={data.onUnpin}
@@ -159,6 +163,7 @@ const SessionCanvas = ({
   onSessionDelete,
   onUpdateSessionMcpServers,
   onOpenSettings,
+  onCreateSessionForWorktree,
   onOpenWorktree,
   onDeleteWorktree,
 }: SessionCanvasProps) => {
@@ -179,10 +184,46 @@ const SessionCanvas = ({
     pinData: { x: number; y: number; parentId: string };
   } | null>(null);
 
+  // Worktree zone trigger modal state
+  const [worktreeTriggerModal, setWorktreeTriggerModal] = useState<{
+    worktreeId: WorktreeID;
+    zoneName: string;
+    zoneId: string;
+    trigger: ZoneTrigger;
+  } | null>(null);
+
   // Debounce timer ref for position updates
   const layoutUpdateTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingLayoutUpdatesRef = useRef<Record<string, { x: number; y: number }>>({});
   const isDraggingRef = useRef(false);
+
+  // Helper: Check if a node intersects with a zone
+  const findIntersectingZone = useCallback(
+    (nodePosition: { x: number; y: number }, nodeWidth = 400, nodeHeight = 200) => {
+      if (!board?.objects) return null;
+
+      for (const [zoneId, zoneData] of Object.entries(board.objects)) {
+        if (zoneData.type !== 'zone') continue;
+
+        // Check if node center is within zone bounds
+        const nodeCenterX = nodePosition.x + nodeWidth / 2;
+        const nodeCenterY = nodePosition.y + nodeHeight / 2;
+
+        const isInZone =
+          nodeCenterX >= zoneData.x &&
+          nodeCenterX <= zoneData.x + zoneData.width &&
+          nodeCenterY >= zoneData.y &&
+          nodeCenterY <= zoneData.y + zoneData.height;
+
+        if (isInZone) {
+          return { zoneId, zoneData };
+        }
+      }
+
+      return null;
+    },
+    [board?.objects]
+  );
   // Track positions we've explicitly set (to avoid being overwritten by other clients)
   const localPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
   // Track objects we've deleted locally (to prevent them from reappearing during WebSocket updates)
@@ -201,6 +242,8 @@ const SessionCanvas = ({
     useBoardObjects({
       board,
       client,
+      sessions,
+      worktrees,
       setNodes,
       deletedObjectsRef,
       eraserMode: activeTool === 'eraser',
@@ -268,6 +311,51 @@ const SessionCanvas = ({
     [board, client]
   );
 
+  // Handler to unpin a worktree from its zone
+  const handleUnpinWorktree = useCallback(
+    async (worktreeId: string) => {
+      if (!board || !client) return;
+
+      // Find the board_object for this worktree
+      const boardObject = boardObjects.find(
+        bo => bo.worktree_id === worktreeId && bo.board_id === board.board_id
+      );
+
+      if (!boardObject || !boardObject.zone_id) {
+        console.warn('Worktree not pinned or board object not found');
+        return;
+      }
+
+      // Get zone position from board.objects
+      const zone = board.objects?.[boardObject.zone_id];
+
+      if (!zone) {
+        console.error('Cannot unpin: zone not found', {
+          zoneId: boardObject.zone_id,
+        });
+        return;
+      }
+
+      // Calculate absolute position from relative position
+      // Worktree's position is relative to zone when pinned, so add zone's position
+      const absoluteX = boardObject.position.x + zone.x;
+      const absoluteY = boardObject.position.y + zone.y;
+
+      console.log(
+        `📍 Unpinning worktree ${worktreeId.substring(0, 8)}: relative (${boardObject.position.x}, ${boardObject.position.y}) -> absolute (${absoluteX}, ${absoluteY})`
+      );
+
+      // Update with absolute position and clear zone_id
+      await client.service('board-objects').patch(boardObject.object_id, {
+        position: { x: absoluteX, y: absoluteY },
+        zone_id: null, // null serializes correctly, undefined gets stripped
+      });
+
+      console.log(`✓ Unpinned worktree ${worktreeId.substring(0, 8)}`);
+    },
+    [board, client, boardObjects]
+  );
+
   // Convert worktrees to React Flow nodes (worktree-centric approach)
   const initialNodes: Node[] = useMemo(() => {
     // Auto-layout for worktrees without explicit positioning
@@ -286,13 +374,12 @@ const SessionCanvas = ({
         ? { x: boardObject.position.x, y: boardObject.position.y }
         : { x: 100, y: 100 + index * VERTICAL_SPACING };
 
-      // Check if worktree is pinned to a zone
-      // TODO: Implement zone pinning for worktrees (currently zones are for sessions only)
-      const parentZoneId = undefined; // No zone pinning for worktrees yet
-      const zoneName = parentZoneId ? zoneLabels[parentZoneId] || 'Unknown Zone' : undefined;
+      // Check if worktree is pinned to a zone (via board_object.zone_id)
+      const zoneId = boardObject?.zone_id;
+      const zoneName = zoneId ? zoneLabels[zoneId] || 'Unknown Zone' : undefined;
       const zoneColor =
-        parentZoneId && board?.objects?.[parentZoneId]
-          ? (board.objects[parentZoneId] as { color?: string }).color
+        zoneId && board?.objects?.[zoneId]
+          ? (board.objects[zoneId] as { color?: string }).color
           : undefined;
 
       // Get sessions for this worktree
@@ -303,8 +390,9 @@ const SessionCanvas = ({
         type: 'worktreeNode',
         position,
         draggable: true,
-        parentId: parentZoneId,
-        extent: parentZoneId ? ('parent' as const) : undefined,
+        // Constrain to parent zone if pinned
+        parentId: zoneId,
+        extent: zoneId ? ('parent' as const) : undefined,
         data: {
           worktree,
           sessions: worktreeSessions,
@@ -313,12 +401,12 @@ const SessionCanvas = ({
           currentUserId,
           onTaskClick,
           onSessionClick,
+          onCreateSession: onCreateSessionForWorktree,
           onDelete: onDeleteWorktree,
           onOpenSettings: onOpenWorktree,
-          onUnpin: undefined, // TODO: Add worktree unpin handler
+          onUnpin: handleUnpinWorktree,
           compact: false,
-          isPinned: !!parentZoneId,
-          parentZoneId,
+          isPinned: !!zoneId,
           zoneName,
           zoneColor,
         },
@@ -334,8 +422,10 @@ const SessionCanvas = ({
     currentUserId,
     onSessionClick,
     onTaskClick,
+    onCreateSessionForWorktree,
     onDeleteWorktree,
     onOpenWorktree,
+    handleUnpinWorktree,
     zoneLabels,
   ]);
 
@@ -590,6 +680,7 @@ const SessionCanvas = ({
           const worktreeUpdates: Array<{
             worktree_id: string;
             position: { x: number; y: number };
+            zone_id?: string;
           }> = [];
           const zoneUpdates: Record<string, { x: number; y: number }> = {};
 
@@ -603,36 +694,154 @@ const SessionCanvas = ({
               // Zone moved - update position via batchUpdateObjectPositions
               zoneUpdates[nodeId] = position;
             } else if (draggedNode?.type === 'worktreeNode') {
-              // Worktree moved - update board_object position
+              // Check if worktree was dropped on a zone
+              const zoneIntersection = findIntersectingZone(position);
+              const droppedZoneId = zoneIntersection?.zoneId;
+
+              // Check if worktree was already pinned to a zone before this drag
+              const existingBoardObject = boardObjects.find(
+                bo => bo.worktree_id === nodeId && bo.board_id === board.board_id
+              );
+              const wasPinned = !!existingBoardObject?.zone_id;
+
+              // Calculate position to store
+              let positionToStore = position;
+              if (droppedZoneId && !wasPinned) {
+                // First-time pinning: convert absolute position to relative
+                const zoneData = zoneIntersection.zoneData;
+                positionToStore = {
+                  x: position.x - zoneData.x,
+                  y: position.y - zoneData.y,
+                };
+                console.log(
+                  `🎯 Converting to relative position: absolute (${position.x}, ${position.y}) -> relative (${positionToStore.x}, ${positionToStore.y})`
+                );
+              }
+
+              // Worktree moved - update board_object position (and zone_id if dropped on zone)
               worktreeUpdates.push({
                 worktree_id: nodeId,
-                position,
+                position: positionToStore,
+                zone_id: droppedZoneId,
               });
               console.log(
-                `📦 Moved worktree ${nodeId.substring(0, 8)} to (${Math.round(position.x)}, ${Math.round(position.y)})`
+                `📦 Moved worktree ${nodeId.substring(0, 8)} to (${Math.round(positionToStore.x)}, ${Math.round(positionToStore.y)})`
               );
+
+              if (zoneIntersection) {
+                const { zoneId, zoneData } = zoneIntersection;
+                console.log(
+                  `🎯 Worktree ${nodeId.substring(0, 8)} dropped on zone "${zoneData.label}"`
+                );
+                console.log(
+                  `📌 Pinned worktree ${nodeId.substring(0, 8)} to zone "${zoneData.label}"`
+                );
+
+                // Handle trigger if zone has one
+                const trigger = zoneData.trigger;
+                if (trigger) {
+                  if (trigger.behavior === 'always_new') {
+                    // Always_new: Auto-create new root session and apply trigger
+                    console.log('⚡ always_new behavior - creating new session...');
+
+                    // Execute async trigger (don't await to avoid blocking drag handler)
+                    (async () => {
+                      try {
+                        // Find the worktree
+                        const worktree = worktrees.find(wt => wt.worktree_id === nodeId);
+
+                        // Render template
+                        const context = {
+                          worktree: worktree
+                            ? {
+                                name: worktree.name || '',
+                                ref: worktree.ref || '',
+                                issue_url: worktree.issue_url || '',
+                                pull_request_url: worktree.pull_request_url || '',
+                                notes: worktree.notes || '',
+                                path: worktree.path || '',
+                                context: worktree.custom_context || {},
+                              }
+                            : {},
+                          board: {
+                            name: board?.name || '',
+                            description: board?.description || '',
+                            context: board?.custom_context || {},
+                          },
+                          session: {
+                            description: '',
+                            context: {},
+                          },
+                        };
+                        const template = Handlebars.compile(trigger.template);
+                        const renderedPrompt = template(context);
+
+                        // Create new root session
+                        const newSession = await client.service('sessions').create({
+                          worktree_id: nodeId,
+                          description: `Session from zone "${zoneData.label}"`,
+                          status: 'idle',
+                          agent: 'claude',
+                        });
+
+                        console.log(
+                          `✓ Created new session: ${newSession.session_id.substring(0, 8)}`
+                        );
+
+                        // Send prompt to new session
+                        await client.service(`sessions/${newSession.session_id}/prompt`).create({
+                          prompt: renderedPrompt,
+                        });
+
+                        console.log(
+                          `✅ Always_new trigger executed: session ${newSession.session_id.substring(0, 8)}`
+                        );
+                      } catch (error) {
+                        console.error('❌ Failed to execute always_new trigger:', error);
+                      }
+                    })();
+                  } else {
+                    // Default: show_picker - open modal for session selection
+                    setWorktreeTriggerModal({
+                      worktreeId: nodeId as WorktreeID,
+                      zoneName: zoneData.label,
+                      zoneId,
+                      trigger,
+                    });
+                  }
+                }
+              }
             }
           }
 
           // Update worktree positions in board_objects
           if (worktreeUpdates.length > 0) {
-            for (const { worktree_id, position } of worktreeUpdates) {
+            for (const { worktree_id, position, zone_id } of worktreeUpdates) {
               // Find existing board_object or create new one
               const existingBoardObject = boardObjects.find(
                 bo => bo.worktree_id === worktree_id && bo.board_id === board.board_id
               );
 
               if (existingBoardObject) {
-                // Update existing board_object
-                await client.service('board-objects').patch(existingBoardObject.object_id, {
+                // Update existing board_object (position and zone_id)
+                const updateData: { position: { x: number; y: number }; zone_id?: string } = {
                   position,
-                });
+                };
+                // Only update zone_id if it's defined (dropped on zone) or explicitly undefined (moved off zone)
+                if (zone_id !== undefined) {
+                  updateData.zone_id = zone_id;
+                }
+                await client
+                  .service('board-objects')
+                  .patch(existingBoardObject.object_id, updateData);
               } else {
-                // Create new board_object
+                // Create new board_object (with zone_id if dropped on zone)
                 await client.service('board-objects').create({
                   board_id: board.board_id,
                   worktree_id,
                   position,
+                  // zone_id will be included if worktree was dropped on zone
+                  ...(zone_id !== undefined && { zone_id }),
                 });
               }
             }
@@ -648,7 +857,15 @@ const SessionCanvas = ({
         }
       }, 500);
     },
-    [board, client, batchUpdateObjectPositions, nodes, boardObjects]
+    [
+      board,
+      client,
+      batchUpdateObjectPositions,
+      nodes,
+      boardObjects,
+      findIntersectingZone,
+      worktrees,
+    ]
   );
 
   // Cleanup debounce timers on unmount
@@ -1127,6 +1344,90 @@ const SessionCanvas = ({
             </Modal>
           );
         })()}
+
+      {/* Worktree Zone Trigger Modal */}
+      {worktreeTriggerModal && (
+        <ZoneTriggerModal
+          open={true}
+          onCancel={() => setWorktreeTriggerModal(null)}
+          worktreeId={worktreeTriggerModal.worktreeId}
+          worktree={worktrees.find(wt => wt.worktree_id === worktreeTriggerModal.worktreeId)}
+          sessions={sessions}
+          zoneName={worktreeTriggerModal.zoneName}
+          trigger={worktreeTriggerModal.trigger}
+          boardName={board?.name}
+          boardDescription={board?.description}
+          boardCustomContext={board?.custom_context}
+          onExecute={async ({ sessionId, action, renderedTemplate }) => {
+            if (!client) {
+              console.error('❌ Cannot execute trigger: client not available');
+              setWorktreeTriggerModal(null);
+              return;
+            }
+
+            try {
+              console.log(
+                `✨ Executing ${action} for worktree ${worktreeTriggerModal.worktreeId.substring(0, 8)}`
+              );
+
+              let targetSessionId = sessionId;
+
+              // If creating new session, create it first
+              if (sessionId === 'new') {
+                const newSession = await client.service('sessions').create({
+                  worktree_id: worktreeTriggerModal.worktreeId,
+                  description: `Session from zone "${worktreeTriggerModal.zoneName}"`,
+                  status: 'idle',
+                  agent: 'claude',
+                });
+                targetSessionId = newSession.session_id;
+                console.log(`✓ Created new session: ${targetSessionId.substring(0, 8)}`);
+              }
+
+              // Execute action
+              switch (action) {
+                case 'prompt': {
+                  await client.service(`sessions/${targetSessionId}/prompt`).create({
+                    prompt: renderedTemplate,
+                  });
+                  console.log(`✓ Sent prompt to session ${targetSessionId.substring(0, 8)}`);
+                  break;
+                }
+                case 'fork': {
+                  const forkedSession = await client
+                    .service(`sessions/${targetSessionId}/fork`)
+                    .create({});
+                  await client.service(`sessions/${forkedSession.session_id}/prompt`).create({
+                    prompt: renderedTemplate,
+                  });
+                  console.log(
+                    `✓ Forked session and sent prompt to ${forkedSession.session_id.substring(0, 8)}`
+                  );
+                  break;
+                }
+                case 'spawn': {
+                  const spawnedSession = await client
+                    .service(`sessions/${targetSessionId}/spawn`)
+                    .create({});
+                  await client.service(`sessions/${spawnedSession.session_id}/prompt`).create({
+                    prompt: renderedTemplate,
+                  });
+                  console.log(
+                    `✓ Spawned child session and sent prompt to ${spawnedSession.session_id.substring(0, 8)}`
+                  );
+                  break;
+                }
+              }
+
+              console.log('✅ Zone trigger executed successfully');
+            } catch (error) {
+              console.error('❌ Failed to execute zone trigger:', error);
+            } finally {
+              setWorktreeTriggerModal(null);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

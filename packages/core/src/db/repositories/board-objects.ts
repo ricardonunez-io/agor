@@ -101,6 +101,7 @@ export class BoardObjectRepository {
     board_id: BoardID;
     worktree_id: WorktreeID;
     position: { x: number; y: number };
+    zone_id?: string;
   }): Promise<BoardEntityObject> {
     try {
       // Check if worktree already on a board
@@ -121,6 +122,7 @@ export class BoardObjectRepository {
         created_at: new Date(),
         data: {
           position: data.position,
+          zone_id: data.zone_id,
         },
       };
 
@@ -148,7 +150,7 @@ export class BoardObjectRepository {
   }
 
   /**
-   * Update position of board object
+   * Update position of board object (preserves zone_id)
    */
   async updatePosition(
     objectId: string,
@@ -165,11 +167,16 @@ export class BoardObjectRepository {
         throw new EntityNotFoundError('BoardObject', objectId);
       }
 
+      // Preserve existing zone_id when updating position
+      const existingData =
+        typeof existing.data === 'string' ? JSON.parse(existing.data) : existing.data;
+
       await this.db
         .update(boardObjects)
         .set({
           data: {
             position,
+            zone_id: existingData.zone_id,
           },
         })
         .where(eq(boardObjects.object_id, objectId));
@@ -189,6 +196,59 @@ export class BoardObjectRepository {
       if (error instanceof EntityNotFoundError) throw error;
       throw new RepositoryError(
         `Failed to update board object position: ${error instanceof Error ? error.message : String(error)}`,
+        error
+      );
+    }
+  }
+
+  /**
+   * Update zone pinning for board object
+   */
+  async updateZone(
+    objectId: string,
+    zoneId: string | undefined | null
+  ): Promise<BoardEntityObject> {
+    try {
+      const existing = await this.db
+        .select()
+        .from(boardObjects)
+        .where(eq(boardObjects.object_id, objectId))
+        .get();
+
+      if (!existing) {
+        throw new EntityNotFoundError('BoardObject', objectId);
+      }
+
+      // Preserve existing position when updating zone
+      const existingData =
+        typeof existing.data === 'string' ? JSON.parse(existing.data) : existing.data;
+
+      await this.db
+        .update(boardObjects)
+        .set({
+          data: {
+            position: existingData.position,
+            // Convert null to undefined for consistency
+            zone_id: zoneId === null ? undefined : zoneId,
+          },
+        })
+        .where(eq(boardObjects.object_id, objectId));
+
+      const row = await this.db
+        .select()
+        .from(boardObjects)
+        .where(eq(boardObjects.object_id, objectId))
+        .get();
+
+      if (!row) {
+        throw new RepositoryError('Failed to retrieve updated board object');
+      }
+
+      return this.rowToEntity(row);
+    } catch (error) {
+      if (error instanceof EntityNotFoundError) throw error;
+      throw new RepositoryError(
+        `Failed to update board object zone: ${error instanceof Error ? error.message : String(error)}`,
         error
       );
     }
@@ -241,6 +301,7 @@ export class BoardObjectRepository {
       board_id: row.board_id as BoardID,
       worktree_id: row.worktree_id as WorktreeID,
       position: data.position,
+      zone_id: data.zone_id,
       created_at: new Date(row.created_at).toISOString(),
     };
   }

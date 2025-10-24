@@ -2,9 +2,9 @@
  * Modal for configuring zone settings (name, triggers, etc.)
  */
 
+import type { BoardObject, ZoneTriggerBehavior } from '@agor/core/types';
 import { Alert, Input, Modal, Select, theme } from 'antd';
 import { useEffect, useId, useState } from 'react';
-import type { BoardObject, ZoneTriggerType } from '@agor/core/types';
 
 interface ZoneConfigModalProps {
   open: boolean;
@@ -25,11 +25,11 @@ export const ZoneConfigModal = ({
 }: ZoneConfigModalProps) => {
   const { token } = theme.useToken();
   const [name, setName] = useState(zoneName);
-  const [triggerType, setTriggerType] = useState<ZoneTriggerType>('prompt');
-  const [triggerText, setTriggerText] = useState('');
+  const [triggerBehavior, setTriggerBehavior] = useState<ZoneTriggerBehavior>('show_picker');
+  const [triggerTemplate, setTriggerTemplate] = useState('');
   const nameId = useId();
-  const triggerTypeId = useId();
-  const triggerTextId = useId();
+  const triggerBehaviorId = useId();
+  const triggerTemplateId = useId();
 
   // Reset form when modal opens
   useEffect(() => {
@@ -37,11 +37,11 @@ export const ZoneConfigModal = ({
       setName(zoneName);
       // Load existing trigger data if available
       if (zoneData.type === 'zone' && zoneData.trigger) {
-        setTriggerType(zoneData.trigger.type);
-        setTriggerText(zoneData.trigger.text);
+        setTriggerBehavior(zoneData.trigger.behavior);
+        setTriggerTemplate(zoneData.trigger.template);
       } else {
-        setTriggerType('prompt');
-        setTriggerText('');
+        setTriggerBehavior('show_picker');
+        setTriggerTemplate('');
       }
     }
   }, [open, zoneName, zoneData]);
@@ -50,20 +50,20 @@ export const ZoneConfigModal = ({
     if (zoneData.type === 'zone') {
       const hasChanges =
         name !== zoneName ||
-        triggerText.trim() !== (zoneData.trigger?.text || '') ||
-        triggerType !== (zoneData.trigger?.type || 'prompt');
+        triggerTemplate.trim() !== (zoneData.trigger?.template || '') ||
+        triggerBehavior !== (zoneData.trigger?.behavior || 'show_picker');
 
       if (hasChanges) {
         onUpdate(objectId, {
           ...zoneData,
           label: name,
-          // Only save trigger if text is provided
-          trigger: triggerText.trim()
+          // Only save trigger if template is provided
+          trigger: triggerTemplate.trim()
             ? {
-                type: triggerType,
-                text: triggerText.trim(),
+                behavior: triggerBehavior,
+                template: triggerTemplate.trim(),
               }
-            : undefined, // Remove trigger if text is empty
+            : undefined, // Remove trigger if template is empty
         });
       }
     }
@@ -104,7 +104,7 @@ export const ZoneConfigModal = ({
 
       <div style={{ marginBottom: 16 }}>
         <label
-          htmlFor={triggerTypeId}
+          htmlFor={triggerBehaviorId}
           style={{
             display: 'block',
             marginBottom: 8,
@@ -112,24 +112,26 @@ export const ZoneConfigModal = ({
             color: token.colorText,
           }}
         >
-          Trigger Type
+          Trigger Behavior
         </label>
         <Select
-          id={triggerTypeId}
-          value={triggerType}
-          onChange={setTriggerType}
+          id={triggerBehaviorId}
+          value={triggerBehavior}
+          onChange={setTriggerBehavior}
           style={{ width: '100%' }}
           options={[
-            { value: 'prompt', label: 'Prompt - Send a message to the session' },
-            { value: 'task', label: 'Task - Create a new task' },
-            { value: 'subtask', label: 'Subtask - Create a subtask for the session' },
+            {
+              value: 'show_picker',
+              label: 'Show Picker - Choose session and action when dropped',
+            },
+            { value: 'always_new', label: 'Always New - Auto-create new root session' },
           ]}
         />
       </div>
 
       <div>
         <label
-          htmlFor={triggerTextId}
+          htmlFor={triggerTemplateId}
           style={{
             display: 'block',
             marginBottom: 8,
@@ -137,13 +139,13 @@ export const ZoneConfigModal = ({
             color: token.colorText,
           }}
         >
-          Trigger
+          Trigger Template
         </label>
         <Input.TextArea
-          id={triggerTextId}
-          value={triggerText}
-          onChange={e => setTriggerText(e.target.value)}
-          placeholder="Enter the prompt or task description that will be triggered..."
+          id={triggerTemplateId}
+          value={triggerTemplate}
+          onChange={e => setTriggerTemplate(e.target.value)}
+          placeholder="Enter the prompt template that will be triggered when a worktree is dropped here..."
           rows={6}
         />
         <Alert

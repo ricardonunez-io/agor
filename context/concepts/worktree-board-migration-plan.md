@@ -255,6 +255,62 @@ Located: `apps/agor-ui/src/components/Pill/Pill.tsx`
 - ✅ Branch icon uses `token.colorPrimary` (theme-aware)
 - ✅ Edit/Delete buttons with proper icons
 - ✅ WorktreeModal width fixed (removed excessive 1200px width)
+- ✅ DeleteWorktreePopconfirm integration with filesystem deletion checkbox
+- ✅ Issue/PR pills replace buttons for cleaner UX
+
+**NewWorktreeModal Validation Fixes:** ✅ Implemented
+
+- ✅ Form validation only checks required fields (repoId, sourceBranch, name)
+- ✅ localStorage support for last used repo (auto-populate on open)
+- ✅ Auto-populate source branch from repo's default_branch
+- ✅ Simplified validation logic (no async timing issues)
+
+---
+
+## Phase 1.6: Session Creation from Worktree ✅ COMPLETE
+
+**Goal:** Add ability to create new sessions directly from WorktreeCard
+
+**Status:** Complete
+
+### Implemented Features
+
+- ✅ Add "New Session" button to WorktreeCard
+  - Primary button when no sessions exist (centered in empty state)
+  - Subtle "+" button in header when sessions exist
+- ✅ Opens NewSessionModal pre-populated with worktree
+- ✅ Quick workflow: see worktree → create session → start coding
+- ✅ Proper button placement and styling based on session count
+
+**Implementation Details:**
+
+Located: `apps/agor-ui/src/components/WorktreeCard/WorktreeCard.tsx`
+
+- Added `onCreateSession` prop to WorktreeCard
+- **Empty state**: Shows only primary "Create Session" button (no collapsible section)
+- **With sessions**: Shows collapsible "Sessions" section with subtle "+" button in header
+- Both buttons call `onCreateSession(worktree.worktree_id)`
+- Clean conditional rendering: collapse only appears when sessions exist
+
+Located: `apps/agor-ui/src/components/SessionCanvas/SessionCanvas.tsx`
+
+- Added `onCreateSessionForWorktree` prop to SessionCanvasProps
+- Passed through to WorktreeNodeData
+- Wired to WorktreeCard via node data
+
+Located: `apps/agor-ui/src/components/App/App.tsx`
+
+- Added `preselectedWorktreeId` state
+- Created `handleOpenNewSessionModalForWorktree` handler
+- Passed handler to SessionCanvas
+- Modal opens with worktree pre-selected
+
+Located: `apps/agor-ui/src/components/NewSessionModal/NewSessionModal.tsx`
+
+- Added `preselectedWorktreeId` prop
+- Updated useEffect to prioritize preselected worktree
+- Modal defaults to "existing worktree" mode when preselected
+- Selected worktree is locked in when opened from WorktreeCard
 
 ---
 

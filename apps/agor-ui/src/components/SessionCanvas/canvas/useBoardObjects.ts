@@ -3,13 +3,15 @@
  */
 
 import type { AgorClient } from '@agor/core/api';
-import { useCallback, useRef } from 'react';
+import type { Board, BoardObject, Session, Worktree } from '@agor/core/types';
+import { useCallback, useMemo, useRef } from 'react';
 import type { Node } from 'reactflow';
-import type { Board, BoardObject } from '@agor/core/types';
 
 interface UseBoardObjectsProps {
   board: Board | null;
   client: AgorClient | null;
+  sessions: Session[];
+  worktrees: Worktree[];
   setNodes: React.Dispatch<React.SetStateAction<Node[]>>;
   deletedObjectsRef: React.MutableRefObject<Set<string>>;
   eraserMode?: boolean;
@@ -18,6 +20,8 @@ interface UseBoardObjectsProps {
 export const useBoardObjects = ({
   board,
   client,
+  sessions,
+  worktrees,
   setNodes,
   deletedObjectsRef,
   eraserMode = false,
@@ -25,6 +29,17 @@ export const useBoardObjects = ({
   // Use ref to avoid recreating callbacks when board changes
   const boardRef = useRef(board);
   boardRef.current = board;
+
+  // Get session IDs for this board (worktree-centric model)
+  const boardSessionIds = useMemo(() => {
+    if (!board) return [];
+    const boardWorktreeIds = new Set(
+      worktrees.filter(w => w.board_id === board.board_id).map(w => w.worktree_id)
+    );
+    return sessions
+      .filter(s => s.worktree_id && boardWorktreeIds.has(s.worktree_id))
+      .map(s => s.session_id);
+  }, [board, worktrees, sessions]);
 
   /**
    * Update an existing board object
@@ -64,7 +79,7 @@ export const useBoardObjects = ({
 
       // Find affected sessions (those pinned to this zone)
       const affectedSessionIds: string[] = [];
-      for (const sessionId of board.sessions) {
+      for (const sessionId of boardSessionIds) {
         const position = board.layout?.[sessionId];
         if (position?.parentId === objectId) {
           affectedSessionIds.push(sessionId);
@@ -102,7 +117,7 @@ export const useBoardObjects = ({
         // Note: WebSocket update should restore the actual state
       }
     },
-    [board, client, setNodes, deletedObjectsRef]
+    [board, client, setNodes, deletedObjectsRef, boardSessionIds]
   );
 
   /**
@@ -130,7 +145,7 @@ export const useBoardObjects = ({
         // Calculate session count for this zone (count pinned sessions via parentId)
         let sessionCount = 0;
         if (objectData.type === 'zone') {
-          for (const sessionId of board.sessions) {
+          for (const sessionId of boardSessionIds) {
             const position = board.layout?.[sessionId];
             if (position?.parentId === objectId) {
               sessionCount++;
@@ -166,7 +181,7 @@ export const useBoardObjects = ({
           },
         };
       });
-  }, [board?.objects, board?.sessions, board?.layout, handleUpdateObject, deleteZone, eraserMode]);
+  }, [board?.objects, board?.layout, boardSessionIds, handleUpdateObject, deleteZone, eraserMode]);
 
   /**
    * Add a zone node at the specified position

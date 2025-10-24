@@ -54,6 +54,7 @@ export class BoardObjectsService {
       board_id: data.board_id,
       worktree_id: data.worktree_id,
       position: data.position,
+      zone_id: data.zone_id,
     });
 
     // Emit WebSocket event
@@ -110,10 +111,23 @@ export class BoardObjectsService {
     data: Partial<BoardEntityObject>,
     params?: BoardObjectParams
   ): Promise<BoardEntityObject> {
+    // Handle simultaneous position + zone_id update
+    if (data.position && 'zone_id' in data) {
+      // Update position first (preserves zone_id)
+      await this.updatePosition(id, data.position, params);
+      // Then update zone_id
+      return this.updateZone(id, data.zone_id, params);
+    }
+
     if (data.position) {
       return this.updatePosition(id, data.position, params);
     }
-    throw new Error('Only position updates are supported via patch');
+
+    if ('zone_id' in data) {
+      return this.updateZone(id, data.zone_id, params);
+    }
+
+    throw new Error('Only position and zone_id updates are supported via patch');
   }
 
   /**
@@ -138,6 +152,22 @@ export class BoardObjectsService {
     params?: BoardObjectParams
   ): Promise<BoardEntityObject> {
     const boardObject = await this.boardObjectRepo.updatePosition(objectId, position);
+
+    // Emit WebSocket event
+    this.emit?.('patched', boardObject, params);
+
+    return boardObject;
+  }
+
+  /**
+   * Custom method: Update zone pinning
+   */
+  async updateZone(
+    objectId: string,
+    zoneId: string | undefined | null,
+    params?: BoardObjectParams
+  ): Promise<BoardEntityObject> {
+    const boardObject = await this.boardObjectRepo.updateZone(objectId, zoneId);
 
     // Emit WebSocket event
     this.emit?.('patched', boardObject, params);

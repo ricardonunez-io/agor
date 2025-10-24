@@ -9,10 +9,10 @@ import {
   ExpandOutlined,
   FolderOpenOutlined,
   LinkOutlined,
+  PlusOutlined,
   PushpinFilled,
 } from '@ant-design/icons';
 import { Badge, Button, Card, Collapse, Space, Spin, Tag, Typography, theme } from 'antd';
-import { useState } from 'react';
 import { DeleteWorktreePopconfirm } from '../DeleteWorktreePopconfirm';
 import { CreatedByTag } from '../metadata';
 import { IssuePill, PullRequestPill } from '../Pill';
@@ -28,6 +28,7 @@ interface WorktreeCardProps {
   currentUserId?: string;
   onTaskClick?: (taskId: string) => void;
   onSessionClick?: (sessionId: string) => void;
+  onCreateSession?: (worktreeId: string) => void;
   onDelete?: (worktreeId: string, deleteFromFilesystem: boolean) => void;
   onOpenSettings?: (worktreeId: string) => void;
   onUnpin?: (worktreeId: string) => void;
@@ -45,6 +46,7 @@ const WorktreeCard = ({
   currentUserId,
   onTaskClick,
   onSessionClick,
+  onCreateSession,
   onDelete,
   onOpenSettings,
   onUnpin,
@@ -54,112 +56,71 @@ const WorktreeCard = ({
   defaultExpanded = true,
 }: WorktreeCardProps) => {
   const { token } = theme.useToken();
-  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
 
-  const toggleSessionExpanded = (sessionId: string) => {
-    setExpandedSessions(prev => {
-      const next = new Set(prev);
-      if (next.has(sessionId)) {
-        next.delete(sessionId);
-      } else {
-        next.add(sessionId);
-      }
-      return next;
-    });
-  };
-
-  // Session list content (collapsible)
+  // Session list content (collapsible) - only used when sessions exist
   const sessionListContent = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {sessions.length === 0 ? (
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          No sessions yet
-        </Typography.Text>
-      ) : (
-        sessions.map(session => {
-          const sessionTasks = tasks[session.session_id] || [];
-          const isExpanded = expandedSessions.has(session.session_id);
-
-          return (
-            <div
-              key={session.session_id}
+      {sessions.map(session => (
+        <div
+          key={session.session_id}
+          style={{
+            border: `1px solid rgba(255, 255, 255, 0.1)`,
+            borderRadius: 4,
+            padding: 8,
+            background: 'rgba(0, 0, 0, 0.2)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            cursor: 'pointer',
+          }}
+          onClick={() => onSessionClick?.(session.session_id)}
+        >
+          <Space size={4} align="start" style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ marginTop: 2 }}>
+              <ToolIcon tool={session.agentic_tool} size={20} />
+            </div>
+            <Typography.Text
+              strong
               style={{
-                border: `1px solid rgba(255, 255, 255, 0.1)`,
-                borderRadius: 4,
-                padding: 8,
-                background: 'rgba(0, 0, 0, 0.2)',
+                fontSize: 12,
+                flex: 1,
+                wordBreak: 'break-word',
+                overflowWrap: 'break-word',
               }}
             >
-              {/* Session header */}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  cursor: 'pointer',
-                }}
-                onClick={() => toggleSessionExpanded(session.session_id)}
-              >
-                <Space size={4} align="center">
-                  <ToolIcon tool={session.agentic_tool} size={20} />
-                  <Typography.Text strong style={{ fontSize: 12 }}>
-                    {session.agentic_tool}
-                  </Typography.Text>
-                  {session.status === TaskStatus.RUNNING ? (
-                    <Spin size="small" />
-                  ) : (
-                    <Badge
-                      status={
-                        session.status === TaskStatus.COMPLETED
-                          ? 'success'
-                          : session.status === TaskStatus.FAILED
-                            ? 'error'
-                            : 'default'
-                      }
-                    />
-                  )}
-                </Space>
-
-                <Space size={4}>
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={<ExpandOutlined />}
-                    onClick={e => {
-                      e.stopPropagation();
-                      onSessionClick?.(session.session_id);
-                    }}
-                    title="Open session"
-                  />
-                </Space>
-              </div>
-
-              {/* Session details (when expanded) */}
-              {isExpanded && (
-                <div style={{ marginTop: 8, paddingLeft: 24 }}>
-                  {(session.title || session.description) && (
-                    <Typography.Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-                      {session.title || session.description}
-                    </Typography.Text>
-                  )}
-
-                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                    💬 {session.message_count} messages
-                  </Typography.Text>
-
-                  {sessionTasks.length > 0 && (
-                    <div style={{ marginTop: 4 }}>
-                      <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                        📋 {sessionTasks.length} tasks
-                      </Typography.Text>
-                    </div>
-                  )}
-                </div>
+              {session.title || session.description || session.agentic_tool}
+            </Typography.Text>
+            <div style={{ marginTop: 2 }}>
+              {session.status === TaskStatus.RUNNING ? (
+                <Spin size="small" />
+              ) : (
+                <Badge
+                  status={
+                    session.status === TaskStatus.COMPLETED
+                      ? 'success'
+                      : session.status === TaskStatus.FAILED
+                        ? 'error'
+                        : 'default'
+                  }
+                />
               )}
             </div>
-          );
-        })
-      )}
+          </Space>
+
+          <div style={{ marginTop: 2 }}>
+            <Button
+              type="text"
+              size="small"
+              icon={<ExpandOutlined />}
+              onClick={e => {
+                e.stopPropagation();
+                onSessionClick?.(session.session_id);
+              }}
+              title="Open session"
+            />
+          </div>
+        </div>
+      ))}
     </div>
   );
 
@@ -173,17 +134,34 @@ const WorktreeCard = ({
         width: '100%',
       }}
     >
-      <Typography.Text strong>Sessions</Typography.Text>
-      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        ({sessions.length})
-      </Typography.Text>
+      <Space size={4} align="center">
+        <Typography.Text strong>Sessions</Typography.Text>
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          ({sessions.length})
+        </Typography.Text>
+      </Space>
+      {sessions.length > 0 && onCreateSession && (
+        <div className="nodrag">
+          <Button
+            type="text"
+            size="small"
+            icon={<PlusOutlined />}
+            onClick={e => {
+              e.stopPropagation();
+              onCreateSession(worktree.worktree_id);
+            }}
+            title="Create new session"
+            style={{ fontSize: 12 }}
+          />
+        </div>
+      )}
     </div>
   );
 
   return (
     <Card
       style={{
-        maxWidth: WORKTREE_CARD_MAX_WIDTH,
+        width: 400,
         ...(isPinned && zoneColor ? { borderColor: zoneColor, borderWidth: 1 } : {}),
       }}
       styles={{
@@ -297,20 +275,49 @@ const WorktreeCard = ({
         </div>
       )}
 
-      {/* Sessions - collapsible */}
+      {/* Sessions - collapsible (only show if sessions exist, otherwise show button directly) */}
       <div className="nodrag">
-        <Collapse
-          defaultActiveKey={defaultExpanded ? ['sessions'] : []}
-          items={[
-            {
-              key: 'sessions',
-              label: sessionListHeader,
-              children: sessionListContent,
-            },
-          ]}
-          ghost
-          style={{ marginTop: 8 }}
-        />
+        {sessions.length === 0 ? (
+          // No sessions: show create button without collapse wrapper
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              alignItems: 'center',
+              padding: '16px 0',
+              marginTop: 8,
+            }}
+          >
+            {onCreateSession && (
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={e => {
+                  e.stopPropagation();
+                  onCreateSession(worktree.worktree_id);
+                }}
+                size="middle"
+              >
+                Create Session
+              </Button>
+            )}
+          </div>
+        ) : (
+          // Has sessions: show collapsible section
+          <Collapse
+            defaultActiveKey={defaultExpanded ? ['sessions'] : []}
+            items={[
+              {
+                key: 'sessions',
+                label: sessionListHeader,
+                children: sessionListContent,
+              },
+            ]}
+            ghost
+            style={{ marginTop: 8 }}
+          />
+        )}
       </div>
     </Card>
   );

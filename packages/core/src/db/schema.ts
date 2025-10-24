@@ -508,6 +508,7 @@ export const boardObjects = sqliteTable(
     data: text('data', { mode: 'json' })
       .$type<{
         position: { x: number; y: number };
+        zone_id?: string; // Optional zone pinning
       }>()
       .notNull(),
   },
