@@ -257,10 +257,8 @@ function AppContent() {
 
       // If creating a new worktree, create it first (with URLs included)
       if (config.worktreeMode === 'new' && config.newWorktree) {
-        message.loading({ content: 'Creating worktree...', key: 'create-worktree', duration: 0 });
-
         // Create the worktree with all metadata (URLs passed to backend)
-        await handleCreateWorktree(config.newWorktree.repoId, {
+        const newWorktree = await handleCreateWorktree(config.newWorktree.repoId, {
           name: config.newWorktree.name,
           ref: config.newWorktree.ref,
           createBranch: config.newWorktree.createBranch,
@@ -270,19 +268,12 @@ function AppContent() {
           pull_request_url: config.newWorktree.pull_request_url,
         });
 
-        message.success({ content: 'Worktree created!', key: 'create-worktree' });
-
-        // Find the newly created worktree to get its ID
-        // Note: This relies on local state being updated via WebSocket
-        const newWorktree = worktrees.find(
-          w => w.repo_id === config.newWorktree.repoId && w.name === config.newWorktree.name
-        );
-
-        if (newWorktree) {
-          worktree_id = newWorktree.worktree_id;
-        } else {
-          throw new Error('Failed to find newly created worktree');
+        if (!newWorktree) {
+          throw new Error('Failed to create worktree');
         }
+
+        // Use the returned worktree ID directly (no race condition!)
+        worktree_id = newWorktree.worktree_id;
       }
 
       if (!worktree_id) {
@@ -558,26 +549,32 @@ function AppContent() {
       createBranch: boolean;
       sourceBranch: string;
       pullLatest: boolean;
+      issue_url?: string;
+      pull_request_url?: string;
     }
-  ) => {
-    if (!client) return;
+  ): Promise<import('@agor/core/types').Worktree | null> => {
+    if (!client) return null;
     try {
       message.loading({ content: 'Creating worktree...', key: 'create-worktree', duration: 0 });
 
-      await client.service(`repos/${repoId}/worktrees`).create({
+      const worktree = await client.service(`repos/${repoId}/worktrees`).create({
         name: data.name,
         ref: data.ref,
         createBranch: data.createBranch,
         pullLatest: data.pullLatest, // Fetch latest from remote before creating
         sourceBranch: data.sourceBranch, // Base new branch on specified source branch
+        issue_url: data.issue_url,
+        pull_request_url: data.pull_request_url,
       });
 
       message.success({ content: 'Worktree created successfully!', key: 'create-worktree' });
+      return worktree;
     } catch (error) {
       message.error({
         content: `Failed to create worktree: ${error instanceof Error ? error.message : String(error)}`,
         key: 'create-worktree',
       });
+      return null;
     }
   };
 

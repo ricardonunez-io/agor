@@ -15,25 +15,10 @@ import {
   PoweroffOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
-import {
-  Badge,
-  Button,
-  Checkbox,
-  Empty,
-  Form,
-  Input,
-  Modal,
-  Select,
-  Space,
-  Table,
-  Tooltip,
-  Typography,
-  theme,
-} from 'antd';
+import { Badge, Button, Empty, Form, Modal, Space, Table, Tooltip, theme } from 'antd';
 import { useState } from 'react';
 import { DeleteWorktreePopconfirm } from '../DeleteWorktreePopconfirm';
-
-const { Text } = Typography;
+import { WorktreeFormFields } from '../WorktreeFormFields';
 
 interface WorktreesTableProps {
   worktrees: Worktree[];
@@ -421,84 +406,15 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
         }}
       >
         <Form form={form} layout="vertical" onFieldsChange={validateForm}>
-          <Form.Item
-            name="repoId"
-            label="Repository"
-            rules={[{ required: true, message: 'Please select a repository' }]}
-          >
-            <Select
-              placeholder="Select a repository"
-              showSearch
-              filterOption={(input, option) =>
-                (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-              }
-              options={repos.map(repo => ({
-                value: repo.repo_id,
-                label: repo.name,
-              }))}
-              onChange={handleRepoChange}
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="sourceBranch"
-            label="Source Branch"
-            rules={[{ required: true, message: 'Please enter source branch' }]}
-            tooltip="Branch to use as base for the new worktree branch"
-            initialValue="main"
-          >
-            <Input placeholder="main" />
-          </Form.Item>
-
-          <Form.Item
-            name="name"
-            label="Worktree Name"
-            rules={[
-              { required: true, message: 'Please enter a worktree name' },
-              {
-                pattern: /^[a-z0-9-]+$/,
-                message: 'Only lowercase letters, numbers, and hyphens allowed',
-              },
-            ]}
-            tooltip="URL-friendly name (e.g., 'feat-auth', 'fix-cors')"
-          >
-            <Input placeholder="feat-auth" />
-          </Form.Item>
-
-          <Form.Item>
-            <Checkbox
-              checked={useSameBranchName}
-              onChange={e => {
-                setUseSameBranchName(e.target.checked);
-                // Re-validate form after checkbox change
-                setTimeout(validateForm, 0);
-              }}
-            >
-              Use worktree name as branch name
-            </Checkbox>
-          </Form.Item>
-
-          {!useSameBranchName && (
-            <Form.Item
-              name="branchName"
-              label="Branch Name"
-              rules={[{ required: true, message: 'Please enter branch name' }]}
-            >
-              <Input placeholder="feature/auth" />
-            </Form.Item>
-          )}
-
-          <Typography.Paragraph type="secondary">
-            <strong>What will happen:</strong>
-            <br />• Fetch latest from origin
-            <br />• Create new branch{' '}
-            <Text code>{useSameBranchName ? '<worktree-name>' : '<branch-name>'}</Text> based on{' '}
-            <Text code>{form.getFieldValue('sourceBranch') || getDefaultBranch()}</Text>
-            <br />• Worktree location:{' '}
-            <Text code>
-              ~/.agor/worktrees/{'<repo>'}/<Text italic>{'<name>'}</Text>
-            </Text>
-          </Typography.Paragraph>
+          <WorktreeFormFields
+            repos={repos}
+            selectedRepoId={selectedRepoId}
+            onRepoChange={handleRepoChange}
+            defaultBranch={getDefaultBranch()}
+            onFormChange={validateForm}
+            useSameBranchName={useSameBranchName}
+            onUseSameBranchNameChange={setUseSameBranchName}
+          />
         </Form>
       </Modal>
     </div>

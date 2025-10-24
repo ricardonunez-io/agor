@@ -24,6 +24,7 @@ import { useEffect, useState } from 'react';
 import { AgenticToolConfigForm } from '../AgenticToolConfigForm';
 import { AgentSelectionCard } from '../AgentSelectionCard';
 import type { ModelConfig } from '../ModelSelector';
+import { WorktreeFormFields } from '../WorktreeFormFields';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -98,6 +99,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [isFormValid, setIsFormValid] = useState(false);
   const [worktreeMode, setWorktreeMode] = useState<'existing' | 'new'>('existing');
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
+  const [useSameBranchName, setUseSameBranchName] = useState(true);
 
   const hasWorktrees = worktreeOptions.length > 0;
   const hasRepos = repoOptions.length > 0;
@@ -105,6 +107,15 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   // Get selected repo's default branch
   const selectedRepo = repos.find(r => r.repo_id === selectedRepoId);
   const defaultBranch = selectedRepo?.default_branch || 'main';
+
+  // Update source branch when repo changes
+  const handleRepoChange = (repoId: string) => {
+    setSelectedRepoId(repoId);
+    const repo = repos.find(r => r.repo_id === repoId);
+    const branch = repo?.default_branch || 'main';
+    form.setFieldValue('newWorktree_sourceBranch', branch);
+    handleFormChange();
+  };
 
   // Remember last used worktree and repo
   useEffect(() => {
@@ -175,13 +186,18 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
           const selectedRepo = repos.find(r => r.repo_id === values.newWorktree_repoId);
           const defaultBranch = selectedRepo?.default_branch || 'main';
 
+          // Calculate branch name based on checkbox state
+          const branchName = useSameBranchName
+            ? values.newWorktree_name
+            : values.newWorktree_branchName;
+
           config.newWorktree = {
             repoId: values.newWorktree_repoId,
             name: values.newWorktree_name,
-            ref: values.newWorktree_ref,
-            createBranch: values.newWorktree_createBranch ?? true,
+            ref: branchName,
+            createBranch: true,
             sourceBranch: values.newWorktree_sourceBranch || defaultBranch,
-            pullLatest: values.newWorktree_pullLatest ?? true,
+            pullLatest: true,
             issue_url: values.newWorktree_issue_url,
             pull_request_url: values.newWorktree_pull_request_url,
           };
@@ -227,11 +243,13 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       if (mode === 'existing') {
         isValid = !!values.worktreeId;
       } else {
-        // For new worktree, check repo, name, and ref
+        // For new worktree, check repo, name, source branch, and branch name (if checkbox unchecked)
+        const hasBranchName = useSameBranchName || !!values.newWorktree_branchName;
         isValid = !!(
           values.newWorktree_repoId &&
           values.newWorktree_name &&
-          values.newWorktree_ref
+          values.newWorktree_sourceBranch &&
+          hasBranchName
         );
       }
 
@@ -399,46 +417,17 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
 
             {hasRepos && (
               <>
-                <Form.Item
-                  name="newWorktree_repoId"
-                  label="Repository"
-                  rules={[
-                    { required: worktreeMode === 'new', message: 'Please select a repository' },
-                  ]}
-                  validateTrigger={['onBlur', 'onChange']}
-                >
-                  <Select
-                    placeholder="Select repository..."
-                    options={repoOptions}
-                    showSearch
-                    optionFilterProp="label"
-                    onChange={value => setSelectedRepoId(value as string)}
-                  />
-                </Form.Item>
-
-                <Form.Item
-                  name="newWorktree_name"
-                  label="Worktree Name"
-                  rules={[
-                    { required: worktreeMode === 'new', message: 'Please enter a worktree name' },
-                  ]}
-                  validateTrigger={['onBlur', 'onChange']}
-                  help="A unique name for this worktree (e.g., 'feat-auth', 'fix-bug-123')"
-                >
-                  <Input placeholder="e.g., feat-auth" />
-                </Form.Item>
-
-                <Form.Item
-                  name="newWorktree_ref"
-                  label="Branch/Ref"
-                  rules={[
-                    { required: worktreeMode === 'new', message: 'Please enter a branch name' },
-                  ]}
-                  validateTrigger={['onBlur', 'onChange']}
-                  help={`Branch name to create or checkout (will be based on ${defaultBranch})`}
-                >
-                  <Input placeholder="e.g., feat/authentication" />
-                </Form.Item>
+                <WorktreeFormFields
+                  repos={repos}
+                  selectedRepoId={selectedRepoId}
+                  onRepoChange={handleRepoChange}
+                  defaultBranch={defaultBranch}
+                  fieldPrefix="newWorktree_"
+                  showUrlFields={false}
+                  onFormChange={handleFormChange}
+                  useSameBranchName={useSameBranchName}
+                  onUseSameBranchNameChange={setUseSameBranchName}
+                />
 
                 <Collapse
                   ghost
