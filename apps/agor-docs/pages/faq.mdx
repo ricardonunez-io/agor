@@ -3,7 +3,7 @@ title: FAQ
 description: Frequently asked questions about session forking, spawning, and Agor's multiplayer workflow
 ---
 
-# Session Fork & Spawn FAQ
+# FAQ
 
 ## What's a worktree?
 
@@ -35,7 +35,7 @@ Each worktree is completely isolated - changes in one don't affect the other. Th
 
 **Agor manages the git worktrees for you** - no need to run `git worktree add` manually. Just create a worktree in the UI or CLI, and Agor handles the git operations.
 
-## What Gets Forked?
+## What happens when I "fork" a session?
 
 **IMPORTANT**: When you fork a session, you're forking the **CONTEXT WINDOW** (conversation history), NOT the git worktree.
 
@@ -76,7 +76,7 @@ You're not exploring alternative implementations (they'd conflict on disk!) - yo
 
 ---
 
-## Why would I spawn a subtask?
+## What happens when I "spawn" a subtask?
 
 **Spawning creates a child session** - like forking, but with parent-child hierarchy instead of siblings.
 
