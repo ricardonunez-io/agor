@@ -24,6 +24,14 @@ docker compose up
 
 ---
 
+## Screenshot
+
+![Agor Board View](apps/agor-docs/public/screenshots/board.png)
+
+_Multiplayer spatial canvas with zones, real-time cursors, and session organization_
+
+---
+
 ## What It Does
 
 - **Agent orchestration** - Run Claude Code, Codex, Gemini from one interface

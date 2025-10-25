@@ -35,7 +35,6 @@ export default class SessionLoadClaude extends Command {
   static examples = [
     '<%= config.bin %> <%= command.id %> <session-id>',
     '<%= config.bin %> <%= command.id %> 34e94925-f4cc-4685-8869-83c77062ad14',
-    '<%= config.bin %> <%= command.id %> <session-id> --board experiments',
   ];
 
   static args = {
@@ -46,10 +45,6 @@ export default class SessionLoadClaude extends Command {
   };
 
   static flags = {
-    board: Flags.string({
-      char: 'b',
-      description: 'Board to add session to (name or ID)',
-    }),
     'project-dir': Flags.string({
       description: 'Project directory (defaults to current directory)',
     }),
@@ -270,21 +265,6 @@ export default class SessionLoadClaude extends Command {
       this.log(
         `${chalk.green('✓')} Linked ${linkedCount} messages to ${createdTasks.length} tasks`
       );
-
-      // Add to board if specified
-      if (flags.board) {
-        try {
-          const boardsService = client.service('boards');
-          await boardsService.patch(null, null, {
-            query: { addSession: created.session_id, boardId: flags.board },
-          });
-          this.log(`${chalk.green('✓')} Added to board: ${chalk.cyan(flags.board)}`);
-        } catch (error) {
-          this.warn(
-            `Failed to add to board "${flags.board}": ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      }
 
       this.log(`\n${chalk.green('✓')} Successfully imported session!\n`);
       this.log(`View with: ${chalk.cyan(`agor session show ${created.session_id}`)}`);

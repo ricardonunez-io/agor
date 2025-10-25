@@ -281,17 +281,18 @@ const WorktreeCard = ({
           <div className="nodrag">
             {isPinned && zoneName && (
               <Tag
-                icon={<PushpinFilled />}
-                color="blue"
+                icon={<PushpinFilled style={{ color: zoneColor }} />}
                 onClick={e => {
                   e.stopPropagation();
                   onUnpin?.(worktree.worktree_id);
                 }}
-                style={{ cursor: 'pointer' }}
+                style={{
+                  cursor: 'pointer',
+                  backgroundColor: zoneColor ? `${zoneColor}1a` : undefined, // 10% alpha (1a in hex = 26/255 ≈ 10%)
+                  borderColor: zoneColor,
+                }}
                 title={`Pinned to ${zoneName} (click to unpin)`}
-              >
-                {zoneName}
-              </Tag>
+              />
             )}
           </div>
           <Button
