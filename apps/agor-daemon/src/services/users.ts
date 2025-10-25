@@ -98,6 +98,9 @@ export class UsersService {
     const now = new Date();
     const user_id = generateId() as UserID;
 
+    const role = data.role || 'member';
+    const defaultEmoji = role === 'admin' ? '⭐' : '👤';
+
     const row = await this.db
       .insert(users)
       .values({
@@ -105,8 +108,8 @@ export class UsersService {
         email: data.email,
         password: hashedPassword,
         name: data.name,
-        emoji: data.emoji || '👤',
-        role: data.role || 'member',
+        emoji: data.emoji || defaultEmoji,
+        role,
         created_at: now,
         updated_at: now,
         data: {

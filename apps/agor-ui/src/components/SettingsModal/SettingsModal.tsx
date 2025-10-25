@@ -15,6 +15,7 @@ import type {
 import { Modal, Tabs } from 'antd';
 import { useState } from 'react';
 import { WorktreeModal } from '../WorktreeModal';
+import { AgenticToolsTab } from './AgenticToolsTab';
 import { BoardsTable } from './BoardsTable';
 import { MCPServersTable } from './MCPServersTable';
 import { ReposTable } from './ReposTable';
@@ -179,6 +180,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onDelete={onDeleteMCPServer}
               />
             ),
+          },
+          {
+            key: 'api-keys',
+            label: 'API Keys',
+            children: <AgenticToolsTab client={client} />,
           },
           {
             key: 'users',

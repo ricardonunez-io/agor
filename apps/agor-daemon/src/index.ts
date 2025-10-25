@@ -66,6 +66,7 @@ import type {
 } from './declarations';
 import { createBoardObjectsService } from './services/board-objects';
 import { createBoardsService } from './services/boards';
+import { createConfigService } from './services/config';
 import { createContextService } from './services/context';
 import { createHealthMonitor } from './services/health-monitor';
 import { createMCPServersService } from './services/mcp-servers';
@@ -297,6 +298,9 @@ async function main() {
   app.use('/repos', createReposService(db, app));
 
   app.use('/mcp-servers', createMCPServersService(db));
+
+  // Register config service for API key management
+  app.use('/config', createConfigService());
 
   // Register context service (read-only filesystem browser for worktree context/ files)
   // Scans context/ directory in worktree for all .md files recursively
@@ -1482,6 +1486,7 @@ async function main() {
   console.log(`     - /boards`);
   console.log(`     - /repos`);
   console.log(`     - /mcp-servers`);
+  console.log(`     - /config`);
   console.log(`     - /context`);
   console.log(`     - /users`);
 
