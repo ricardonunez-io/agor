@@ -405,73 +405,123 @@ interface CommentNodeData {
 const CommentNodeComponent = ({ data }: { data: CommentNodeData }) => {
   const { token } = theme.useToken();
   const { comment, replyCount, onClick } = data;
+  const [isHovered, setIsHovered] = useState(false);
 
   // Show first line of content as preview
-  const preview = comment.content.split('\n')[0].slice(0, 50);
-  const hasMore = comment.content.length > 50 || comment.content.includes('\n');
+  const preview = comment.content.split('\n')[0].slice(0, 80);
+  const hasMore = comment.content.length > 80 || comment.content.includes('\n');
+
+  const pinColor = comment.resolved ? token.colorSuccess : token.colorPrimary;
+  const totalCount = 1 + replyCount; // Thread root + replies
 
   return (
     <div
       onClick={() => onClick?.(comment.comment_id)}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       style={{
-        background: token.colorBgContainer,
-        border: `2px solid ${comment.resolved ? token.colorSuccess : token.colorPrimary}`,
-        borderRadius: token.borderRadiusLG,
-        padding: '12px',
-        minWidth: '200px',
-        maxWidth: '300px',
-        boxShadow: token.boxShadowSecondary,
+        position: 'relative',
         cursor: 'pointer',
-        transition: 'all 0.2s',
-      }}
-      onMouseEnter={e => {
-        e.currentTarget.style.boxShadow = token.boxShadow;
-        e.currentTarget.style.transform = 'scale(1.02)';
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.boxShadow = token.boxShadowSecondary;
-        e.currentTarget.style.transform = 'scale(1)';
+        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <CommentOutlined
-          style={{ color: comment.resolved ? token.colorSuccess : token.colorPrimary }}
-        />
-        <div style={{ flex: 1, fontSize: 12, color: token.colorTextSecondary }}>
-          {comment.resolved ? 'Resolved' : 'Open'}
-        </div>
-        {replyCount > 0 && (
-          <Badge
-            count={replyCount}
+      {/* Pin bubble - always visible */}
+      <div
+        style={{
+          width: '32px',
+          height: '32px',
+          borderRadius: '50%',
+          background: pinColor,
+          border: `2px solid ${token.colorBgContainer}`,
+          boxShadow: isHovered ? token.boxShadow : token.boxShadowSecondary,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          transform: isHovered ? 'scale(1.1)' : 'scale(1)',
+        }}
+      >
+        <CommentOutlined style={{ fontSize: '16px', color: token.colorBgContainer }} />
+        {totalCount > 1 && (
+          <div
             style={{
-              backgroundColor: token.colorBgTextHover,
-              color: token.colorText,
-              fontSize: 11,
+              position: 'absolute',
+              top: '-4px',
+              right: '-4px',
+              minWidth: '18px',
+              height: '18px',
+              borderRadius: '9px',
+              background: token.colorError,
+              border: `2px solid ${token.colorBgContainer}`,
+              color: token.colorBgContainer,
+              fontSize: '11px',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0 4px',
             }}
-          />
-        )}
-        {comment.reactions && comment.reactions.length > 0 && (
-          <div style={{ fontSize: 11, color: token.colorTextSecondary }}>
-            {comment.reactions.slice(0, 3).map(r => (
-              <span key={`${r.user_id}-${r.emoji}`}>{r.emoji}</span>
-            ))}
+          >
+            {totalCount}
           </div>
         )}
       </div>
 
-      {/* Content preview */}
-      <div
-        style={{
-          fontSize: 13,
-          color: token.colorText,
-          lineHeight: '1.4',
-          wordBreak: 'break-word',
-        }}
-      >
-        {preview}
-        {hasMore && <span style={{ color: token.colorTextSecondary }}>...</span>}
-      </div>
+      {/* Hover tooltip - shows preview */}
+      {isHovered && (
+        <div
+          style={{
+            position: 'absolute',
+            left: '40px',
+            top: '0',
+            minWidth: '240px',
+            maxWidth: '320px',
+            background: token.colorBgElevated,
+            border: `1px solid ${pinColor}`,
+            borderRadius: token.borderRadiusLG,
+            padding: '12px',
+            boxShadow: token.boxShadow,
+            zIndex: 1000,
+            pointerEvents: 'none',
+            animation: 'fadeIn 0.15s ease-out',
+          }}
+        >
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: pinColor,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}
+            >
+              {comment.resolved ? 'Resolved' : 'Open'}
+            </div>
+            {comment.reactions && comment.reactions.length > 0 && (
+              <div style={{ fontSize: 12, marginLeft: 'auto' }}>
+                {comment.reactions.slice(0, 3).map(r => (
+                  <span key={`${r.user_id}-${r.emoji}`}>{r.emoji}</span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Content preview */}
+          <div
+            style={{
+              fontSize: 13,
+              color: token.colorText,
+              lineHeight: '1.5',
+              wordBreak: 'break-word',
+            }}
+          >
+            {preview}
+            {hasMore && <span style={{ color: token.colorTextSecondary }}>...</span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
