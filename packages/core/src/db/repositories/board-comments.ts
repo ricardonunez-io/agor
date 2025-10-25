@@ -320,11 +320,16 @@ export class BoardCommentsRepository
 
   /**
    * Delete comment by ID
+   * If deleting a thread root, also deletes all replies (cascade)
    */
   async delete(id: string): Promise<void> {
     try {
       const fullId = await this.resolveId(id);
 
+      // First, delete all replies (if this is a thread root)
+      await this.db.delete(boardComments).where(eq(boardComments.parent_comment_id, fullId)).run();
+
+      // Then delete the comment itself
       const result = await this.db
         .delete(boardComments)
         .where(eq(boardComments.comment_id, fullId))
