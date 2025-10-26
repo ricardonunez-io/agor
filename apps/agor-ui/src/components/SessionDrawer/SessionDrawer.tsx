@@ -34,6 +34,7 @@ import {
   theme,
 } from 'antd';
 import React from 'react';
+import { useTasks } from '../../hooks/useTasks';
 import spawnSubsessionTemplate from '../../templates/spawn_subsession.hbs?raw';
 import { compileTemplate } from '../../utils/templates';
 import { ConversationView } from '../ConversationView';
@@ -41,11 +42,13 @@ import { EnvironmentPill } from '../EnvironmentPill';
 import { CreatedByTag } from '../metadata';
 import { PermissionModeSelector } from '../PermissionModeSelector';
 import {
+  ContextWindowPill,
   ForkPill,
   MessageCountPill,
   RepoPill,
   SessionIdPill,
   SpawnPill,
+  TokenCountPill,
   ToolCountPill,
 } from '../Pill';
 import { ToolIcon } from '../ToolIcon';
@@ -126,6 +129,40 @@ const SessionDrawer = ({
   );
   const [scrollToBottom, setScrollToBottom] = React.useState<(() => void) | null>(null);
   const [isStopping, setIsStopping] = React.useState(false);
+
+  // Fetch tasks for this session to calculate token totals
+  const { tasks } = useTasks(client, session?.session_id || null);
+
+  // Calculate token totals and breakdown across all tasks
+  const tokenBreakdown = React.useMemo(() => {
+    return tasks.reduce(
+      (acc, task) => ({
+        total: acc.total + (task.usage?.total_tokens || 0),
+        input: acc.input + (task.usage?.input_tokens || 0),
+        output: acc.output + (task.usage?.output_tokens || 0),
+        cacheRead: acc.cacheRead + (task.usage?.cache_read_tokens || 0),
+        cacheCreation: acc.cacheCreation + (task.usage?.cache_creation_tokens || 0),
+        cost: acc.cost + (task.usage?.estimated_cost_usd || 0),
+      }),
+      { total: 0, input: 0, output: 0, cacheRead: 0, cacheCreation: 0, cost: 0 }
+    );
+  }, [tasks]);
+
+  // Get latest context window from most recent completed task
+  const latestContextWindow = React.useMemo(() => {
+    // Find most recent task with context window data
+    const tasksWithContext = tasks
+      .filter(t => t.context_window && t.context_window_limit)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    if (tasksWithContext.length > 0) {
+      return {
+        used: tasksWithContext[0].context_window!,
+        limit: tasksWithContext[0].context_window_limit!,
+      };
+    }
+    return null;
+  }, [tasks]);
 
   // Update permission mode when session changes
   React.useEffect(() => {
@@ -257,7 +294,7 @@ const SessionDrawer = ({
   return (
     <Drawer
       title={
-        <Space size={12} align="start">
+        <Space size={12} align="center">
           <ToolIcon tool={session.agentic_tool} size={40} />
           <div style={{ flex: 1 }}>
             <div style={{ marginBottom: 4 }}>
@@ -270,15 +307,6 @@ const SessionDrawer = ({
                 style={{ marginLeft: 12 }}
               />
             </div>
-            {session.description && session.description !== session.title && (
-              <div style={{ marginBottom: 4 }}>
-                <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-                  {typeof session.description === 'string'
-                    ? session.description
-                    : JSON.stringify(session.description)}
-                </Typography.Text>
-              </div>
-            )}
             {session.created_by && (
               <div>
                 <CreatedByTag
@@ -320,7 +348,7 @@ const SessionDrawer = ({
         </Space>
       }
       placement="right"
-      width={720}
+      width={820}
       open={open}
       onClose={onClose}
       styles={{
@@ -412,6 +440,7 @@ const SessionDrawer = ({
           client={client}
           sessionId={session.session_id}
           agentic_tool={session.agentic_tool}
+          sessionModel={session.model_config?.model}
           users={users}
           currentUserId={currentUserId}
           onScrollRef={setScrollToBottom}
@@ -451,6 +480,22 @@ const SessionDrawer = ({
               <SessionIdPill sessionId={session.session_id} showCopy={true} />
               <MessageCountPill count={session.message_count} />
               <ToolCountPill count={session.tool_use_count} />
+              {tokenBreakdown.total > 0 && (
+                <TokenCountPill
+                  count={tokenBreakdown.total}
+                  estimatedCost={tokenBreakdown.cost}
+                  inputTokens={tokenBreakdown.input}
+                  outputTokens={tokenBreakdown.output}
+                  cacheReadTokens={tokenBreakdown.cacheRead}
+                  cacheCreationTokens={tokenBreakdown.cacheCreation}
+                />
+              )}
+              {latestContextWindow && (
+                <ContextWindowPill
+                  used={latestContextWindow.used}
+                  limit={latestContextWindow.limit}
+                />
+              )}
             </Space>
             <Space size={8}>
               {/* Permission Mode Selector - Agentic tool-specific options */}

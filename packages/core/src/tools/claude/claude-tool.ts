@@ -26,11 +26,37 @@ import {
   type TaskID,
   TaskStatus,
 } from '../../types';
+import type { TokenUsage } from '../../utils/pricing';
 import type { ImportOptions, ITool, SessionData, ToolCapabilities } from '../base';
 import { loadClaudeSession } from './import/load-session';
 import { transcriptsToMessages } from './import/message-converter';
 import { DEFAULT_CLAUDE_MODEL } from './models';
 import { ClaudePromptService } from './prompt-service';
+
+/**
+ * Safely extract and validate token usage from SDK response
+ * SDK may not properly type this field, so we validate at runtime
+ *
+ * Note: SDK uses different field names than Anthropic API:
+ * - cache_creation_input_tokens → cache_creation_tokens
+ * - cache_read_input_tokens → cache_read_tokens
+ */
+function extractTokenUsage(raw: unknown): TokenUsage | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+
+  const obj = raw as Record<string, unknown>;
+  return {
+    input_tokens: typeof obj.input_tokens === 'number' ? obj.input_tokens : undefined,
+    output_tokens: typeof obj.output_tokens === 'number' ? obj.output_tokens : undefined,
+    total_tokens: typeof obj.total_tokens === 'number' ? obj.total_tokens : undefined,
+    cache_read_tokens:
+      typeof obj.cache_read_input_tokens === 'number' ? obj.cache_read_input_tokens : undefined,
+    cache_creation_tokens:
+      typeof obj.cache_creation_input_tokens === 'number'
+        ? obj.cache_creation_input_tokens
+        : undefined,
+  };
+}
 
 /**
  * Service interface for creating messages via FeathersJS
@@ -168,7 +194,15 @@ export class ClaudeTool implements ITool {
     taskId?: TaskID,
     permissionMode?: PermissionMode,
     streamingCallbacks?: import('../base').StreamingCallbacks
-  ): Promise<{ userMessageId: MessageID; assistantMessageIds: MessageID[] }> {
+  ): Promise<{
+    userMessageId: MessageID;
+    assistantMessageIds: MessageID[];
+    tokenUsage?: TokenUsage;
+    durationMs?: number;
+    agentSessionId?: string;
+    contextWindow?: number;
+    contextWindowLimit?: number;
+  }> {
     if (!this.promptService || !this.messagesRepo) {
       throw new Error('ClaudeTool not initialized with repositories for live execution');
     }
@@ -191,6 +225,10 @@ export class ClaudeTool implements ITool {
     let currentMessageId: MessageID | null = null;
     let streamStartTime = Date.now();
     let firstTokenTime: number | null = null;
+    let tokenUsage: TokenUsage | undefined;
+    let durationMs: number | undefined;
+    let contextWindow: number | undefined;
+    let contextWindowLimit: number | undefined;
 
     for await (const event of this.promptService.promptSessionStreaming(
       sessionId,
@@ -230,6 +268,48 @@ export class ClaudeTool implements ITool {
             tool_use_id: event.toolUseId,
           });
         }
+      }
+
+      // Capture metadata from result events (SDK may not type this properly)
+      if ('token_usage' in event && event.token_usage) {
+        tokenUsage = extractTokenUsage(event.token_usage);
+      }
+      if ('duration_ms' in event && typeof event.duration_ms === 'number') {
+        durationMs = event.duration_ms;
+      }
+      if ('model_usage' in event && event.model_usage) {
+        // Extract context window data from model usage
+        const modelUsage = event.model_usage as Record<
+          string,
+          {
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadInputTokens?: number;
+            cacheCreationInputTokens?: number;
+            contextWindow: number;
+          }
+        >;
+        // Find the model with the highest context usage
+        // (each model has its own context window, not shared)
+        let maxUsage = 0;
+        let maxLimit = 0;
+        for (const modelData of Object.values(modelUsage)) {
+          const usage =
+            (modelData.inputTokens || 0) +
+            (modelData.outputTokens || 0) +
+            (modelData.cacheReadInputTokens || 0) +
+            (modelData.cacheCreationInputTokens || 0);
+          const limit = modelData.contextWindow || 0;
+          if (usage > maxUsage) {
+            maxUsage = usage;
+            maxLimit = limit;
+          }
+        }
+        contextWindow = maxUsage;
+        contextWindowLimit = maxLimit;
+        console.log(
+          `🔍 [ClaudeTool] Context window: ${contextWindow}/${contextWindowLimit} (${((contextWindow / contextWindowLimit) * 100).toFixed(1)}%)`
+        );
       }
 
       // Handle partial streaming events (token-level chunks)
@@ -313,6 +393,11 @@ export class ClaudeTool implements ITool {
     return {
       userMessageId: userMessage.message_id,
       assistantMessageIds,
+      tokenUsage,
+      durationMs,
+      agentSessionId: capturedAgentSessionId,
+      contextWindow,
+      contextWindowLimit,
     };
   }
 
@@ -478,7 +563,15 @@ export class ClaudeTool implements ITool {
     prompt: string,
     taskId?: TaskID,
     permissionMode?: PermissionMode
-  ): Promise<{ userMessageId: MessageID; assistantMessageIds: MessageID[] }> {
+  ): Promise<{
+    userMessageId: MessageID;
+    assistantMessageIds: MessageID[];
+    tokenUsage?: TokenUsage;
+    durationMs?: number;
+    agentSessionId?: string;
+    contextWindow?: number;
+    contextWindowLimit?: number;
+  }> {
     if (!this.promptService || !this.messagesRepo) {
       throw new Error('ClaudeTool not initialized with repositories for live execution');
     }
@@ -498,6 +591,10 @@ export class ClaudeTool implements ITool {
     const assistantMessageIds: MessageID[] = [];
     let capturedAgentSessionId: string | undefined;
     let resolvedModel: string | undefined;
+    let tokenUsage: TokenUsage | undefined;
+    let durationMs: number | undefined;
+    let contextWindow: number | undefined;
+    let contextWindowLimit: number | undefined;
 
     for await (const event of this.promptService.promptSessionStreaming(
       sessionId,
@@ -514,6 +611,48 @@ export class ClaudeTool implements ITool {
       if (!capturedAgentSessionId && event.agentSessionId) {
         capturedAgentSessionId = event.agentSessionId;
         await this.captureAgentSessionId(sessionId, capturedAgentSessionId);
+      }
+
+      // Capture metadata from result events (SDK may not type this properly)
+      if ('token_usage' in event && event.token_usage) {
+        tokenUsage = extractTokenUsage(event.token_usage);
+      }
+      if ('duration_ms' in event && typeof event.duration_ms === 'number') {
+        durationMs = event.duration_ms;
+      }
+      if ('model_usage' in event && event.model_usage) {
+        // Extract context window data from model usage
+        const modelUsage = event.model_usage as Record<
+          string,
+          {
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadInputTokens?: number;
+            cacheCreationInputTokens?: number;
+            contextWindow: number;
+          }
+        >;
+        // Find the model with the highest context usage
+        // (each model has its own context window, not shared)
+        let maxUsage = 0;
+        let maxLimit = 0;
+        for (const modelData of Object.values(modelUsage)) {
+          const usage =
+            (modelData.inputTokens || 0) +
+            (modelData.outputTokens || 0) +
+            (modelData.cacheReadInputTokens || 0) +
+            (modelData.cacheCreationInputTokens || 0);
+          const limit = modelData.contextWindow || 0;
+          if (usage > maxUsage) {
+            maxUsage = usage;
+            maxLimit = limit;
+          }
+        }
+        contextWindow = maxUsage;
+        contextWindowLimit = maxLimit;
+        console.log(
+          `🔍 [ClaudeTool] Context window: ${contextWindow}/${contextWindowLimit} (${((contextWindow / contextWindowLimit) * 100).toFixed(1)}%)`
+        );
       }
 
       // Skip partial events in non-streaming mode
@@ -540,6 +679,11 @@ export class ClaudeTool implements ITool {
     return {
       userMessageId: userMessage.message_id,
       assistantMessageIds,
+      tokenUsage,
+      durationMs,
+      agentSessionId: capturedAgentSessionId,
+      contextWindow,
+      contextWindowLimit,
     };
   }
 

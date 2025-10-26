@@ -36,6 +36,11 @@ export interface ConversationViewProps {
   agentic_tool?: string;
 
   /**
+   * Session's default model (to hide redundant model pills)
+   */
+  sessionModel?: string;
+
+  /**
    * All users for emoji avatars
    */
   users?: User[];
@@ -66,6 +71,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   client,
   sessionId,
   agentic_tool,
+  sessionModel,
   users = [],
   currentUserId,
   onScrollRef,
@@ -183,6 +189,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           task={task}
           messages={taskMessages}
           agentic_tool={agentic_tool}
+          sessionModel={sessionModel}
           users={users}
           currentUserId={currentUserId}
           // Expand only the last task by default

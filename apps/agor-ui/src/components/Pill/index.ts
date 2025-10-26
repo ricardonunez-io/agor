@@ -1,12 +1,14 @@
 export {
   BranchPill,
   ConceptPill,
+  ContextWindowPill,
   DirtyStatePill,
   ForkPill,
   GitShaPill,
   GitStatePill,
   IssuePill,
   MessageCountPill,
+  ModelPill,
   PILL_COLORS,
   Pill,
   PullRequestPill,
@@ -15,6 +17,7 @@ export {
   SessionIdPill,
   SpawnPill,
   StatusPill,
+  TokenCountPill,
   ToolCountPill,
   WorktreePill,
 } from './Pill';

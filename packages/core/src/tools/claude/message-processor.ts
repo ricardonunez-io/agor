@@ -95,6 +95,8 @@ export type ProcessedEvent =
       duration_ms?: number;
       cost?: number;
       token_usage?: unknown;
+      model_usage?: unknown; // Per-model breakdown with context window info
+      agentSessionId?: string;
     }
   | {
       type: 'end';
@@ -166,8 +168,10 @@ export class SDKMessageProcessor {
     this.state.messageCount++;
     this.state.lastActivityTime = Date.now();
 
-    // Log message type for debugging
-    console.debug(`📨 SDK message ${this.state.messageCount}: type=${msg.type}`);
+    // Log message type for debugging (sample every 10th to reduce verbosity)
+    if (this.state.messageCount % 10 === 0) {
+      console.debug(`📨 SDK message ${this.state.messageCount}: type=${msg.type}`);
+    }
 
     // Add detailed logging for debugging SDK behavior
     if (process.env.DEBUG_SDK_MESSAGES === 'true') {
@@ -472,6 +476,11 @@ export class SDKMessageProcessor {
       console.log(`   Token usage:`, msg.usage);
     }
 
+    // Log modelUsage (should contain contextWindow per TypeScript types)
+    if ('modelUsage' in msg && msg.modelUsage) {
+      console.log(`   Model usage (with contextWindow):`, JSON.stringify(msg.modelUsage, null, 2));
+    }
+
     return [
       {
         type: 'result',
@@ -479,6 +488,8 @@ export class SDKMessageProcessor {
         duration_ms: duration,
         cost,
         token_usage: 'usage' in msg ? msg.usage : undefined,
+        model_usage: 'modelUsage' in msg ? msg.modelUsage : undefined,
+        agentSessionId: this.state.capturedAgentSessionId,
       },
       {
         type: 'end',

@@ -51,6 +51,22 @@ export interface Task {
     commit_message?: string; // Commit message if task resulted in a commit (optional)
   };
 
+  // Token usage and cost tracking
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+    cache_read_tokens?: number; // Claude-specific: prompt caching reads
+    cache_creation_tokens?: number; // Claude-specific: prompt caching writes
+    estimated_cost_usd?: number; // Calculated cost based on model pricing
+  };
+
+  // Task execution metadata
+  duration_ms?: number; // Total execution time from SDK
+  agent_session_id?: string; // SDK's internal session ID for debugging
+  context_window?: number; // Context window size (total input + output tokens in window)
+  context_window_limit?: number; // Maximum context window size for the model(s) used
+
   // Model (resolved model ID used for this task, e.g., "claude-sonnet-4-5-20250929")
   model?: string;
 

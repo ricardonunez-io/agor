@@ -11,9 +11,12 @@ import {
   ForkOutlined,
   GithubOutlined,
   MessageOutlined,
+  PercentageOutlined,
+  RobotOutlined,
+  ThunderboltOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
-import { message, Tag, theme } from 'antd';
+import { message, Tag, Tooltip, theme } from 'antd';
 import type React from 'react';
 
 /**
@@ -21,13 +24,15 @@ import type React from 'react';
  * Using subset of Ant Design preset colors for consistency
  */
 export const PILL_COLORS = {
-  // Metadata
-  message: 'blue', // Message counts
-  tool: 'purple', // Tool usage
-  git: 'geekblue', // Git info
+  // Metadata (grayscale - subtle, informational only)
+  message: 'default', // Message counts
+  tool: 'default', // Tool usage
+  token: 'default', // Token usage
+  model: 'default', // Model ID
+  git: 'default', // Git info (clean state)
   session: 'default', // Session IDs
 
-  // Status
+  // Status (colored - actionable/warnings)
   success: 'green', // Completed/success
   error: 'red', // Failed/error
   warning: 'orange', // Dirty state, warnings
@@ -98,7 +103,7 @@ interface MessageCountPillProps extends BasePillProps {
 
 export const MessageCountPill: React.FC<MessageCountPillProps> = ({ count, style }) => (
   <Tag icon={<MessageOutlined />} color={PILL_COLORS.message} style={style}>
-    {count} {count === 1 ? 'message' : 'messages'}
+    {count}
   </Tag>
 );
 
@@ -109,9 +114,116 @@ interface ToolCountPillProps extends BasePillProps {
 
 export const ToolCountPill: React.FC<ToolCountPillProps> = ({ count, toolName, style }) => (
   <Tag icon={<ToolOutlined />} color={PILL_COLORS.tool} style={style}>
-    {count} {toolName || 'tools'}
+    {count}
   </Tag>
 );
+
+interface TokenCountPillProps extends BasePillProps {
+  count: number;
+  estimatedCost?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+}
+
+export const TokenCountPill: React.FC<TokenCountPillProps> = ({
+  count,
+  estimatedCost,
+  inputTokens,
+  outputTokens,
+  cacheReadTokens,
+  cacheCreationTokens,
+  style,
+}) => {
+  // Build detailed tooltip if breakdown is available
+  const hasBreakdown = inputTokens !== undefined || outputTokens !== undefined;
+  const tooltipContent = hasBreakdown ? (
+    <div>
+      {inputTokens !== undefined && <div>Input: {inputTokens.toLocaleString()}</div>}
+      {outputTokens !== undefined && <div>Output: {outputTokens.toLocaleString()}</div>}
+      {cacheReadTokens !== undefined && cacheReadTokens > 0 && (
+        <div>Cache Read: {cacheReadTokens.toLocaleString()}</div>
+      )}
+      {cacheCreationTokens !== undefined && cacheCreationTokens > 0 && (
+        <div>Cache Creation: {cacheCreationTokens.toLocaleString()}</div>
+      )}
+      {estimatedCost !== undefined && <div>Est. Cost: ${estimatedCost.toFixed(4)}</div>}
+    </div>
+  ) : estimatedCost !== undefined ? (
+    `Est. Cost: $${estimatedCost.toFixed(4)}`
+  ) : undefined;
+
+  const pill = (
+    <Tag icon={<ThunderboltOutlined />} color={PILL_COLORS.token} style={style}>
+      {count.toLocaleString()}
+    </Tag>
+  );
+
+  return tooltipContent ? <Tooltip title={tooltipContent}>{pill}</Tooltip> : pill;
+};
+
+interface ContextWindowPillProps extends BasePillProps {
+  used: number;
+  limit: number;
+}
+
+export const ContextWindowPill: React.FC<ContextWindowPillProps> = ({ used, limit, style }) => {
+  const percentage = Math.round((used / limit) * 100);
+
+  // Color-code based on usage: green (<50%), yellow (50-80%), red (>80%)
+  const getColor = () => {
+    if (percentage < 50) return 'green';
+    if (percentage < 80) return 'orange';
+    return 'red';
+  };
+
+  const tooltipContent = (
+    <div>
+      <div>
+        Used: {used.toLocaleString()} / {limit.toLocaleString()}
+      </div>
+      <div>Percentage: {percentage}%</div>
+    </div>
+  );
+
+  const pill = (
+    <Tag icon={<PercentageOutlined />} color={getColor()} style={style}>
+      {percentage}%
+    </Tag>
+  );
+
+  return <Tooltip title={tooltipContent}>{pill}</Tooltip>;
+};
+
+interface ModelPillProps extends BasePillProps {
+  model: string;
+}
+
+export const ModelPill: React.FC<ModelPillProps> = ({ model, style }) => {
+  // Simplify model name for display (e.g., "claude-sonnet-4-5-20250929" -> "sonnet-4.5")
+  const getDisplayName = (modelId: string) => {
+    if (modelId.includes('sonnet')) {
+      const match = modelId.match(/sonnet-(\d)-(\d)/);
+      return match ? `sonnet-${match[1]}.${match[2]}` : 'sonnet';
+    }
+    if (modelId.includes('haiku')) {
+      const match = modelId.match(/haiku-(\d)-(\d)/);
+      return match ? `haiku-${match[1]}.${match[2]}` : 'haiku';
+    }
+    if (modelId.includes('opus')) {
+      const match = modelId.match(/opus-(\d)-(\d)/);
+      return match ? `opus-${match[1]}.${match[2]}` : 'opus';
+    }
+    return modelId; // Fallback to full ID
+  };
+
+  return (
+    <Tag icon={<RobotOutlined />} color={PILL_COLORS.model} style={style}>
+      {getDisplayName(model)}
+    </Tag>
+  );
+};
 
 interface GitShaPillProps extends BasePillProps {
   sha: string;
@@ -162,7 +274,7 @@ export const GitStatePill: React.FC<GitStatePillProps> = ({
   return (
     <Tag
       icon={<ForkOutlined />}
-      color={isDirty && showDirtyIndicator ? PILL_COLORS.warning : 'cyan'}
+      color={isDirty && showDirtyIndicator ? 'cyan' : PILL_COLORS.git}
       style={style}
     >
       {branch && <span>{branch} : </span>}

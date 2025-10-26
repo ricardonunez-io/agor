@@ -137,6 +137,12 @@ export const tasks = sqliteTable(
         model: string;
         tool_use_count: number;
 
+        usage?: Task['usage'];
+        duration_ms?: number;
+        agent_session_id?: string;
+        context_window?: number;
+        context_window_limit?: number;
+
         report?: Task['report'];
         permission_request?: Task['permission_request'];
       }>()

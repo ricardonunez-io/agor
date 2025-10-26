@@ -908,6 +908,14 @@ export class ClaudePromptService {
         type: 'message_complete';
         agentSessionId?: string;
       }
+    | {
+        type: 'result';
+        subtype: string;
+        duration_ms?: number;
+        cost?: number;
+        token_usage?: unknown;
+        agentSessionId?: string;
+      }
   > {
     const {
       query: result,
@@ -924,7 +932,7 @@ export class ClaudePromptService {
       sessionId,
       existingSdkSessionId,
       enableTokenStreaming: ClaudePromptService.ENABLE_TOKEN_STREAMING,
-      idleTimeoutMs: 30000, // 30 seconds
+      idleTimeoutMs: 120000, // 2 minutes - allows time for long operations (web search, file reads, etc.)
     });
 
     try {
@@ -972,13 +980,7 @@ export class ClaudePromptService {
             break; // Exit for-await loop
           }
 
-          // Handle result event (log but don't yield)
-          if (event.type === 'result') {
-            // Already logged by processor, nothing more to do
-            continue;
-          }
-
-          // Yield all other events (partial, complete, tool_start, tool_complete, etc.)
+          // Yield all events including result (for token usage capture)
           yield event;
         }
 
@@ -1048,7 +1050,7 @@ export class ClaudePromptService {
       sessionId,
       existingSdkSessionId,
       enableTokenStreaming: false, // Non-streaming mode
-      idleTimeoutMs: 30000,
+      idleTimeoutMs: 120000, // 2 minutes - allows time for long operations
     });
 
     // Collect response messages from async generator
@@ -1064,6 +1066,16 @@ export class ClaudePromptService {
       toolUses?: Array<{ id: string; name: string; input: Record<string, unknown> }>;
     }> = [];
 
+    // Accumulate token usage from result events
+    let tokenUsage:
+      | {
+          input_tokens?: number;
+          output_tokens?: number;
+          cache_creation_tokens?: number;
+          cache_read_tokens?: number;
+        }
+      | undefined;
+
     for await (const msg of result) {
       const events = await processor.process(msg);
 
@@ -1076,6 +1088,16 @@ export class ClaudePromptService {
           });
         }
 
+        // Capture token usage from result events
+        if (event.type === 'result' && event.token_usage) {
+          tokenUsage = event.token_usage as {
+            input_tokens?: number;
+            output_tokens?: number;
+            cache_creation_tokens?: number;
+            cache_read_tokens?: number;
+          };
+        }
+
         // Break on end event
         if (event.type === 'end') {
           break;
@@ -1086,11 +1108,11 @@ export class ClaudePromptService {
     // Clean up query reference
     this.activeQueries.delete(sessionId);
 
-    // TODO: Extract token counts from Agent SDK result metadata
+    // Extract token counts from SDK result metadata
     return {
       messages: assistantMessages,
-      inputTokens: 0, // Agent SDK doesn't expose this yet
-      outputTokens: 0,
+      inputTokens: tokenUsage?.input_tokens || 0,
+      outputTokens: tokenUsage?.output_tokens || 0,
     };
   }
 

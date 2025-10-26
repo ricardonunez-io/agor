@@ -17,6 +17,7 @@ export default defineConfig({
     'feathers/index': 'src/feathers/index.ts', // FeathersJS runtime re-exports
     'templates/handlebars-helpers': 'src/templates/handlebars-helpers.ts', // Handlebars helpers
     'environment/variable-resolver': 'src/environment/variable-resolver.ts', // Environment variable resolution
+    'utils/pricing': 'src/utils/pricing.ts', // Token pricing and cost calculation
   },
   format: ['cjs', 'esm'],
   dts: true,

@@ -27,12 +27,10 @@ import {
   GithubOutlined,
   LoadingOutlined,
   LockOutlined,
-  MessageOutlined,
   MinusCircleOutlined,
   RightOutlined,
   RobotOutlined,
   StopOutlined,
-  ToolOutlined,
 } from '@ant-design/icons';
 import { Bubble } from '@ant-design/x';
 import { Avatar, Collapse, Space, Spin, Tag, Typography, theme } from 'antd';
@@ -44,7 +42,14 @@ import { AgentChain } from '../AgentChain';
 import { MessageBlock } from '../MessageBlock';
 import { CreatedByTag } from '../metadata/CreatedByTag';
 import { PermissionRequestBlock } from '../PermissionRequestBlock';
-import { GitStatePill } from '../Pill';
+import {
+  ContextWindowPill,
+  GitStatePill,
+  MessageCountPill,
+  ModelPill,
+  TokenCountPill,
+  ToolCountPill,
+} from '../Pill';
 import ToolExecutingIndicator from '../ToolExecutingIndicator';
 import { ToolIcon } from '../ToolIcon';
 
@@ -59,6 +64,7 @@ interface TaskBlockProps {
   task: Task;
   messages: Message[];
   agentic_tool?: string;
+  sessionModel?: string;
   users?: User[];
   currentUserId?: string;
   defaultExpanded?: boolean;
@@ -155,6 +161,7 @@ export const TaskBlock: React.FC<TaskBlockProps> = ({
   task,
   messages,
   agentic_tool,
+  sessionModel,
   users = [],
   currentUserId,
   defaultExpanded = false,
@@ -208,6 +215,23 @@ export const TaskBlock: React.FC<TaskBlockProps> = ({
     }
   };
 
+  // Calculate context window usage percentage for visual progress bar
+  const contextWindowPercentage =
+    task.context_window && task.context_window_limit
+      ? (task.context_window / task.context_window_limit) * 100
+      : 0;
+
+  // Color-code based on usage: green (<50%), yellow (50-80%), red (>80%)
+  const getContextWindowColor = () => {
+    if (contextWindowPercentage < 50) {
+      return token.colorSuccessBg; // Light green
+    }
+    if (contextWindowPercentage < 80) {
+      return token.colorWarningBg; // Light yellow/orange
+    }
+    return token.colorErrorBg; // Light red
+  };
+
   // Task header shows when collapsed
   const taskHeader = (
     <div style={{ width: '100%' }}>
@@ -239,17 +263,22 @@ export const TaskBlock: React.FC<TaskBlockProps> = ({
                 prefix="By"
               />
             )}
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              <MessageOutlined /> {messages.length}
-            </Typography.Text>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              <ToolOutlined /> {task.tool_use_count}
-            </Typography.Text>
-            {task.model && (
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                🤖 {task.model}
-              </Typography.Text>
+            <MessageCountPill count={messages.length} />
+            <ToolCountPill count={task.tool_use_count} />
+            {task.usage?.total_tokens && (
+              <TokenCountPill
+                count={task.usage.total_tokens}
+                estimatedCost={task.usage.estimated_cost_usd}
+                inputTokens={task.usage.input_tokens}
+                outputTokens={task.usage.output_tokens}
+                cacheReadTokens={task.usage.cache_read_tokens}
+                cacheCreationTokens={task.usage.cache_creation_tokens}
+              />
             )}
+            {task.context_window && task.context_window_limit && (
+              <ContextWindowPill used={task.context_window} limit={task.context_window_limit} />
+            )}
+            {task.model && task.model !== sessionModel && <ModelPill model={task.model} />}
             {task.git_state.sha_at_start && task.git_state.sha_at_start !== 'unknown' && (
               <GitStatePill
                 branch={task.git_state.ref_at_start}

@@ -22,11 +22,13 @@ All three use official SDKs for programmatic control, streaming, and session man
 | --------------------------------- | -------------------- | ------------------- | ------------------ |
 | **SDK Available**                 | ✅ Official          | ✅ Official         | ✅ Official        |
 | **Streaming Support**             | ✅ Token-level       | ✅ Event-based      | ✅ Token-level     |
+| **Usage/Token Tracking**          | ✅ Full support      | ⚠️ Not exposed      | ⚠️ Not tested      |
 | **Permission Modes**              | ✅ 4 modes           | ✅ 4 modes (hybrid) | ✅ 3 modes         |
 | **Mid-Session Permission Change** | ✅ Via hooks         | ✅ Via /approvals   | ⚠️ Needs testing   |
 | **Session Continuity**            | ✅ sdk_session_id    | ✅ Thread ID        | ✅ History array   |
 | **Model Selection**               | ✅ Via SDK           | ✅ Via SDK          | ✅ Via SDK         |
 | **MCP Support**                   | ✅ Via SDK           | ❌ No MCP           | ✅ Via SDK         |
+| **Agor MCP Integration**          | ✅ Self-hosted       | ❌ N/A              | ⚠️ Not wired       |
 | **Session Import**                | ✅ JSONL transcripts | ❌ Format unknown   | ❌ Not implemented |
 | **Tool Event Details**            | ✅ Rich metadata     | ✅ Rich metadata    | ✅ 13 event types  |
 | **Interactive Permissions**       | ✅ PreToolUse hook   | ❌ Config-only      | ⚠️ Unknown         |
@@ -57,7 +59,58 @@ All three use official SDKs for programmatic control, streaming, and session man
 
 ---
 
-#### 2. Permission Modes
+#### 2. Usage/Token Tracking
+
+**Claude Code:** ✅ Full support via SDK response
+
+- Available data:
+  - `input_tokens` - Prompt tokens
+  - `output_tokens` - Completion tokens
+  - `cache_creation_tokens` - Prompt caching writes (Claude-specific)
+  - `cache_read_tokens` - Prompt caching reads (Claude-specific)
+- Source: `SDKResultMessage.usage` from `@anthropic-ai/claude-agent-sdk/sdk`
+- Storage: `Task.usage` JSON blob in database
+- Pricing: $3/1M input, $15/1M output, $0.30/1M cache read, $3.75/1M cache creation
+- UI Display:
+  - Task cards: Token count pill with tooltip showing cost breakdown
+  - Session drawer: Total tokens across all tasks with estimated cost
+- Status: ✅ Fully implemented
+
+**Codex:** ⚠️ Not exposed in SDK responses
+
+- Challenge: Usage data not returned in SDK result messages
+- Workaround: May be available via separate API endpoint
+- Status: ❌ Not available in current SDK version
+
+**Gemini:** ⚠️ Needs investigation
+
+- Possibility: May be available in event metadata
+- Status: ⚠️ Not yet tested
+- Integration: Infrastructure ready (pricing data in `packages/core/src/utils/pricing.ts`)
+
+**Implementation Details:**
+
+- Type definition: `packages/core/src/types/task.ts` (lines 55-62)
+- Schema: `packages/core/src/db/schema.ts` (JSON blob storage)
+- Pricing utility: `packages/core/src/utils/pricing.ts`
+  - `calculateTokenCost(usage, agent)` - Calculate USD cost
+  - `formatCost(costUsd)` - Format with appropriate precision
+  - `formatTokenCount(tokens)` - Add thousands separators
+- UI components:
+  - `TaskBlock.tsx` - Token pill in task header
+  - `SessionDrawer.tsx` - Session totals with `TokenCountPill`
+  - `Pill.tsx` - `TokenCountPill` component (gold color, ThunderboltOutlined icon)
+
+**Future Work:**
+
+- Wire up actual usage capture when SDK responses include data (TODOs in `apps/agor-daemon/src/index.ts`)
+- Test and implement for Codex (if SDK adds support)
+- Test and implement for Gemini
+- Add session-level total tracking (aggregate field on Session model)
+
+---
+
+#### 3. Permission Modes
 
 **Claude Code:** 4 modes via `permissionMode` SDK parameter
 
@@ -93,7 +146,7 @@ All three use official SDKs for programmatic control, streaming, and session man
 
 ---
 
-#### 3. Mid-Session Permission Changes
+#### 4. Mid-Session Permission Changes
 
 **Claude Code:** ✅ Fully supported
 
@@ -115,7 +168,7 @@ All three use official SDKs for programmatic control, streaming, and session man
 
 ---
 
-#### 4. Session Continuity (Resumption)
+#### 5. Session Continuity (Resumption)
 
 **Claude Code:** `resume: sdk_session_id` parameter
 
@@ -137,7 +190,7 @@ All three use official SDKs for programmatic control, streaming, and session man
 
 ---
 
-#### 5. Model Selection
+#### 6. Model Selection
 
 **Claude Code:**
 
@@ -162,7 +215,7 @@ All three use official SDKs for programmatic control, streaming, and session man
 
 ---
 
-#### 6. MCP (Model Context Protocol) Support
+#### 7. MCP (Model Context Protocol) Support
 
 **Claude Code:** ✅ Full support
 
@@ -182,7 +235,7 @@ All three use official SDKs for programmatic control, streaming, and session man
 
 ---
 
-#### 7. Session Import (Loading Past Sessions)
+#### 8. Session Import (Loading Past Sessions)
 
 **Claude Code:** ✅ Full import support
 
@@ -204,7 +257,7 @@ All three use official SDKs for programmatic control, streaming, and session man
 
 ---
 
-#### 8. Tool Event Details
+#### 9. Tool Event Details
 
 **Claude Code:** Rich metadata with specialized UI components
 
@@ -226,7 +279,7 @@ All three use official SDKs for programmatic control, streaming, and session man
 
 ---
 
-#### 9. Interactive Permission Checks
+#### 10. Interactive Permission Checks
 
 **Claude Code:** ✅ PreToolUse hook
 
@@ -409,7 +462,7 @@ interface Session {
 1. **Permission audit trail** - Log all approval decisions
 2. **Unified tool blocks** - Abstract tool rendering
 3. **Session migration** - Convert sessions between agent formats
-4. **Cost tracking** - Track token usage per agent/model
+4. ~~**Cost tracking**~~ - ✅ Implemented for Claude Code (see Usage/Token Tracking section)
 
 ---
 

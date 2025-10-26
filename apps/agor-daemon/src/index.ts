@@ -41,6 +41,7 @@ import type {
   User,
 } from '@agor/core/types';
 import { SessionStatus, TaskStatus } from '@agor/core/types';
+import type { TokenUsage } from '@agor/core/utils/pricing';
 // Import Claude SDK's PermissionMode type for ClaudeTool method signatures
 // (Agor's PermissionMode is a superset of all tool permission modes)
 import type { PermissionMode as ClaudePermissionMode } from '@anthropic-ai/claude-agent-sdk';
@@ -992,6 +993,26 @@ async function main() {
                 });
               } else {
                 // Safe to mark as completed
+                // Calculate estimated cost if usage data is available
+                let usage: typeof task.usage | undefined;
+                if ('tokenUsage' in result && result.tokenUsage) {
+                  const tokenUsage = result.tokenUsage as TokenUsage;
+                  const { calculateTokenCost } = await import('@agor/core/utils/pricing');
+                  const estimatedCost = calculateTokenCost(tokenUsage, session.agentic_tool);
+
+                  // Calculate total_tokens if SDK didn't provide it
+                  const totalTokens =
+                    tokenUsage.total_tokens ||
+                    (tokenUsage.input_tokens || 0) + (tokenUsage.output_tokens || 0);
+
+                  // Spread tokenUsage (type-safe) and add calculated fields
+                  usage = {
+                    ...tokenUsage,
+                    total_tokens: totalTokens,
+                    estimated_cost_usd: estimatedCost,
+                  };
+                }
+
                 await tasksService.patch(task.task_id, {
                   status: TaskStatus.COMPLETED,
                   message_range: {
@@ -1000,10 +1021,15 @@ async function main() {
                     start_timestamp: startTimestamp,
                     end_timestamp: endTimestamp,
                   },
+                  duration_ms: result.durationMs,
+                  agent_session_id: result.agentSessionId,
+                  context_window: result.contextWindow,
+                  context_window_limit: result.contextWindowLimit,
                   tool_use_count: result.assistantMessageIds.reduce((count, _id, _index) => {
                     // First assistant message likely has tools
                     return count; // TODO: Count actual tools from messages
                   }, 0),
+                  usage,
                 });
 
                 console.log(`✅ Task ${task.task_id} completed successfully`);
