@@ -1,0 +1,30 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    ".": {
+      "ignore": []
+    },
+    "apps/agor-cli": {
+      "entry": ["src/index.ts", "src/commands/**/*.ts", "src/hooks/**/*.ts"],
+      "ignore": [],
+      "ignoreDependencies": ["@oclif/plugin-help"]
+    },
+    "apps/agor-daemon": {
+      "entry": ["src/index.ts"],
+      "ignore": []
+    },
+    "apps/agor-ui": {
+      "entry": ["src/main.tsx"],
+      "ignore": []
+    },
+    "apps/agor-docs": {
+      "entry": ["pages/**/*.{md,mdx}", "theme.config.tsx"],
+      "ignore": ["components/**"],
+      "ignoreDependencies": ["nextra-theme-docs"]
+    },
+    "packages/core": {
+      "entry": ["src/index.ts"],
+      "ignore": ["src/db/scripts/**"]
+    }
+  }
+}

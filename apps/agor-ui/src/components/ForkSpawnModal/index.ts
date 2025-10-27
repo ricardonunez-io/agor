@@ -1,1 +1,1 @@
-export { type ForkSpawnAction, ForkSpawnModal, type ForkSpawnModalProps } from './ForkSpawnModal';
+export { type ForkSpawnAction, ForkSpawnModal } from './ForkSpawnModal';

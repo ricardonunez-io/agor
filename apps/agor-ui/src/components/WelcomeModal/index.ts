@@ -1,2 +1,2 @@
-export type { SystemStats, WelcomeModalProps } from './WelcomeModal';
+export type { SystemStats } from './WelcomeModal';
 export { WelcomeModal } from './WelcomeModal';

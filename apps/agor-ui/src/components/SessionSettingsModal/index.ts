@@ -1,1 +1,1 @@
-export { SessionSettingsModal, type SessionSettingsModalProps } from './SessionSettingsModal';
+export { SessionSettingsModal } from './SessionSettingsModal';

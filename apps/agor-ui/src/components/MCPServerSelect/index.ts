@@ -1,1 +1,1 @@
-export { MCPServerSelect, type MCPServerSelectProps } from './MCPServerSelect';
+export { MCPServerSelect } from './MCPServerSelect';
