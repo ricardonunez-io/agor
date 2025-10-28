@@ -168,7 +168,6 @@ graph TB
     subgraph Clients
         CLI["CLI (oclif)"]
         UI["Web UI (React)"]
-        Desktop["Desktop (future)"]
     end
 
     Client["Feathers Client<br/>REST + WebSocket"]
@@ -179,17 +178,16 @@ graph TB
         Services["Services<br/>Sessions, Tasks, Messages<br/>Boards, Worktrees, Repos"]
         AgentSDKs["Agent SDKs<br/>Claude, Codex, Gemini"]
         ORM["Drizzle ORM"]
-    end
 
-    subgraph Storage
-        DB[("LibSQL Database<br/>~/.agor/agor.db")]
-        Git["Git Worktrees<br/>~/.agor/worktrees/"]
-        Config["Config<br/>~/.agor/config.yaml"]
+        subgraph Storage
+            DB[("LibSQL Database<br/>~/.agor/agor.db")]
+            Git["Git Worktrees<br/>~/.agor/worktrees/"]
+            Config["Config<br/>~/.agor/config.yaml"]
+        end
     end
 
     CLI --> Client
     UI --> Client
-    Desktop -.-> Client
 
     Client <-->|REST + WebSocket| Feathers
 
