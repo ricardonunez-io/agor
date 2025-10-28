@@ -1,23 +1,39 @@
 # API Reference
 
-Complete REST API documentation for the Agor daemon.
+Interactive REST API documentation auto-generated from the Agor daemon.
 
-## What's Here
+## 📚 Interactive API Docs
 
-- **[REST Endpoints](/api-reference/rest)** - HTTP API reference for all FeathersJS services
-- **[WebSocket Events](/api-reference/websockets)** - Real-time event documentation
+The Agor daemon serves **live, interactive API documentation** via Swagger UI:
 
-For TypeScript type definitions and source code:
-- **TypeScript types**: [`packages/core/src/types`](https://github.com/mistercrunch/agor/tree/main/packages/core/src/types)
-- **Service implementations**: [`apps/agor-daemon/src/services`](https://github.com/mistercrunch/agor/tree/main/apps/agor-daemon/src/services)
+<div style={{ padding: '20px', background: '#1a1a1a', borderRadius: '8px', border: '1px solid #333', marginTop: '20px' }}>
+  <p style={{ margin: '0 0 10px', color: '#2e9a92', fontWeight: 'bold' }}>Start your daemon:</p>
+  <pre style={{ margin: '0 0 15px', padding: '10px', background: '#0a0a0a', borderRadius: '4px' }}>
+agor daemon start
+  </pre>
+  <p style={{ margin: '0 0 10px', color: '#2e9a92', fontWeight: 'bold' }}>Then visit:</p>
+  <p style={{ margin: 0 }}>
+    <a href="http://localhost:3030/docs/" target="_blank" style={{ color: '#2e9a92', fontSize: '18px' }}>
+      → http://localhost:3030/docs/
+    </a>
+  </p>
+</div>
 
-## Base URL
+**Features:**
+- ✅ **Always up-to-date** - Generated from actual service definitions
+- ✅ **Try it out** - Execute API calls directly from the browser
+- ✅ **Dark mode** - Easy on the eyes
+- ✅ **Full schema** - Request/response models for all endpoints
+
+## Quick Reference
+
+### Base URL
 
 ```
 http://localhost:3030
 ```
 
-## Authentication
+### Authentication
 
 Agor uses JWT-based authentication:
 
@@ -27,18 +43,18 @@ Authorization: Bearer <your-token>
 
 **Anonymous Mode:** For local development, anonymous authentication is enabled by default (no token required).
 
-## Core Services
+### Core Services
 
-- **Sessions** - AI agent session management with genealogy (fork/spawn)
-- **Tasks** - Work units within sessions tracking prompts and execution
-- **Messages** - Conversation messages with streaming support
-- **Repositories** - Git repository management and worktree operations
-- **Boards** - Spatial organization of sessions with zones and triggers
-- **Users** - User account management and authentication
-- **MCP Servers** - Model Context Protocol server configurations
-- **Worktrees** - Git worktree isolation for sessions
+- **`/sessions`** - AI agent session management with genealogy (fork/spawn)
+- **`/tasks`** - Work units within sessions tracking prompts and execution
+- **`/messages`** - Conversation messages with streaming support
+- **`/repos`** - Git repository management and worktree operations
+- **`/boards`** - Spatial organization of sessions with zones and triggers
+- **`/worktrees`** - Git worktree isolation for sessions
+- **`/users`** - User account management and authentication
+- **`/mcp-servers`** - Model Context Protocol server configurations
 
-## Response Format
+### Response Format
 
 All FeathersJS endpoints return data in this format:
 
@@ -57,21 +73,25 @@ All FeathersJS endpoints return data in this format:
 }
 ```
 
-## FeathersJS Services
+### RESTful Conventions
 
-Agor uses [FeathersJS](https://feathersjs.com/) for its API layer. All endpoints follow RESTful conventions:
+All services follow standard REST patterns:
 
 - `GET /service` - List items (paginated)
 - `GET /service/:id` - Get single item
 - `POST /service` - Create new item
-- `PATCH /service/:id` - Update item
+- `PATCH /service/:id` - Update item (partial)
 - `DELETE /service/:id` - Delete item
 
-Available services:
-- `/sessions` - AI agent sessions
-- `/tasks` - Work units
-- `/messages` - Conversation history
-- `/repos` - Git repositories
-- `/boards` - Session boards
-- `/users` - User accounts
-- `/mcp-servers` - MCP server configs
+## WebSocket Events
+
+Real-time updates via Socket.IO:
+
+- **[WebSocket Events](/api-reference/websockets)** - Real-time event documentation
+
+## Source Code
+
+For TypeScript type definitions and service implementations:
+
+- **TypeScript types**: [`packages/core/src/types`](https://github.com/mistercrunch/agor/tree/main/packages/core/src/types)
+- **Service implementations**: [`apps/agor-daemon/src/services`](https://github.com/mistercrunch/agor/tree/main/apps/agor-daemon/src/services)

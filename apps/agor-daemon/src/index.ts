@@ -68,6 +68,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import cors from 'cors';
 import express from 'express';
+import swagger from 'feathers-swagger';
 import jwt from 'jsonwebtoken';
 import type { Socket } from 'socket.io';
 import type {
@@ -338,6 +339,33 @@ async function main() {
   app.publish(() => {
     return app.channel('everybody');
   });
+
+  // Configure Swagger for API documentation
+  app.configure(
+    swagger({
+      openApiVersion: 3,
+      docsPath: '/docs',
+      docsJsonPath: '/docs.json',
+      ui: swagger.swaggerUI({ docsPath: '/docs' }),
+      specs: {
+        info: {
+          title: 'Agor API',
+          description: 'REST and WebSocket API for Agor agent orchestration platform',
+          version: DAEMON_VERSION,
+        },
+        servers: [{ url: `http://localhost:${DAEMON_PORT}`, description: 'Local daemon' }],
+        components: {
+          securitySchemes: {
+            BearerAuth: {
+              type: 'http',
+              scheme: 'bearer',
+              bearerFormat: 'JWT',
+            },
+          },
+        },
+      },
+    })
+  );
 
   // Initialize database (auto-create if it doesn't exist)
   console.log(`📦 Connecting to database: ${DB_PATH}`);
