@@ -33,13 +33,44 @@ Traditional CLI tools force linear conversations. Agor embraces the reality:
 
 ### What Makes Agor Different
 
-- **Worktree-Centric Architecture** - 1 worktree = 1 issue = 1 PR. Isolated git workspaces eliminate branch conflicts.
-- **Multiplayer Spatial Canvas** - Real-time collaboration with cursor broadcasting and facepiles. Organize work spatially, not linearly.
-- **Session Genealogy** - Fork and spawn sessions to create exploration trees. Full introspection and reusability.
-- **Zone Triggers — Workflows Made Spatial** - Drag worktrees to zones, trigger templated prompts. Build Kanban-style flows or custom pipelines.
-- **Multi-Agent Orchestration** - Integrates with Claude Code, Codex, Gemini via extensible SDK. Centralized MCP configuration.
-- **Environment Management** - Run multiple dev servers in parallel, one per worktree. Automatic port management and health monitoring.
-- **Social by Default** - Everyone sees each other's boards. Spatial comments, live cursors, threaded conversations.
+**🧩 Agent Orchestration Layer**
+
+- **Claude Code**, **Codex**, and **Gemini** support via extensible SDK — more coming soon.
+- Centralized **MCP configuration** — connect once, use across all tools.
+- Swap or parallelize agents with one command; easily hand off work when one model stalls.
+
+**🌐 Multiplayer Spatial Canvas**
+
+- Real-time collaboration with **cursor broadcasting** and **facepiles**.
+- Sessions live on a **dynamic board** — cluster by project, phase, or purpose.
+- **Threaded comments** directly on the board with spatial pins (Figma-style).
+- **Emoji reactions** for quick feedback; resolve threads when decisions are made.
+
+**🌲 Session Trees — Fork, Spawn, Coordinate**
+
+- **Fork sessions** to explore alternatives without losing the original path.
+- **Spawn subsessions** for focused subtasks that report back to the parent.
+- Visualize the full genealogy — see how work branched, merged, and evolved.
+- Track outcomes across the tree to understand what approaches worked.
+
+**⚙️ Zone Triggers — Workflows Made Spatial**
+
+- Define **zones** on your board that trigger templated prompts when sessions are dropped.
+- Build **kanban-style flows** or custom pipelines: analyze → develop → review → deploy.
+- Combine with context templates to automate arbitrarily complex workflows.
+
+**🌳 Shared, Persisted Dev Environments**
+
+- **No more local environment juggling** — managed **git worktrees** with shared, persistent dev environments.
+- Sessions map to worktrees with running apps, auto-managed ports, and health monitoring.
+- **One-click control** — configure start/stop commands once, everyone on the team can use it.
+- Works with any stack: `docker compose up`, `npm run dev`, `./manage.py runserver`.
+
+**🕹️ Real-Time Strategy for AI Teams**
+
+- Coordinate agentic work like a multiplayer RTS.
+- Watch teammates or agents move across tasks live.
+- Cluster sessions, delegate, pivot, and iterate together.
 
 ## The Core Primitives
 
@@ -312,33 +343,24 @@ Annotate worktrees, sessions, and boards with threaded conversations:
 5. **Social by Default** - Everyone sees each other's boards, multiplayer is core
 6. **Multi-Agent** - Work with Claude, Codex, Gemini from one workspace
 
-## Product Philosophy & Roadmap
+## Roadmap
 
-**Current Phase: Core Platform Complete** ✅
+**Core Platform: Complete** ✅
 
-- ✅ Real-time collaboration (cursor broadcasting, facepiles, presence)
-- ✅ Spatial canvas with zones and worktree pinning
-- ✅ Multi-agent support (Claude Code, Codex SDKs, Gemini in progress)
-- ✅ User authentication and board management
-- ✅ Social multiplayer – everyone can see each other's boards
-- ✅ **Session forking & subsession spawning** – interactive genealogy visualization, parent→child relationships
-- ✅ **MCP integration** – settings UI, session-level selection, Claude SDK hookup
-- ✅ **Zone triggers** – drop worktrees on zones to launch templated workflows
-- ✅ **Git worktree management** – visual labels, isolated workspaces per session
-- ✅ **Environment management** – start/stop dev servers, unique ports per worktree
-- ✅ **Single-package distribution** – `npm install -g agor-live`
+- Real-time multiplayer (cursors, facepiles, spatial comments)
+- Multi-agent support (Claude Code, Codex, Gemini)
+- Session trees (fork/spawn with genealogy visualization)
+- Zone triggers (spatial workflow automation)
+- Shared, persisted dev environments (worktrees + running apps)
+- MCP integration (centralized configuration)
+- Single-package distribution (`npm install -g agor-live`)
 
-**Near-Term Roadmap:**
+**Near-Term:**
 
-- 🔄 **Gemini SDK Integration** – complete the agent trio (in progress)
-- 🧾 **Reports** – automated summaries after each task
-- 📚 **Concept Management** – structured context system UI
-
-**Future Vision:**
-
-- 🤖 **Cross-Agent Orchestration** – hybrid Claude–Codex–Gemini workflows
-- 📊 **Knowledge Maps** – visualize all AI interactions across projects
-- 🎯 **Advanced Zone Triggers** – conditional workflows, multi-step pipelines
+- **Match CLI-Native Features** — Push SDK integrations deeper to match all key features available in underlying CLIs
+- **Bring Your Own IDE** — Connect VSCode, Cursor, or any IDE directly to Agor-managed worktrees via SSH/Remote
+- **Automated Reports** — AI-generated summaries after task completion
+- **Context Management System** — Modular markdown-based context files that compose into session-specific knowledge
 
 ---
 
