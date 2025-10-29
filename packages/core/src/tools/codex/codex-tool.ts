@@ -9,6 +9,7 @@
 
 import { execSync } from 'node:child_process';
 import type { MessagesRepository } from '../../db/repositories/messages';
+import type { SessionMCPServerRepository } from '../../db/repositories/session-mcp-servers';
 import type { SessionRepository } from '../../db/repositories/sessions';
 import { generateId } from '../../lib/ids';
 import {
@@ -33,12 +34,18 @@ export class CodexTool implements ITool {
   constructor(
     private messagesRepo?: MessagesRepository,
     private sessionsRepo?: SessionRepository,
+    private sessionMCPServerRepo?: SessionMCPServerRepository,
     apiKey?: string,
     private messagesService?: MessagesService,
     private tasksService?: TasksService
   ) {
     if (messagesRepo && sessionsRepo) {
-      this.promptService = new CodexPromptService(messagesRepo, sessionsRepo, apiKey);
+      this.promptService = new CodexPromptService(
+        messagesRepo,
+        sessionsRepo,
+        sessionMCPServerRepo,
+        apiKey
+      );
     }
   }
 
@@ -204,14 +211,14 @@ export class CodexTool implements ITool {
         // Filter out tool_use and tool_result blocks (already saved via tool_complete events)
         // But KEEP text blocks - these contain the response
         const textOnlyContent = event.content.filter(
-          (block) => block.type === 'text' // Only keep text blocks
+          block => block.type === 'text' // Only keep text blocks
         );
 
         // Only create message if there's text content (not just tools)
         if (textOnlyContent.length > 0) {
           // Extract full text for client-side streaming
           const _fullText = textOnlyContent
-            .map((block) => (block as { text?: string }).text || '')
+            .map(block => (block as { text?: string }).text || '')
             .join('');
 
           // Use existing message ID from streaming (if any) or generate new
@@ -307,7 +314,7 @@ export class CodexTool implements ITool {
     resolvedModel?: string
   ): Promise<Message> {
     // Extract text content for preview
-    const textBlocks = content.filter((b) => b.type === 'text').map((b) => b.text || '');
+    const textBlocks = content.filter(b => b.type === 'text').map(b => b.text || '');
     const fullTextContent = textBlocks.join('');
     const contentPreview = fullTextContent.substring(0, 200);
 

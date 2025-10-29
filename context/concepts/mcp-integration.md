@@ -302,9 +302,10 @@ PATCH  /sessions/:id/mcp-servers/:mcpId # Toggle enabled
 
 **SDK Integration:**
 
-- ❌ **Pass MCP servers to agent** - Enable agents to use configured MCP servers
+- ✅ **Pass MCP servers to Claude Code** - SDK parameter integration
   - Claude Agent SDK: pass `mcpServers` option to `query()`
   - Convert Agor MCP config to SDK format
+  - Status: ✅ Fully implemented
   - Example:
     ```typescript
     for await (const message of query({
@@ -317,6 +318,23 @@ PATCH  /sessions/:id/mcp-servers/:mcpId # Toggle enabled
       yield message;
     }
     ```
+
+- ✅ **Pass MCP servers to Codex** - Config file integration
+  - Codex requires MCP configuration in `~/.codex/config.toml`
+  - Agor automatically writes selected MCP servers to config file
+  - Format:
+
+    ```toml
+    [mcp_servers.agor]
+    command = "npx"
+    args = ["-y", "@agor/agor-mcp"]
+
+    [mcp_servers.agor.env]
+    AGOR_API_URL = "http://localhost:3030"
+    ```
+
+  - Status: ✅ Fully implemented
+  - Location: `packages/core/src/tools/codex/prompt-service.ts:114-200`
 
 **UI Enhancements:**
 

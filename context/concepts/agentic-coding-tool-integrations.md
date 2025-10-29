@@ -27,8 +27,8 @@ All three use official SDKs for programmatic control, streaming, and session man
 | **Mid-Session Permission Change** | ✅ Via hooks         | ✅ Via /approvals   | ⚠️ Needs testing   |
 | **Session Continuity**            | ✅ sdk_session_id    | ✅ Thread ID        | ✅ History array   |
 | **Model Selection**               | ✅ Via SDK           | ✅ Via SDK          | ✅ Via SDK         |
-| **MCP Support**                   | ✅ Via SDK           | ❌ No MCP           | ✅ Via SDK         |
-| **Agor MCP Integration**          | ✅ Self-hosted       | ❌ N/A              | ⚠️ Not wired       |
+| **MCP Support**                   | ✅ Via SDK           | ✅ Via config.toml  | ✅ Via SDK         |
+| **Agor MCP Integration**          | ✅ Self-hosted       | ✅ Fully wired      | ⚠️ Not wired       |
 | **Session Import**                | ✅ JSONL transcripts | ❌ Format unknown   | ❌ Not implemented |
 | **Tool Event Details**            | ✅ Rich metadata     | ✅ Rich metadata    | ✅ 13 event types  |
 | **Interactive Permissions**       | ✅ PreToolUse hook   | ❌ Config-only      | ⚠️ Unknown         |
@@ -223,9 +223,12 @@ All three use official SDKs for programmatic control, streaming, and session man
 - Agor integration: Session-level MCP server selection via UI
 - Status: ✅ Fully wired and working
 
-**Codex:** ❌ Not supported
+**Codex:** ✅ Full support via config file
 
-- Status: Codex SDK does not support MCP
+- API: `~/.codex/config.toml` with `[mcp_servers.<name>]` sections
+- Agor integration: Session-level MCP server selection via UI
+- Configuration: Agor writes MCP servers to config.toml automatically
+- Status: ✅ Fully wired and working
 
 **Gemini:** ✅ SDK supports MCP
 
@@ -395,7 +398,7 @@ interface Session {
 | **Mid-Session Mode Change** | ✅ Complete | ✅ Complete      | ⚠️ Needs testing     |
 | **Session Resumption**      | ✅ Complete | ✅ Complete      | ❌ Not implemented   |
 | **Model Selection UI**      | ✅ Complete | ✅ Complete      | ✅ Complete          |
-| **MCP Integration**         | ✅ Complete | ❌ Not supported | ⚠️ Ready (not wired) |
+| **MCP Integration**         | ✅ Complete | ✅ Complete      | ⚠️ Ready (not wired) |
 | **Session Import**          | ✅ Complete | ❌ Deferred      | ❌ Not implemented   |
 | **Tool Visualization**      | ✅ Complete | ⚠️ Basic         | ❌ Not implemented   |
 | **Interactive Approvals**   | ✅ Complete | ❌ Not supported | ⚠️ Unknown           |
@@ -409,13 +412,14 @@ interface Session {
 - **PreToolUse hook** - Runtime tool approval with input inspection
 - **Session import** - Load past sessions from JSONL transcripts
 - **Plan mode** - Generate plan without execution
-- **Full MCP integration** - Working in Agor
+- **SDK-based MCP integration** - Pass MCP servers via SDK parameter
 
 ### Codex Only
 
 - **Hybrid permission system** - Dual-setting approach (sandboxMode + approval_policy)
 - **On-failure approval** - Only ask if tool execution fails
 - **Slash commands** - `/approvals` for mid-session permission changes
+- **Config-based MCP integration** - MCP servers configured via ~/.codex/config.toml
 
 ### Gemini Only
 

@@ -41,7 +41,7 @@ export const PermissionRequestBlock: React.FC<PermissionRequestBlockProps> = ({
   const { token } = theme.useToken();
   const [scope, setScope] = useState<PermissionScope>(PermissionScope.ONCE);
 
-  const { tool_name, tool_input, status } = content;
+  const { tool_name, tool_input, status, approved_at } = content;
 
   // Determine the state: active, approved, denied, or waiting
   const isApproved = status === PermissionStatus.APPROVED;

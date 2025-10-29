@@ -281,7 +281,7 @@ const SessionCanvas = ({
   const pendingResizeUpdatesRef = useRef<Record<string, { width: number; height: number }>>({});
 
   // Board objects hook
-  const { getBoardObjectNodes, batchUpdateObjectPositions } = useBoardObjects({
+  const { getBoardObjectNodes, batchUpdateObjectPositions, deleteObject } = useBoardObjects({
     board,
     client,
     sessions,
@@ -1201,7 +1201,7 @@ const SessionCanvas = ({
       // Worktree cards handle their own session clicks internally
       // (no canvas-level click handler needed for worktreeNode)
     },
-    [activeTool]
+    [activeTool, deleteObject]
   );
 
   // Keyboard shortcuts

@@ -9,6 +9,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { Codex, type Thread, type ThreadItem } from '@openai/codex-sdk';
 import type { MessagesRepository } from '../../db/repositories/messages';
+import type { SessionMCPServerRepository } from '../../db/repositories/session-mcp-servers';
 import type { SessionRepository } from '../../db/repositories/sessions';
 import type { CodexPermissionMode, PermissionMode, SessionID, TaskID } from '../../types';
 import { DEFAULT_CODEX_MODEL } from './models';
@@ -88,11 +89,13 @@ export type CodexStreamEvent =
 export class CodexPromptService {
   private codex: Codex;
   private lastApprovalPolicy: string | null = null;
+  private lastMCPServersHash: string | null = null;
   private stopRequested = new Map<SessionID, boolean>();
 
   constructor(
     _messagesRepo: MessagesRepository,
     private sessionsRepo: SessionRepository,
+    private sessionMCPServerRepo?: SessionMCPServerRepository,
     apiKey?: string
   ) {
     // Initialize Codex SDK
@@ -102,12 +105,18 @@ export class CodexPromptService {
   }
 
   /**
-   * Generate ~/.codex/config.toml for approval_policy setting
+   * Generate ~/.codex/config.toml with approval_policy and MCP servers
    *
-   * NOTE: approval_policy cannot be passed via ThreadOptions, so we must use config.toml.
-   * We minimize file writes by tracking the last set value and only updating when it changes.
+   * NOTE: Both approval_policy and MCP servers must be configured via config.toml
+   * (not available in ThreadOptions). We minimize file writes by tracking a hash
+   * of the configuration and only updating when it changes.
+   *
+   * @returns Number of MCP servers configured
    */
-  private async ensureApprovalPolicy(permissionMode: CodexPermissionMode): Promise<void> {
+  private async ensureCodexConfig(
+    permissionMode: CodexPermissionMode,
+    sessionId: SessionID
+  ): Promise<number> {
     const approvalPolicyMap: Record<CodexPermissionMode, string> = {
       ask: 'untrusted', // Ask before running any command
       auto: 'on-request', // Model decides when to ask (recommended)
@@ -117,33 +126,104 @@ export class CodexPromptService {
 
     const approvalPolicy = approvalPolicyMap[permissionMode];
 
-    // Skip if already set to this value (avoid unnecessary file I/O)
-    if (this.lastApprovalPolicy === approvalPolicy) {
-      return;
+    // Fetch MCP servers for this session (if repository is available)
+    console.log(`🔍 [Codex MCP] Fetching MCP servers for session ${sessionId.substring(0, 8)}...`);
+    if (!this.sessionMCPServerRepo) {
+      console.warn('⚠️  [Codex MCP] SessionMCPServerRepository not available!');
+    }
+    const mcpServers = this.sessionMCPServerRepo
+      ? await this.sessionMCPServerRepo.listServers(sessionId, true) // enabledOnly = true
+      : [];
+
+    console.log(`📊 [Codex MCP] Found ${mcpServers.length} MCP server(s) for session`);
+    if (mcpServers.length > 0) {
+      console.log(`   Servers: ${mcpServers.map(s => `${s.name} (${s.transport})`).join(', ')}`);
     }
 
-    const homeDir = process.env.HOME || process.env.USERPROFILE;
-    if (!homeDir) {
-      console.warn('⚠️  Could not determine home directory, skipping approval_policy config');
-      return;
+    // Filter MCP servers: Codex ONLY supports stdio transport (not HTTP/SSE)
+    const stdioServers = mcpServers.filter(s => s.transport === 'stdio');
+    const unsupportedServers = mcpServers.filter(s => s.transport !== 'stdio');
+
+    if (unsupportedServers.length > 0) {
+      console.warn(
+        `⚠️  [Codex MCP] ${unsupportedServers.length} MCP server(s) skipped - Codex only supports STDIO transport:`
+      );
+      for (const server of unsupportedServers) {
+        console.warn(`   ❌ ${server.name} (${server.transport}) - not supported by Codex`);
+      }
     }
 
-    const codexConfigDir = path.join(homeDir, '.codex');
-    const configPath = path.join(codexConfigDir, 'config.toml');
+    // Generate MCP servers TOML blocks (stdio only)
+    let mcpServersToml = '';
+    for (const server of stdioServers) {
+      // Normalize server name to lowercase for TOML convention
+      const serverName = server.name.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+      console.log(`   📝 [Codex MCP] Configuring server: ${server.name} -> ${serverName}`);
 
-    const configContent = `# Codex configuration (approval_policy only - sandboxMode passed via SDK)
+      mcpServersToml += `\n[mcp_servers.${serverName}]\n`;
+      if (server.command) {
+        mcpServersToml += `command = "${server.command}"\n`;
+        console.log(`      command: ${server.command}`);
+      }
+      if (server.args && server.args.length > 0) {
+        const argsJson = JSON.stringify(server.args);
+        mcpServersToml += `args = ${argsJson}\n`;
+        console.log(`      args: ${argsJson}`);
+      }
+
+      // Add environment variables if present
+      if (server.env && Object.keys(server.env).length > 0) {
+        mcpServersToml += `\n[mcp_servers.${serverName}.env]\n`;
+        const envCount = Object.keys(server.env).length;
+        console.log(`      env vars: ${envCount} variable(s)`);
+        for (const [key, value] of Object.entries(server.env)) {
+          mcpServersToml += `${key} = "${value}"\n`;
+        }
+      }
+    }
+
+    // Generate complete config content
+    const configContent = `# Codex configuration
 # Generated by Agor - ${new Date().toISOString()}
 
 # Approval policy controls when Codex asks before running commands
 # Options: "untrusted", "on-request", "on-failure", "never"
 approval_policy = "${approvalPolicy}"
-`;
+${mcpServersToml}`;
+
+    // Create hash to detect changes (only stdio servers count)
+    const configHash = `${approvalPolicy}:${JSON.stringify(stdioServers.map(s => s.mcp_server_id))}`;
+
+    // Skip if config hasn't changed (avoid unnecessary file I/O)
+    if (this.lastMCPServersHash === configHash) {
+      console.log(`✅ [Codex MCP] Config unchanged, skipping write`);
+      return stdioServers.length;
+    }
+
+    const homeDir = process.env.HOME || process.env.USERPROFILE;
+    if (!homeDir) {
+      console.warn('⚠️  [Codex MCP] Could not determine home directory, skipping Codex config');
+      return 0;
+    }
+
+    const codexConfigDir = path.join(homeDir, '.codex');
+    const configPath = path.join(codexConfigDir, 'config.toml');
+
+    console.log(`📁 [Codex MCP] Writing config to: ${configPath}`);
+    console.log(`📄 [Codex MCP] Config content:\n${configContent}`);
 
     await fs.mkdir(codexConfigDir, { recursive: true });
     await fs.writeFile(configPath, configContent, 'utf-8');
 
-    this.lastApprovalPolicy = approvalPolicy;
-    console.log(`📝 [Codex] Set approval_policy = "${approvalPolicy}" in ~/.codex/config.toml`);
+    this.lastMCPServersHash = configHash;
+    console.log(`✅ [Codex] Updated config.toml with approval_policy = "${approvalPolicy}"`);
+    if (stdioServers.length > 0) {
+      console.log(
+        `✅ [Codex MCP] Configured ${stdioServers.length} STDIO MCP server(s): ${stdioServers.map(s => s.name).join(', ')}`
+      );
+    }
+
+    return stdioServers.length;
   }
 
   /**
@@ -262,10 +342,21 @@ approval_policy = "${approvalPolicy}"
     };
     const sandboxMode = sandboxModeMap[effectivePermissionMode];
 
-    // Set approval_policy in config.toml (required because it's not available in ThreadOptions)
-    await this.ensureApprovalPolicy(effectivePermissionMode);
+    // Set approval_policy and MCP servers in config.toml (required because they're not available in ThreadOptions)
+    const mcpServerCount = await this.ensureCodexConfig(effectivePermissionMode, sessionId);
 
-    console.log(`   Configured: sandboxMode=${sandboxMode}, approval_policy via config.toml`);
+    const totalMcpServers = this.sessionMCPServerRepo
+      ? (await this.sessionMCPServerRepo.listServers(sessionId, true)).length
+      : 0;
+    if (mcpServerCount < totalMcpServers) {
+      console.log(
+        `   Configured: sandboxMode=${sandboxMode}, approval_policy + ${mcpServerCount} STDIO MCP servers via config.toml (${totalMcpServers - mcpServerCount} HTTP/SSE servers skipped)`
+      );
+    } else {
+      console.log(
+        `   Configured: sandboxMode=${sandboxMode}, approval_policy + ${mcpServerCount} MCP server(s) via config.toml`
+      );
+    }
 
     // TODO: Update to use worktree path after worktree-centric refactor
     // Build thread options with sandbox mode
@@ -283,6 +374,20 @@ approval_policy = "${approvalPolicy}"
     let thread: Thread;
     if (session.sdk_session_id) {
       console.log(`🔄 [Codex] Resuming thread: ${session.sdk_session_id}`);
+
+      // IMPORTANT: Codex threads lock in MCP configuration at creation time
+      // If MCP servers are configured now, warn that they might not be available in existing thread
+      if (mcpServerCount > 0) {
+        console.warn('⚠️  [Codex MCP] MCP servers are configured for this session.');
+        console.warn(
+          "   ⚠️  If this thread was created BEFORE MCP servers were added, it won't see them!"
+        );
+        console.warn('   🔧 SOLUTION: Create a NEW Agor session to pick up MCP servers.');
+        console.warn(
+          `   Current thread: ${session.sdk_session_id} (check if MCP servers are missing)`
+        );
+      }
+
       thread = this.codex.resumeThread(session.sdk_session_id, threadOptions);
 
       // If permission mode changed, send slash commands to update thread settings
@@ -317,6 +422,11 @@ approval_policy = "${approvalPolicy}"
       }
     } else {
       console.log(`🆕 [Codex] Creating new thread`);
+      if (mcpServerCount > 0) {
+        console.log(
+          `✅ [Codex MCP] New thread will have ${mcpServerCount} MCP server(s) available from config.toml`
+        );
+      }
       thread = this.codex.startThread(threadOptions);
     }
 
