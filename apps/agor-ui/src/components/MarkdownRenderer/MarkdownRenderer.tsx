@@ -26,7 +26,7 @@ interface MarkdownRendererProps {
 
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, inline = false }) => {
   // Handle array of strings: filter empty, join with double newlines
-  const text = Array.isArray(content) ? content.filter(t => t.trim()).join('\n\n') : content;
+  const text = Array.isArray(content) ? content.filter((t) => t.trim()).join('\n\n') : content;
 
   let html = md.render(text);
 

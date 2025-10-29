@@ -83,8 +83,10 @@ export class MCPServerRepository
 
     return {
       mcp_server_id: serverId as string,
-      created_at: 'created_at' in data && data.created_at ? new Date(data.created_at) : new Date(now),
-      updated_at: 'updated_at' in data && data.updated_at ? new Date(data.updated_at) : new Date(now),
+      created_at:
+        'created_at' in data && data.created_at ? new Date(data.created_at) : new Date(now),
+      updated_at:
+        'updated_at' in data && data.updated_at ? new Date(data.updated_at) : new Date(now),
 
       // Materialized columns
       name: data.name!,
@@ -142,7 +144,7 @@ export class MCPServerRepository
       throw new AmbiguousIdError(
         'MCPServer',
         id,
-        results.map(r => formatShortId(r.mcp_server_id as UUID))
+        results.map((r) => formatShortId(r.mcp_server_id as UUID))
       );
     }
 
@@ -245,7 +247,7 @@ export class MCPServerRepository
       }
 
       const rows = await query.all();
-      return rows.map(row => this.rowToMCPServer(row));
+      return rows.map((row) => this.rowToMCPServer(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to find MCP servers: ${error instanceof Error ? error.message : String(error)}`,

@@ -4,25 +4,19 @@
  * Tests for type-safe CRUD operations on worktrees with short ID support.
  */
 
-import { describe, expect, it } from 'vitest';
 import type { UUID, WorktreeID } from '@agor/core/types';
+import { describe, expect } from 'vitest';
 import { generateId } from '../../lib/ids';
-import { dbTest } from '../test-helpers';
 import { boards } from '../schema';
-import {
-  AmbiguousIdError,
-  EntityNotFoundError,
-} from './base';
+import { dbTest } from '../test-helpers';
+import { AmbiguousIdError, EntityNotFoundError } from './base';
 import { RepoRepository } from './repos';
 import { WorktreeRepository } from './worktrees';
 
 /**
  * Create test repo data (needed as FK for worktrees)
  */
-function createRepoData(overrides?: {
-  repo_id?: UUID;
-  slug?: string;
-}) {
+function createRepoData(overrides?: { repo_id?: UUID; slug?: string }) {
   const slug = overrides?.slug ?? 'test-repo';
   return {
     repo_id: overrides?.repo_id ?? generateId(),
@@ -165,7 +159,9 @@ describe('WorktreeRepository.create', () => {
 
     // Verify defaults
     expect(created.worktree_id).toBeDefined();
-    expect(created.worktree_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(created.worktree_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    );
     expect(created.created_by).toBe('anonymous');
     expect(created.new_branch).toBe(false);
     expect(created.board_id).toBeUndefined();
@@ -245,18 +241,22 @@ describe('WorktreeRepository.findById', () => {
     const id1 = '01933e4a-aaaa-7c35-a8f3-9d2e1c4b5a6f' as WorktreeID;
     const id2 = '01933e4a-bbbb-7c35-a8f3-9d2e1c4b5a6f' as WorktreeID;
 
-    await wtRepo.create(createWorktreeData({
-      worktree_id: id1,
-      repo_id: repo.repo_id,
-      name: 'worktree-1',
-      worktree_unique_id: 1,
-    }));
-    await wtRepo.create(createWorktreeData({
-      worktree_id: id2,
-      repo_id: repo.repo_id,
-      name: 'worktree-2',
-      worktree_unique_id: 2,
-    }));
+    await wtRepo.create(
+      createWorktreeData({
+        worktree_id: id1,
+        repo_id: repo.repo_id,
+        name: 'worktree-1',
+        worktree_unique_id: 1,
+      })
+    );
+    await wtRepo.create(
+      createWorktreeData({
+        worktree_id: id2,
+        repo_id: repo.repo_id,
+        name: 'worktree-2',
+        worktree_unique_id: 2,
+      })
+    );
 
     const shortPrefix = '01933e4a';
 
@@ -284,30 +284,36 @@ describe('WorktreeRepository.findAll', () => {
 
     const repo = await repoRepo.create(createRepoData());
 
-    await wtRepo.create(createWorktreeData({
-      repo_id: repo.repo_id,
-      name: 'worktree-1',
-      worktree_unique_id: 1,
-      base_ref: 'main',
-      notes: 'Test notes',
-    }));
-    await wtRepo.create(createWorktreeData({
-      repo_id: repo.repo_id,
-      name: 'worktree-2',
-      worktree_unique_id: 2,
-    }));
-    await wtRepo.create(createWorktreeData({
-      repo_id: repo.repo_id,
-      name: 'worktree-3',
-      worktree_unique_id: 3,
-    }));
+    await wtRepo.create(
+      createWorktreeData({
+        repo_id: repo.repo_id,
+        name: 'worktree-1',
+        worktree_unique_id: 1,
+        base_ref: 'main',
+        notes: 'Test notes',
+      })
+    );
+    await wtRepo.create(
+      createWorktreeData({
+        repo_id: repo.repo_id,
+        name: 'worktree-2',
+        worktree_unique_id: 2,
+      })
+    );
+    await wtRepo.create(
+      createWorktreeData({
+        repo_id: repo.repo_id,
+        name: 'worktree-3',
+        worktree_unique_id: 3,
+      })
+    );
 
     const worktrees = await wtRepo.findAll();
 
     expect(worktrees).toHaveLength(3);
-    expect(worktrees.map(w => w.name).sort()).toEqual(['worktree-1', 'worktree-2', 'worktree-3']);
+    expect(worktrees.map((w) => w.name).sort()).toEqual(['worktree-1', 'worktree-2', 'worktree-3']);
     // Verify full object population
-    const first = worktrees.find(w => w.name === 'worktree-1');
+    const first = worktrees.find((w) => w.name === 'worktree-1');
     expect(first?.base_ref).toBe('main');
     expect(first?.notes).toBe('Test notes');
   });
@@ -319,27 +325,33 @@ describe('WorktreeRepository.findAll', () => {
     const repo1 = await repoRepo.create(createRepoData({ slug: 'repo-1' }));
     const repo2 = await repoRepo.create(createRepoData({ slug: 'repo-2' }));
 
-    await wtRepo.create(createWorktreeData({
-      repo_id: repo1.repo_id,
-      name: 'repo1-wt',
-      worktree_unique_id: 1,
-    }));
-    await wtRepo.create(createWorktreeData({
-      repo_id: repo2.repo_id,
-      name: 'repo2-wt1',
-      worktree_unique_id: 2,
-    }));
-    await wtRepo.create(createWorktreeData({
-      repo_id: repo2.repo_id,
-      name: 'repo2-wt2',
-      worktree_unique_id: 3,
-    }));
+    await wtRepo.create(
+      createWorktreeData({
+        repo_id: repo1.repo_id,
+        name: 'repo1-wt',
+        worktree_unique_id: 1,
+      })
+    );
+    await wtRepo.create(
+      createWorktreeData({
+        repo_id: repo2.repo_id,
+        name: 'repo2-wt1',
+        worktree_unique_id: 2,
+      })
+    );
+    await wtRepo.create(
+      createWorktreeData({
+        repo_id: repo2.repo_id,
+        name: 'repo2-wt2',
+        worktree_unique_id: 3,
+      })
+    );
 
     const repo2Worktrees = await wtRepo.findAll({ repo_id: repo2.repo_id });
 
     expect(repo2Worktrees).toHaveLength(2);
-    expect(repo2Worktrees.map(w => w.name).sort()).toEqual(['repo2-wt1', 'repo2-wt2']);
-    expect(repo2Worktrees.every(w => w.repo_id === repo2.repo_id)).toBe(true);
+    expect(repo2Worktrees.map((w) => w.name).sort()).toEqual(['repo2-wt1', 'repo2-wt2']);
+    expect(repo2Worktrees.every((w) => w.repo_id === repo2.repo_id)).toBe(true);
   });
 
   dbTest('should return empty array for no matches', async ({ db }) => {
@@ -404,10 +416,12 @@ describe('WorktreeRepository.findByRepoAndName', () => {
     const wtRepo = new WorktreeRepository(db);
 
     const repo = await repoRepo.create(createRepoData());
-    await wtRepo.create(createWorktreeData({
-      repo_id: repo.repo_id,
-      name: 'feature-123',
-    }));
+    await wtRepo.create(
+      createWorktreeData({
+        repo_id: repo.repo_id,
+        name: 'feature-123',
+      })
+    );
 
     // Wrong name
     const wrongName = await wtRepo.findByRepoAndName(repo.repo_id, 'non-existent');
@@ -470,7 +484,7 @@ describe('WorktreeRepository.update', () => {
     });
     const created = await wtRepo.create(data);
 
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     const updated = await wtRepo.update(data.worktree_id, {
       board_id: boardId,
@@ -544,9 +558,9 @@ describe('WorktreeRepository.update', () => {
   dbTest('should throw EntityNotFoundError for non-existent ID', async ({ db }) => {
     const wtRepo = new WorktreeRepository(db);
 
-    await expect(
-      wtRepo.update('99999999', { notes: 'Updated' })
-    ).rejects.toThrow(EntityNotFoundError);
+    await expect(wtRepo.update('99999999', { notes: 'Updated' })).rejects.toThrow(
+      EntityNotFoundError
+    );
   });
 });
 
@@ -616,7 +630,7 @@ describe('WorktreeRepository.delete', () => {
     // Verify only data1 deleted
     const remaining = await wtRepo.findAll();
     expect(remaining).toHaveLength(2);
-    expect(remaining.map(w => w.name).sort()).toEqual(['wt2', 'wt3']);
+    expect(remaining.map((w) => w.name).sort()).toEqual(['wt2', 'wt3']);
 
     const repo2Worktrees = await wtRepo.findAll({ repo_id: repo2.repo_id });
     expect(repo2Worktrees).toHaveLength(1);

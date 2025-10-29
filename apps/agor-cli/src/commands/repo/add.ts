@@ -90,7 +90,7 @@ export default class RepoAdd extends Command {
       this.log('');
 
       // Close socket and wait for it to close
-      await new Promise<void>(resolve => {
+      await new Promise<void>((resolve) => {
         client.io.once('disconnect', () => resolve());
         client.io.close();
         setTimeout(() => resolve(), 1000); // Fallback timeout

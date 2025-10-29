@@ -5,11 +5,11 @@
  * Does NOT test FeathersJS internals, Socket.io, or HTTP libraries.
  */
 
-import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
+import authClient from '@feathersjs/authentication-client';
 import type { Socket } from 'socket.io-client';
 import io from 'socket.io-client';
-import { createClient, isDaemonRunning, type AgorClient } from './index';
-import authClient from '@feathersjs/authentication-client';
+import { beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
+import { createClient, isDaemonRunning } from './index';
 
 // Mock socket.io-client
 vi.mock('socket.io-client', () => ({
@@ -28,16 +28,22 @@ vi.mock('@feathersjs/feathers', () => ({
 
 // Mock @feathersjs/socketio-client
 vi.mock('@feathersjs/socketio-client', () => ({
-  default: vi.fn(() => function (this: any) {
-    // socketio plugin configuration
-  }),
+  default: vi.fn(
+    () =>
+      function (this: any) {
+        // socketio plugin configuration
+      }
+  ),
 }));
 
 // Mock @feathersjs/authentication-client
 vi.mock('@feathersjs/authentication-client', () => ({
-  default: vi.fn(() => function (this: any) {
-    // auth plugin configuration
-  }),
+  default: vi.fn(
+    () =>
+      function (this: any) {
+        // auth plugin configuration
+      }
+  ),
 }));
 
 /**
@@ -318,7 +324,7 @@ describe('createClient', () => {
     });
 
     it('should handle globalThis without localStorage gracefully', () => {
-      const globalThisBackup = globalThis;
+      const _globalThisBackup = globalThis;
 
       // Create globalThis without localStorage
       const mockGlobalThis = {} as typeof globalThis;
@@ -453,10 +459,7 @@ describe('isDaemonRunning', () => {
 
       await isDaemonRunning();
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:3030/health',
-        expect.any(Object)
-      );
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3030/health', expect.any(Object));
     });
 
     it('should set timeout to 1000ms', async () => {
@@ -577,10 +580,7 @@ describe('isDaemonRunning', () => {
 
       await isDaemonRunning('http://localhost:9999');
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:9999/health',
-        expect.any(Object)
-      );
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:9999/health', expect.any(Object));
     });
 
     it('should handle IP addresses', async () => {
@@ -625,11 +625,7 @@ describe('isDaemonRunning', () => {
     it('should handle multiple concurrent checks', async () => {
       global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
 
-      const results = await Promise.all([
-        isDaemonRunning(),
-        isDaemonRunning(),
-        isDaemonRunning(),
-      ]);
+      const results = await Promise.all([isDaemonRunning(), isDaemonRunning(), isDaemonRunning()]);
 
       expect(results).toEqual([true, true, true]);
       expect(global.fetch).toHaveBeenCalledTimes(3);
@@ -642,11 +638,7 @@ describe('isDaemonRunning', () => {
         .mockResolvedValueOnce({ ok: false, status: 500 })
         .mockResolvedValueOnce({ ok: true, status: 200 });
 
-      const results = await Promise.all([
-        isDaemonRunning(),
-        isDaemonRunning(),
-        isDaemonRunning(),
-      ]);
+      const results = await Promise.all([isDaemonRunning(), isDaemonRunning(), isDaemonRunning()]);
 
       expect(results).toEqual([true, false, true]);
     });

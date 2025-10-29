@@ -18,7 +18,7 @@ async function migrate() {
   try {
     // Check if column already exists
     const tableInfo = (await db.all(`PRAGMA table_info(users)`)) as Array<{ name: string }>;
-    const columnExists = tableInfo.some(col => col.name === 'onboarding_completed');
+    const columnExists = tableInfo.some((col) => col.name === 'onboarding_completed');
 
     if (columnExists) {
       console.log('✅ Column onboarding_completed already exists, skipping...');
@@ -45,7 +45,7 @@ async function migrate() {
 // Run migration
 migrate()
   .then(() => process.exit(0))
-  .catch(error => {
+  .catch((error) => {
     console.error('Fatal error:', error);
     process.exit(1);
   });

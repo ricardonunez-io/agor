@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styles from './GifModal.module.css';
 
 interface GifModalProps {
@@ -19,7 +19,7 @@ export function GifModal({ src, alt, caption }: GifModalProps) {
 
       {isOpen && (
         <div className={styles.modal} onClick={() => setIsOpen(false)}>
-          <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
             <button type="button" className={styles.closeButton} onClick={() => setIsOpen(false)}>
               ✕
             </button>

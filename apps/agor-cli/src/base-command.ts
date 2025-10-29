@@ -55,7 +55,7 @@ export abstract class BaseCommand extends Command {
    * Ensures socket is properly closed to prevent hanging processes
    */
   protected async cleanupClient(client: AgorClient): Promise<void> {
-    await new Promise<void>(resolve => {
+    await new Promise<void>((resolve) => {
       // Use 'once' to prevent memory leak from accumulating listeners
       client.io.once('disconnect', () => resolve());
       // Remove all other listeners before closing

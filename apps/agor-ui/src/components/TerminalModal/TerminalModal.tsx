@@ -20,7 +20,7 @@ export const TerminalModal: React.FC<TerminalModalProps> = ({
   const { modal } = App.useApp();
   const terminalDivRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
-  const [terminalId, setTerminalId] = useState<string | null>(null);
+  const [_terminalId, setTerminalId] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
@@ -75,7 +75,7 @@ export const TerminalModal: React.FC<TerminalModalProps> = ({
         }
 
         // Handle user input - send to backend
-        terminal.onData(data => {
+        terminal.onData((data) => {
           if (result.terminalId) {
             client.service('terminals').patch(result.terminalId, { input: data });
           }

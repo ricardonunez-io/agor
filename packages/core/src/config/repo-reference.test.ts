@@ -6,7 +6,6 @@ import {
   isValidSlug,
   parseRepoReference,
   resolveRepoReference,
-  type RepoReference,
 } from './repo-reference';
 
 describe('parseRepoReference', () => {

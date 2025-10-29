@@ -5,15 +5,11 @@
  * scope filtering, and comprehensive JSON field handling.
  */
 
-import { describe, expect, it } from 'vitest';
-import type { MCPServer, MCPServerID, SessionID, TeamID, UserID, UUID } from '@agor/core/types';
+import type { MCPServer, MCPServerID, TeamID, UserID } from '@agor/core/types';
+import { describe, expect } from 'vitest';
 import { generateId } from '../../lib/ids';
 import { dbTest } from '../test-helpers';
-import {
-  AmbiguousIdError,
-  EntityNotFoundError,
-  RepositoryError,
-} from './base';
+import { AmbiguousIdError, EntityNotFoundError } from './base';
 import { MCPServerRepository } from './mcp-servers';
 
 /**
@@ -66,7 +62,9 @@ describe('MCPServerRepository.create', () => {
     const created = await repo.create(data);
 
     expect(created.mcp_server_id).toBeDefined();
-    expect(created.mcp_server_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(created.mcp_server_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    );
   });
 
   dbTest('should default to enabled=true if not provided', async ({ db }) => {
@@ -131,9 +129,7 @@ describe('MCPServerRepository.create', () => {
         {
           name: 'list-project-files',
           description: 'List all files in project directory',
-          arguments: [
-            { name: 'project', description: 'Project name', required: true },
-          ],
+          arguments: [{ name: 'project', description: 'Project name', required: true }],
         },
       ],
     });
@@ -146,7 +142,10 @@ describe('MCPServerRepository.create', () => {
     expect(created.description).toBe('Access local filesystem via MCP');
     expect(created.transport).toBe('stdio');
     expect(created.command).toBe('npx');
-    expect(created.args).toEqual(['@modelcontextprotocol/server-filesystem', '/Users/test/projects']);
+    expect(created.args).toEqual([
+      '@modelcontextprotocol/server-filesystem',
+      '/Users/test/projects',
+    ]);
     expect(created.env).toEqual({
       ALLOWED_PATHS: '/Users/test/projects',
       LOG_LEVEL: 'debug',
@@ -460,7 +459,7 @@ describe('MCPServerRepository.findAll', () => {
     const servers = await repo.findAll();
 
     expect(servers).toHaveLength(3);
-    expect(servers.map(s => s.name).sort()).toEqual(['server-1', 'server-2', 'server-3']);
+    expect(servers.map((s) => s.name).sort()).toEqual(['server-1', 'server-2', 'server-3']);
   });
 
   dbTest('should filter by scope', async ({ db }) => {
@@ -473,7 +472,7 @@ describe('MCPServerRepository.findAll', () => {
     const globalServers = await repo.findAll({ scope: 'global' });
 
     expect(globalServers).toHaveLength(2);
-    expect(globalServers.map(s => s.name).sort()).toEqual(['global-1', 'global-2']);
+    expect(globalServers.map((s) => s.name).sort()).toEqual(['global-1', 'global-2']);
   });
 
   dbTest('should filter by scope and scopeId for global scope', async ({ db }) => {
@@ -481,8 +480,12 @@ describe('MCPServerRepository.findAll', () => {
     const userId1 = generateId() as UserID;
     const userId2 = generateId() as UserID;
 
-    await repo.create(createMCPServerData({ name: 'user1-server', scope: 'global', owner_user_id: userId1 }));
-    await repo.create(createMCPServerData({ name: 'user2-server', scope: 'global', owner_user_id: userId2 }));
+    await repo.create(
+      createMCPServerData({ name: 'user1-server', scope: 'global', owner_user_id: userId1 })
+    );
+    await repo.create(
+      createMCPServerData({ name: 'user2-server', scope: 'global', owner_user_id: userId2 })
+    );
 
     const user1Servers = await repo.findAll({ scope: 'global', scopeId: userId1 });
 
@@ -495,8 +498,12 @@ describe('MCPServerRepository.findAll', () => {
     const teamId1 = generateId() as TeamID;
     const teamId2 = generateId() as TeamID;
 
-    await repo.create(createMCPServerData({ name: 'team1-server', scope: 'team', team_id: teamId1 }));
-    await repo.create(createMCPServerData({ name: 'team2-server', scope: 'team', team_id: teamId2 }));
+    await repo.create(
+      createMCPServerData({ name: 'team1-server', scope: 'team', team_id: teamId1 })
+    );
+    await repo.create(
+      createMCPServerData({ name: 'team2-server', scope: 'team', team_id: teamId2 })
+    );
 
     const team1Servers = await repo.findAll({ scope: 'team', scopeId: teamId1 });
 
@@ -521,8 +528,12 @@ describe('MCPServerRepository.findAll', () => {
       local_path: '/tmp/test2',
     });
 
-    await mcpRepo.create(createMCPServerData({ name: 'repo1-server', scope: 'repo', repo_id: testRepo1.repo_id }));
-    await mcpRepo.create(createMCPServerData({ name: 'repo2-server', scope: 'repo', repo_id: testRepo2.repo_id }));
+    await mcpRepo.create(
+      createMCPServerData({ name: 'repo1-server', scope: 'repo', repo_id: testRepo1.repo_id })
+    );
+    await mcpRepo.create(
+      createMCPServerData({ name: 'repo2-server', scope: 'repo', repo_id: testRepo2.repo_id })
+    );
 
     const repo1Servers = await mcpRepo.findAll({ scope: 'repo', scopeId: testRepo1.repo_id });
 
@@ -581,10 +592,25 @@ describe('MCPServerRepository.findAll', () => {
       git_state: { ref: 'main', base_sha: 'abc', current_sha: 'def' },
     });
 
-    await mcpRepo.create(createMCPServerData({ name: 'session1-server', scope: 'session', session_id: testSession1.session_id }));
-    await mcpRepo.create(createMCPServerData({ name: 'session2-server', scope: 'session', session_id: testSession2.session_id }));
+    await mcpRepo.create(
+      createMCPServerData({
+        name: 'session1-server',
+        scope: 'session',
+        session_id: testSession1.session_id,
+      })
+    );
+    await mcpRepo.create(
+      createMCPServerData({
+        name: 'session2-server',
+        scope: 'session',
+        session_id: testSession2.session_id,
+      })
+    );
 
-    const session1Servers = await mcpRepo.findAll({ scope: 'session', scopeId: testSession1.session_id });
+    const session1Servers = await mcpRepo.findAll({
+      scope: 'session',
+      scopeId: testSession1.session_id,
+    });
 
     expect(session1Servers).toHaveLength(1);
     expect(session1Servers[0].name).toBe('session1-server');
@@ -600,7 +626,7 @@ describe('MCPServerRepository.findAll', () => {
     const stdioServers = await repo.findAll({ transport: 'stdio' });
 
     expect(stdioServers).toHaveLength(2);
-    expect(stdioServers.map(s => s.name).sort()).toEqual(['stdio-1', 'stdio-2']);
+    expect(stdioServers.map((s) => s.name).sort()).toEqual(['stdio-1', 'stdio-2']);
   });
 
   dbTest('should filter by enabled status', async ({ db }) => {
@@ -613,7 +639,7 @@ describe('MCPServerRepository.findAll', () => {
     const enabledServers = await repo.findAll({ enabled: true });
 
     expect(enabledServers).toHaveLength(2);
-    expect(enabledServers.map(s => s.name).sort()).toEqual(['enabled-1', 'enabled-2']);
+    expect(enabledServers.map((s) => s.name).sort()).toEqual(['enabled-1', 'enabled-2']);
   });
 
   dbTest('should filter by source', async ({ db }) => {
@@ -626,37 +652,43 @@ describe('MCPServerRepository.findAll', () => {
     const userServers = await repo.findAll({ source: 'user' });
 
     expect(userServers).toHaveLength(2);
-    expect(userServers.map(s => s.name).sort()).toEqual(['user-1', 'user-2']);
+    expect(userServers.map((s) => s.name).sort()).toEqual(['user-1', 'user-2']);
   });
 
   dbTest('should support multiple filters simultaneously', async ({ db }) => {
     const repo = new MCPServerRepository(db);
     const userId = generateId() as UserID;
 
-    await repo.create(createMCPServerData({
-      name: 'match',
-      scope: 'global',
-      owner_user_id: userId,
-      transport: 'stdio',
-      enabled: true,
-      source: 'user',
-    }));
-    await repo.create(createMCPServerData({
-      name: 'no-match-disabled',
-      scope: 'global',
-      owner_user_id: userId,
-      transport: 'stdio',
-      enabled: false,
-      source: 'user',
-    }));
-    await repo.create(createMCPServerData({
-      name: 'no-match-http',
-      scope: 'global',
-      owner_user_id: userId,
-      transport: 'http',
-      enabled: true,
-      source: 'user',
-    }));
+    await repo.create(
+      createMCPServerData({
+        name: 'match',
+        scope: 'global',
+        owner_user_id: userId,
+        transport: 'stdio',
+        enabled: true,
+        source: 'user',
+      })
+    );
+    await repo.create(
+      createMCPServerData({
+        name: 'no-match-disabled',
+        scope: 'global',
+        owner_user_id: userId,
+        transport: 'stdio',
+        enabled: false,
+        source: 'user',
+      })
+    );
+    await repo.create(
+      createMCPServerData({
+        name: 'no-match-http',
+        scope: 'global',
+        owner_user_id: userId,
+        transport: 'http',
+        enabled: true,
+        source: 'user',
+      })
+    );
 
     const filtered = await repo.findAll({
       scope: 'global',
@@ -692,7 +724,9 @@ describe('MCPServerRepository.findByScope', () => {
     const repo = new MCPServerRepository(db);
     const teamId = generateId() as TeamID;
 
-    await repo.create(createMCPServerData({ name: 'team1-server', scope: 'team', team_id: teamId }));
+    await repo.create(
+      createMCPServerData({ name: 'team1-server', scope: 'team', team_id: teamId })
+    );
 
     const teamServers = await repo.findByScope('team', teamId);
 
@@ -789,7 +823,7 @@ describe('MCPServerRepository.update', () => {
     const data = createMCPServerData();
     const created = await repo.create(data);
 
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     const updated = await repo.update(data.mcp_server_id, { enabled: false });
 
@@ -801,9 +835,7 @@ describe('MCPServerRepository.update', () => {
   dbTest('should throw EntityNotFoundError for non-existent ID', async ({ db }) => {
     const repo = new MCPServerRepository(db);
 
-    await expect(
-      repo.update('99999999', { enabled: false })
-    ).rejects.toThrow(EntityNotFoundError);
+    await expect(repo.update('99999999', { enabled: false })).rejects.toThrow(EntityNotFoundError);
   });
 
   dbTest('should preserve unchanged fields', async ({ db }) => {
@@ -948,7 +980,9 @@ describe('MCPServerRepository edge cases', () => {
     const repo = new MCPServerRepository(db);
 
     const user = await repo.create(createMCPServerData({ name: 'user', source: 'user' }));
-    const imported = await repo.create(createMCPServerData({ name: 'imported', source: 'imported' }));
+    const imported = await repo.create(
+      createMCPServerData({ name: 'imported', source: 'imported' })
+    );
     const agor = await repo.create(createMCPServerData({ name: 'agor', source: 'agor' }));
 
     expect(user.source).toBe('user');
@@ -1007,7 +1041,9 @@ describe('MCPServerRepository edge cases', () => {
     const created = await repo.create(data);
 
     expect(created.tools![0].input_schema).toHaveProperty('properties');
-    expect((created.tools![0].input_schema as any).properties.config.properties.nested.type).toBe('array');
+    expect((created.tools![0].input_schema as any).properties.config.properties.nested.type).toBe(
+      'array'
+    );
   });
 
   dbTest('should handle empty arrays for capabilities', async ({ db }) => {

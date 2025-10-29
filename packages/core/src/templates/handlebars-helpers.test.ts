@@ -1,9 +1,9 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import Handlebars from 'handlebars';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildWorktreeContext,
   registerHandlebarsHelpers,
   renderTemplate,
-  buildWorktreeContext,
 } from './handlebars-helpers';
 
 describe('handlebars-helpers', () => {
@@ -975,7 +975,9 @@ describe('handlebars-helpers', () => {
     });
 
     it('should render with nested helpers', () => {
-      const result = renderTemplate('{{uppercase (replace name "-" "_")}}', { name: 'hello-world' });
+      const result = renderTemplate('{{uppercase (replace name "-" "_")}}', {
+        name: 'hello-world',
+      });
       expect(result).toBe('HELLO_WORLD');
     });
 
@@ -1031,7 +1033,9 @@ NAME={{replace (uppercase worktree.name) "-" "_"}}
     });
 
     it('should handle each loop with built-in helper', () => {
-      const result = renderTemplate('{{#each items}}{{this}} {{/each}}', { items: ['a', 'b', 'c'] });
+      const result = renderTemplate('{{#each items}}{{this}} {{/each}}', {
+        items: ['a', 'b', 'c'],
+      });
       expect(result).toBe('a b c ');
     });
   });

@@ -74,7 +74,7 @@ export const WorktreeFormFields: React.FC<WorktreeFormFieldsProps> = ({
           filterOption={(input, option) =>
             (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
           }
-          options={repos.map(repo => ({
+          options={repos.map((repo) => ({
             value: repo.repo_id,
             label: repo.name || repo.slug,
           }))}
@@ -95,7 +95,7 @@ export const WorktreeFormFields: React.FC<WorktreeFormFieldsProps> = ({
             filterOption={(input, option) =>
               (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
             }
-            options={boards.map(board => ({
+            options={boards.map((board) => ({
               value: board.board_id,
               label: `${board.icon || '📋'} ${board.name}`,
             }))}
@@ -134,7 +134,7 @@ export const WorktreeFormFields: React.FC<WorktreeFormFieldsProps> = ({
       <Form.Item>
         <Checkbox
           checked={useSameBranchName}
-          onChange={e => handleCheckboxChange(e.target.checked)}
+          onChange={(e) => handleCheckboxChange(e.target.checked)}
         >
           Use worktree name as branch name
         </Checkbox>

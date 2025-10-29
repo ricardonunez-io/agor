@@ -167,7 +167,7 @@ export const PermissionModeSelector: React.FC<PermissionModeSelectorProps> = ({
 
   // Full mode: render as Radio group with descriptions
   return (
-    <Radio.Group value={effectiveValue} onChange={e => onChange?.(e.target.value)}>
+    <Radio.Group value={effectiveValue} onChange={(e) => onChange?.(e.target.value)}>
       <Space direction="vertical" style={{ width: '100%' }}>
         {modes.map(({ mode, label, description, icon, color }) => (
           <Radio key={mode} value={mode}>

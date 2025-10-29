@@ -108,7 +108,7 @@ export class WorktreeRepository implements BaseRepository<Worktree, Partial<Work
       throw new AmbiguousIdError(
         'Worktree',
         prefix,
-        matches.map(m => formatShortId(m.worktree_id as UUID))
+        matches.map((m) => formatShortId(m.worktree_id as UUID))
       );
     }
 
@@ -124,11 +124,11 @@ export class WorktreeRepository implements BaseRepository<Worktree, Partial<Work
         .select()
         .from(worktrees)
         .where(eq(worktrees.repo_id, filter.repo_id));
-      return rows.map(row => this.rowToWorktree(row));
+      return rows.map((row) => this.rowToWorktree(row));
     }
 
     const rows = await this.db.select().from(worktrees);
-    return rows.map(row => this.rowToWorktree(row));
+    return rows.map((row) => this.rowToWorktree(row));
   }
 
   /**

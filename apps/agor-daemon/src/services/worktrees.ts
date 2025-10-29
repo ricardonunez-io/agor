@@ -6,7 +6,7 @@
  */
 
 import { type ChildProcess, spawn } from 'node:child_process';
-import { appendFile, mkdir } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { ENVIRONMENT } from '@agor/core/config';
@@ -345,7 +345,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
           stdio: 'inherit', // Show output directly in daemon logs
         });
 
-        childProcess.on('exit', code => {
+        childProcess.on('exit', (code) => {
           if (code === 0) {
             console.log(`✅ Start command completed successfully for ${worktree.name}`);
             resolve();
@@ -428,7 +428,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
             stdio: 'inherit',
           });
 
-          stopProcess.on('exit', code => {
+          stopProcess.on('exit', (code) => {
             if (code === 0) {
               resolve();
             } else {
@@ -500,7 +500,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       await this.stopEnvironment(id, params);
 
       // Wait a bit for processes to clean up
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
     // Start

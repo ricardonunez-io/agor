@@ -96,7 +96,7 @@ export const ZoneConfigModal = ({
         <Input
           id={nameId}
           value={name}
-          onChange={e => setName(e.target.value)}
+          onChange={(e) => setName(e.target.value)}
           placeholder="Enter zone name..."
           size="large"
         />
@@ -144,7 +144,7 @@ export const ZoneConfigModal = ({
         <Input.TextArea
           id={triggerTemplateId}
           value={triggerTemplate}
-          onChange={e => setTriggerTemplate(e.target.value)}
+          onChange={(e) => setTriggerTemplate(e.target.value)}
           placeholder="Enter the prompt template that will be triggered when a worktree is dropped here..."
           rows={6}
         />

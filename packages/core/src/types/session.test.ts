@@ -3,8 +3,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { getDefaultPermissionMode } from './session';
 import type { AgenticToolName } from './agentic-tool';
+import { getDefaultPermissionMode } from './session';
 
 describe('getDefaultPermissionMode', () => {
   it('returns "auto" for codex', () => {
@@ -68,9 +68,9 @@ describe('getDefaultPermissionMode', () => {
 
       // Verify expected mappings
       expect(results['claude-code']).toBe('acceptEdits');
-      expect(results['cursor']).toBe('acceptEdits');
-      expect(results['codex']).toBe('auto');
-      expect(results['gemini']).toBe('acceptEdits');
+      expect(results.cursor).toBe('acceptEdits');
+      expect(results.codex).toBe('auto');
+      expect(results.gemini).toBe('acceptEdits');
     });
 
     it('returns valid PermissionMode values', () => {

@@ -3,9 +3,9 @@
  */
 
 import type { AgorClient } from '@agor/core/api';
+import type { Message, SessionID } from '@agor/core/types';
 import { useCallback, useEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
-import type { Message, SessionID } from '@agor/core/types';
 
 interface UseMessagesResult {
   messages: Message[];
@@ -74,9 +74,9 @@ export function useMessages(
       if (message.session_id === sessionId) {
         // Use flushSync to force immediate render (bypass React 18 automatic batching)
         flushSync(() => {
-          setMessages(prev => {
+          setMessages((prev) => {
             // Check if message already exists (avoid duplicates)
-            if (prev.some(m => m.message_id === message.message_id)) {
+            if (prev.some((m) => m.message_id === message.message_id)) {
               return prev;
             }
             // Insert in correct position based on index
@@ -91,13 +91,13 @@ export function useMessages(
 
     const handleMessagePatched = (message: Message) => {
       if (message.session_id === sessionId) {
-        setMessages(prev => prev.map(m => (m.message_id === message.message_id ? message : m)));
+        setMessages((prev) => prev.map((m) => (m.message_id === message.message_id ? message : m)));
       }
     };
 
     const handleMessageRemoved = (message: Message) => {
       if (message.session_id === sessionId) {
-        setMessages(prev => prev.filter(m => m.message_id !== message.message_id));
+        setMessages((prev) => prev.filter((m) => m.message_id !== message.message_id));
       }
     };
 

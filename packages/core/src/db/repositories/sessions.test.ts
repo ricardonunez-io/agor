@@ -5,18 +5,14 @@
  * genealogy tracking, and JSON field handling.
  */
 
-import { describe, expect, it } from 'vitest';
 import type { Session, UUID } from '@agor/core/types';
 import { SessionStatus } from '@agor/core/types';
+import { describe, expect } from 'vitest';
 import { generateId } from '../../lib/ids';
 import { dbTest } from '../test-helpers';
-import {
-  AmbiguousIdError,
-  EntityNotFoundError,
-  RepositoryError,
-} from './base';
-import { SessionRepository } from './sessions';
+import { AmbiguousIdError, EntityNotFoundError, RepositoryError } from './base';
 import { RepoRepository } from './repos';
+import { SessionRepository } from './sessions';
 import { WorktreeRepository } from './worktrees';
 
 /**
@@ -115,7 +111,9 @@ describe('SessionRepository.create', () => {
     const created = await repo.create(data);
 
     expect(created.session_id).toBeDefined();
-    expect(created.session_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(created.session_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    );
   });
 
   dbTest('should default to IDLE status if not provided', async ({ db }) => {
@@ -421,7 +419,7 @@ describe('SessionRepository.findAll', () => {
     const sessions = await repo.findAll();
 
     expect(sessions).toHaveLength(3);
-    expect(sessions.map(s => s.title).sort()).toEqual(['Session 1', 'Session 2', 'Session 3']);
+    expect(sessions.map((s) => s.title).sort()).toEqual(['Session 1', 'Session 2', 'Session 3']);
   });
 
   dbTest('should return fully populated session objects', async ({ db }) => {
@@ -456,14 +454,20 @@ describe('SessionRepository.findByStatus', () => {
     const repo = new SessionRepository(db);
     const worktree = await createTestWorktree(db);
 
-    await repo.create(createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.IDLE }));
-    await repo.create(createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.RUNNING }));
-    await repo.create(createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.IDLE }));
+    await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.IDLE })
+    );
+    await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.RUNNING })
+    );
+    await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.IDLE })
+    );
 
     const idleSessions = await repo.findByStatus(SessionStatus.IDLE);
 
     expect(idleSessions).toHaveLength(2);
-    idleSessions.forEach(session => {
+    idleSessions.forEach((session) => {
       expect(session.status).toBe(SessionStatus.IDLE);
     });
   });
@@ -472,8 +476,12 @@ describe('SessionRepository.findByStatus', () => {
     const repo = new SessionRepository(db);
     const worktree = await createTestWorktree(db);
 
-    await repo.create(createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.RUNNING }));
-    await repo.create(createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.IDLE }));
+    await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.RUNNING })
+    );
+    await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.IDLE })
+    );
 
     const runningSessions = await repo.findByStatus(SessionStatus.RUNNING);
 
@@ -485,7 +493,9 @@ describe('SessionRepository.findByStatus', () => {
     const repo = new SessionRepository(db);
     const worktree = await createTestWorktree(db);
 
-    await repo.create(createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.IDLE }));
+    await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.IDLE })
+    );
 
     const completedSessions = await repo.findByStatus(SessionStatus.COMPLETED);
 
@@ -496,8 +506,12 @@ describe('SessionRepository.findByStatus', () => {
     const repo = new SessionRepository(db);
     const worktree = await createTestWorktree(db);
 
-    await repo.create(createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.COMPLETED }));
-    await repo.create(createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.FAILED }));
+    await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.COMPLETED })
+    );
+    await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.FAILED })
+    );
 
     const completedSessions = await repo.findByStatus(SessionStatus.COMPLETED);
 
@@ -509,8 +523,12 @@ describe('SessionRepository.findByStatus', () => {
     const repo = new SessionRepository(db);
     const worktree = await createTestWorktree(db);
 
-    await repo.create(createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.FAILED }));
-    await repo.create(createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.COMPLETED }));
+    await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.FAILED })
+    );
+    await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.COMPLETED })
+    );
 
     const failedSessions = await repo.findByStatus(SessionStatus.FAILED);
 
@@ -548,25 +566,31 @@ describe('SessionRepository.findChildren', () => {
     const worktree = await createTestWorktree(db);
 
     const parent = await repo.create(createSessionData({ worktree_id: worktree.worktree_id }));
-    const child1 = await repo.create(createSessionData({
-      worktree_id: worktree.worktree_id,
-      genealogy: {
-        parent_session_id: parent.session_id,
-        children: [],
-      },
-    }));
-    const child2 = await repo.create(createSessionData({
-      worktree_id: worktree.worktree_id,
-      genealogy: {
-        parent_session_id: parent.session_id,
-        children: [],
-      },
-    }));
+    const child1 = await repo.create(
+      createSessionData({
+        worktree_id: worktree.worktree_id,
+        genealogy: {
+          parent_session_id: parent.session_id,
+          children: [],
+        },
+      })
+    );
+    const child2 = await repo.create(
+      createSessionData({
+        worktree_id: worktree.worktree_id,
+        genealogy: {
+          parent_session_id: parent.session_id,
+          children: [],
+        },
+      })
+    );
 
     const children = await repo.findChildren(parent.session_id);
 
     expect(children).toHaveLength(2);
-    expect(children.map(c => c.session_id).sort()).toEqual([child1.session_id, child2.session_id].sort());
+    expect(children.map((c) => c.session_id).sort()).toEqual(
+      [child1.session_id, child2.session_id].sort()
+    );
   });
 
   dbTest('should find child sessions with forked_from_session_id', async ({ db }) => {
@@ -574,13 +598,15 @@ describe('SessionRepository.findChildren', () => {
     const worktree = await createTestWorktree(db);
 
     const original = await repo.create(createSessionData({ worktree_id: worktree.worktree_id }));
-    const fork1 = await repo.create(createSessionData({
-      worktree_id: worktree.worktree_id,
-      genealogy: {
-        forked_from_session_id: original.session_id,
-        children: [],
-      },
-    }));
+    const fork1 = await repo.create(
+      createSessionData({
+        worktree_id: worktree.worktree_id,
+        genealogy: {
+          forked_from_session_id: original.session_id,
+          children: [],
+        },
+      })
+    );
 
     const children = await repo.findChildren(original.session_id);
 
@@ -607,18 +633,22 @@ describe('SessionRepository.findChildren', () => {
     const parentId = '01933e4a-aaaa-7c35-a8f3-9d2e1c4b5a6f' as UUID;
     const childId = '01933e4b-bbbb-7c35-a8f3-000000000000' as UUID;
 
-    const parent = await repo.create(createSessionData({
-      session_id: parentId,
-      worktree_id: worktree.worktree_id
-    }));
-    await repo.create(createSessionData({
-      session_id: childId,
-      worktree_id: worktree.worktree_id,
-      genealogy: {
-        parent_session_id: parent.session_id,
-        children: [],
-      },
-    }));
+    const parent = await repo.create(
+      createSessionData({
+        session_id: parentId,
+        worktree_id: worktree.worktree_id,
+      })
+    );
+    await repo.create(
+      createSessionData({
+        session_id: childId,
+        worktree_id: worktree.worktree_id,
+        genealogy: {
+          parent_session_id: parent.session_id,
+          children: [],
+        },
+      })
+    );
 
     const shortId = parent.session_id.replace(/-/g, '').slice(0, 8);
     const children = await repo.findChildren(shortId);
@@ -637,13 +667,15 @@ describe('SessionRepository.findAncestors', () => {
     const worktree = await createTestWorktree(db);
 
     const parent = await repo.create(createSessionData({ worktree_id: worktree.worktree_id }));
-    const child = await repo.create(createSessionData({
-      worktree_id: worktree.worktree_id,
-      genealogy: {
-        parent_session_id: parent.session_id,
-        children: [],
-      },
-    }));
+    const child = await repo.create(
+      createSessionData({
+        worktree_id: worktree.worktree_id,
+        genealogy: {
+          parent_session_id: parent.session_id,
+          children: [],
+        },
+      })
+    );
 
     const ancestors = await repo.findAncestors(child.session_id);
 
@@ -656,20 +688,24 @@ describe('SessionRepository.findAncestors', () => {
     const worktree = await createTestWorktree(db);
 
     const grandparent = await repo.create(createSessionData({ worktree_id: worktree.worktree_id }));
-    const parent = await repo.create(createSessionData({
-      worktree_id: worktree.worktree_id,
-      genealogy: {
-        parent_session_id: grandparent.session_id,
-        children: [],
-      },
-    }));
-    const child = await repo.create(createSessionData({
-      worktree_id: worktree.worktree_id,
-      genealogy: {
-        parent_session_id: parent.session_id,
-        children: [],
-      },
-    }));
+    const parent = await repo.create(
+      createSessionData({
+        worktree_id: worktree.worktree_id,
+        genealogy: {
+          parent_session_id: grandparent.session_id,
+          children: [],
+        },
+      })
+    );
+    const child = await repo.create(
+      createSessionData({
+        worktree_id: worktree.worktree_id,
+        genealogy: {
+          parent_session_id: parent.session_id,
+          children: [],
+        },
+      })
+    );
 
     const ancestors = await repo.findAncestors(child.session_id);
 
@@ -683,13 +719,15 @@ describe('SessionRepository.findAncestors', () => {
     const worktree = await createTestWorktree(db);
 
     const original = await repo.create(createSessionData({ worktree_id: worktree.worktree_id }));
-    const fork = await repo.create(createSessionData({
-      worktree_id: worktree.worktree_id,
-      genealogy: {
-        forked_from_session_id: original.session_id,
-        children: [],
-      },
-    }));
+    const fork = await repo.create(
+      createSessionData({
+        worktree_id: worktree.worktree_id,
+        genealogy: {
+          forked_from_session_id: original.session_id,
+          children: [],
+        },
+      })
+    );
 
     const ancestors = await repo.findAncestors(fork.session_id);
 
@@ -716,18 +754,22 @@ describe('SessionRepository.findAncestors', () => {
     const parentId = '01933e5a-aaaa-7c35-a8f3-9d2e1c4b5a6f' as UUID;
     const childId = '01933e5b-bbbb-7c35-a8f3-000000000000' as UUID;
 
-    const parent = await repo.create(createSessionData({
-      session_id: parentId,
-      worktree_id: worktree.worktree_id
-    }));
-    const child = await repo.create(createSessionData({
-      session_id: childId,
-      worktree_id: worktree.worktree_id,
-      genealogy: {
-        parent_session_id: parent.session_id,
-        children: [],
-      },
-    }));
+    const parent = await repo.create(
+      createSessionData({
+        session_id: parentId,
+        worktree_id: worktree.worktree_id,
+      })
+    );
+    const child = await repo.create(
+      createSessionData({
+        session_id: childId,
+        worktree_id: worktree.worktree_id,
+        genealogy: {
+          parent_session_id: parent.session_id,
+          children: [],
+        },
+      })
+    );
 
     const shortId = child.session_id.replace(/-/g, '').slice(0, 8);
     const ancestors = await repo.findAncestors(shortId);
@@ -757,7 +799,10 @@ describe('SessionRepository.update', () => {
   dbTest('should update session by short ID', async ({ db }) => {
     const repo = new SessionRepository(db);
     const worktree = await createTestWorktree(db);
-    const data = createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.IDLE });
+    const data = createSessionData({
+      worktree_id: worktree.worktree_id,
+      status: SessionStatus.IDLE,
+    });
     await repo.create(data);
 
     const shortId = data.session_id!.replace(/-/g, '').slice(0, 8);
@@ -831,7 +876,7 @@ describe('SessionRepository.update', () => {
     const data = createSessionData({ worktree_id: worktree.worktree_id });
     const created = await repo.create(data);
 
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     const updated = await repo.update(data.session_id!, { title: 'Updated' });
 
@@ -843,9 +888,9 @@ describe('SessionRepository.update', () => {
   dbTest('should throw EntityNotFoundError for non-existent ID', async ({ db }) => {
     const repo = new SessionRepository(db);
 
-    await expect(
-      repo.update('99999999', { title: 'Updated' })
-    ).rejects.toThrow(EntityNotFoundError);
+    await expect(repo.update('99999999', { title: 'Updated' })).rejects.toThrow(
+      EntityNotFoundError
+    );
   });
 
   dbTest('should preserve unchanged fields', async ({ db }) => {
@@ -928,14 +973,20 @@ describe('SessionRepository.findRunning', () => {
     const repo = new SessionRepository(db);
     const worktree = await createTestWorktree(db);
 
-    await repo.create(createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.RUNNING }));
-    await repo.create(createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.IDLE }));
-    await repo.create(createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.RUNNING }));
+    await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.RUNNING })
+    );
+    await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.IDLE })
+    );
+    await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.RUNNING })
+    );
 
     const running = await repo.findRunning();
 
     expect(running).toHaveLength(2);
-    running.forEach(session => {
+    running.forEach((session) => {
       expect(session.status).toBe(SessionStatus.RUNNING);
     });
   });
@@ -944,7 +995,9 @@ describe('SessionRepository.findRunning', () => {
     const repo = new SessionRepository(db);
     const worktree = await createTestWorktree(db);
 
-    await repo.create(createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.IDLE }));
+    await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, status: SessionStatus.IDLE })
+    );
 
     const running = await repo.findRunning();
 
@@ -1002,10 +1055,18 @@ describe('SessionRepository edge cases', () => {
     const repo = new SessionRepository(db);
     const worktree = await createTestWorktree(db);
 
-    const claude = await repo.create(createSessionData({ worktree_id: worktree.worktree_id, agentic_tool: 'claude-code' }));
-    const cursor = await repo.create(createSessionData({ worktree_id: worktree.worktree_id, agentic_tool: 'cursor' }));
-    const codex = await repo.create(createSessionData({ worktree_id: worktree.worktree_id, agentic_tool: 'codex' }));
-    const gemini = await repo.create(createSessionData({ worktree_id: worktree.worktree_id, agentic_tool: 'gemini' }));
+    const claude = await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, agentic_tool: 'claude-code' })
+    );
+    const cursor = await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, agentic_tool: 'cursor' })
+    );
+    const codex = await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, agentic_tool: 'codex' })
+    );
+    const gemini = await repo.create(
+      createSessionData({ worktree_id: worktree.worktree_id, agentic_tool: 'gemini' })
+    );
 
     expect(claude.agentic_tool).toBe('claude-code');
     expect(cursor.agentic_tool).toBe('cursor');
@@ -1018,25 +1079,31 @@ describe('SessionRepository edge cases', () => {
     const worktree = await createTestWorktree(db);
 
     const root = await repo.create(createSessionData({ worktree_id: worktree.worktree_id }));
-    const child1 = await repo.create(createSessionData({
-      worktree_id: worktree.worktree_id,
-      genealogy: {
-        parent_session_id: root.session_id,
-        spawn_point_task_id: generateId(),
-        children: [],
-      },
-    }));
-    const child2 = await repo.create(createSessionData({
-      worktree_id: worktree.worktree_id,
-      genealogy: {
-        forked_from_session_id: root.session_id,
-        fork_point_task_id: generateId(),
-        children: [],
-      },
-    }));
+    const child1 = await repo.create(
+      createSessionData({
+        worktree_id: worktree.worktree_id,
+        genealogy: {
+          parent_session_id: root.session_id,
+          spawn_point_task_id: generateId(),
+          children: [],
+        },
+      })
+    );
+    const child2 = await repo.create(
+      createSessionData({
+        worktree_id: worktree.worktree_id,
+        genealogy: {
+          forked_from_session_id: root.session_id,
+          fork_point_task_id: generateId(),
+          children: [],
+        },
+      })
+    );
 
     const children = await repo.findChildren(root.session_id);
     expect(children).toHaveLength(2);
-    expect(children.map(c => c.session_id).sort()).toEqual([child1.session_id, child2.session_id].sort());
+    expect(children.map((c) => c.session_id).sort()).toEqual(
+      [child1.session_id, child2.session_id].sort()
+    );
   });
 });

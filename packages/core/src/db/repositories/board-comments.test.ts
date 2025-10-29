@@ -5,15 +5,11 @@
  * threading, reactions, and flexible attachments.
  */
 
-import { describe, expect, it } from 'vitest';
 import type { BoardComment, CommentID, UUID } from '@agor/core/types';
+import { describe, expect } from 'vitest';
 import { generateId } from '../../lib/ids';
 import { dbTest } from '../test-helpers';
-import {
-  AmbiguousIdError,
-  EntityNotFoundError,
-  RepositoryError,
-} from './base';
+import { AmbiguousIdError, EntityNotFoundError, RepositoryError } from './base';
 import { BoardCommentsRepository } from './board-comments';
 import { BoardRepository } from './boards';
 
@@ -80,7 +76,9 @@ describe('BoardCommentsRepository.create', () => {
     const created = await repo.create(data);
 
     expect(created.comment_id).toBeDefined();
-    expect(created.comment_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(created.comment_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    );
   });
 
   dbTest('should auto-generate content_preview from content', async ({ db }) => {
@@ -108,7 +106,7 @@ describe('BoardCommentsRepository.create', () => {
 
     const created = await repo.create(data);
 
-    expect(created.content_preview).toBe(longContent.slice(0, 200) + '...');
+    expect(created.content_preview).toBe(`${longContent.slice(0, 200)}...`);
     expect(created.content_preview.length).toBe(203); // 200 + '...'
   });
 
@@ -351,7 +349,7 @@ describe('BoardCommentsRepository.findAll', () => {
     const comments = await repo.findAll({ board_id: board1.board_id });
 
     expect(comments).toHaveLength(2);
-    comments.forEach(c => expect(c.board_id).toBe(board1.board_id));
+    comments.forEach((c) => expect(c.board_id).toBe(board1.board_id));
   });
 
   dbTest('should filter by null session_id', async ({ db }) => {
@@ -364,7 +362,7 @@ describe('BoardCommentsRepository.findAll', () => {
     const comments = await repo.findAll({ session_id: null as any });
 
     expect(comments).toHaveLength(2);
-    comments.forEach(c => expect(c.session_id).toBeUndefined());
+    comments.forEach((c) => expect(c.session_id).toBeUndefined());
   });
 
   dbTest('should filter by resolved status', async ({ db }) => {
@@ -393,28 +391,34 @@ describe('BoardCommentsRepository.findAll', () => {
     const aliceComments = await repo.findAll({ created_by: 'alice' as UUID });
 
     expect(aliceComments).toHaveLength(2);
-    aliceComments.forEach(c => expect(c.created_by).toBe('alice'));
+    aliceComments.forEach((c) => expect(c.created_by).toBe('alice'));
   });
 
   dbTest('should combine multiple filters', async ({ db }) => {
     const repo = new BoardCommentsRepository(db);
     const board = await createTestBoard(db);
 
-    await repo.create(createCommentData({
-      board_id: board.board_id,
-      created_by: 'alice' as UUID,
-      resolved: false,
-    }));
-    await repo.create(createCommentData({
-      board_id: board.board_id,
-      created_by: 'bob' as UUID,
-      resolved: false,
-    }));
-    await repo.create(createCommentData({
-      board_id: board.board_id,
-      created_by: 'alice' as UUID,
-      resolved: true,
-    }));
+    await repo.create(
+      createCommentData({
+        board_id: board.board_id,
+        created_by: 'alice' as UUID,
+        resolved: false,
+      })
+    );
+    await repo.create(
+      createCommentData({
+        board_id: board.board_id,
+        created_by: 'bob' as UUID,
+        resolved: false,
+      })
+    );
+    await repo.create(
+      createCommentData({
+        board_id: board.board_id,
+        created_by: 'alice' as UUID,
+        resolved: true,
+      })
+    );
 
     const comments = await repo.findAll({
       board_id: board.board_id,
@@ -502,7 +506,7 @@ describe('BoardCommentsRepository.update', () => {
     const data = createCommentData({ board_id: board.board_id });
     const created = await repo.create(data);
 
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     const updated = await repo.update(data.comment_id!, { content: 'Updated' });
 
@@ -517,9 +521,9 @@ describe('BoardCommentsRepository.update', () => {
   dbTest('should throw EntityNotFoundError for non-existent ID', async ({ db }) => {
     const repo = new BoardCommentsRepository(db);
 
-    await expect(
-      repo.update('99999999', { content: 'Updated' })
-    ).rejects.toThrow(EntityNotFoundError);
+    await expect(repo.update('99999999', { content: 'Updated' })).rejects.toThrow(
+      EntityNotFoundError
+    );
   });
 });
 
@@ -561,8 +565,14 @@ describe('BoardCommentsRepository.delete', () => {
     const root = await repo.create(createCommentData({ board_id: board.board_id }));
 
     // Create replies
-    const reply1 = await repo.createReply(root.comment_id, createCommentData({ content: 'Reply 1' }));
-    const reply2 = await repo.createReply(root.comment_id, createCommentData({ content: 'Reply 2' }));
+    const reply1 = await repo.createReply(
+      root.comment_id,
+      createCommentData({ content: 'Reply 1' })
+    );
+    const reply2 = await repo.createReply(
+      root.comment_id,
+      createCommentData({ content: 'Reply 2' })
+    );
 
     // Delete root
     await repo.delete(root.comment_id);
@@ -652,7 +662,7 @@ describe('BoardCommentsRepository.findByBoard', () => {
     const comments = await repo.findByBoard(board1.board_id);
 
     expect(comments).toHaveLength(2);
-    comments.forEach(c => expect(c.board_id).toBe(board1.board_id));
+    comments.forEach((c) => expect(c.board_id).toBe(board1.board_id));
   });
 
   dbTest('should filter by resolved within board', async ({ db }) => {
@@ -699,23 +709,29 @@ describe('BoardCommentsRepository.findMentions', () => {
     const board = await createTestBoard(db);
     const userId = generateId();
 
-    await repo.create(createCommentData({
-      board_id: board.board_id,
-      mentions: [userId],
-    }));
-    await repo.create(createCommentData({
-      board_id: board.board_id,
-      mentions: [generateId()],
-    }));
-    await repo.create(createCommentData({
-      board_id: board.board_id,
-      mentions: [userId, generateId()],
-    }));
+    await repo.create(
+      createCommentData({
+        board_id: board.board_id,
+        mentions: [userId],
+      })
+    );
+    await repo.create(
+      createCommentData({
+        board_id: board.board_id,
+        mentions: [generateId()],
+      })
+    );
+    await repo.create(
+      createCommentData({
+        board_id: board.board_id,
+        mentions: [userId, generateId()],
+      })
+    );
 
     const mentions = await repo.findMentions(userId);
 
     expect(mentions).toHaveLength(2);
-    mentions.forEach(c => expect(c.mentions).toContain(userId));
+    mentions.forEach((c) => expect(c.mentions).toContain(userId));
   });
 
   dbTest('should filter mentions by board_id', async ({ db }) => {
@@ -724,14 +740,18 @@ describe('BoardCommentsRepository.findMentions', () => {
     const board2 = await createTestBoard(db);
     const userId = generateId();
 
-    await repo.create(createCommentData({
-      board_id: board1.board_id,
-      mentions: [userId],
-    }));
-    await repo.create(createCommentData({
-      board_id: board2.board_id,
-      mentions: [userId],
-    }));
+    await repo.create(
+      createCommentData({
+        board_id: board1.board_id,
+        mentions: [userId],
+      })
+    );
+    await repo.create(
+      createCommentData({
+        board_id: board2.board_id,
+        mentions: [userId],
+      })
+    );
 
     const mentions = await repo.findMentions(userId, board1.board_id);
 
@@ -835,9 +855,9 @@ describe('BoardCommentsRepository.toggleReaction', () => {
   dbTest('should throw EntityNotFoundError for non-existent comment', async ({ db }) => {
     const repo = new BoardCommentsRepository(db);
 
-    await expect(
-      repo.toggleReaction('99999999', 'user1', '👍')
-    ).rejects.toThrow(EntityNotFoundError);
+    await expect(repo.toggleReaction('99999999', 'user1', '👍')).rejects.toThrow(
+      EntityNotFoundError
+    );
   });
 });
 
@@ -851,9 +871,12 @@ describe('BoardCommentsRepository.createReply', () => {
     const board = await createTestBoard(db);
     const root = await repo.create(createCommentData({ board_id: board.board_id }));
 
-    const reply = await repo.createReply(root.comment_id, createCommentData({
-      content: 'This is a reply',
-    }));
+    const reply = await repo.createReply(
+      root.comment_id,
+      createCommentData({
+        content: 'This is a reply',
+      })
+    );
 
     expect(reply.parent_comment_id).toBe(root.comment_id);
     expect(reply.board_id).toBe(board.board_id);
@@ -865,9 +888,12 @@ describe('BoardCommentsRepository.createReply', () => {
     const board = await createTestBoard(db);
     const root = await repo.create(createCommentData({ board_id: board.board_id }));
 
-    const reply = await repo.createReply(root.comment_id, createCommentData({
-      content: 'Reply',
-    }));
+    const reply = await repo.createReply(
+      root.comment_id,
+      createCommentData({
+        content: 'Reply',
+      })
+    );
 
     expect(reply.board_id).toBe(board.board_id);
   });
@@ -875,14 +901,19 @@ describe('BoardCommentsRepository.createReply', () => {
   dbTest('should strip position from replies', async ({ db }) => {
     const repo = new BoardCommentsRepository(db);
     const board = await createTestBoard(db);
-    const root = await repo.create(createCommentData({
-      board_id: board.board_id,
-    }));
+    const root = await repo.create(
+      createCommentData({
+        board_id: board.board_id,
+      })
+    );
 
-    const reply = await repo.createReply(root.comment_id, createCommentData({
-      content: 'Reply',
-      position: { absolute: { x: 100, y: 200 } },
-    }));
+    const reply = await repo.createReply(
+      root.comment_id,
+      createCommentData({
+        content: 'Reply',
+        position: { absolute: { x: 100, y: 200 } },
+      })
+    );
 
     expect(reply.position).toBeUndefined();
   });
@@ -891,9 +922,12 @@ describe('BoardCommentsRepository.createReply', () => {
     const repo = new BoardCommentsRepository(db);
     const board = await createTestBoard(db);
     const root = await repo.create(createCommentData({ board_id: board.board_id }));
-    const reply1 = await repo.createReply(root.comment_id, createCommentData({
-      content: 'First reply',
-    }));
+    const reply1 = await repo.createReply(
+      root.comment_id,
+      createCommentData({
+        content: 'First reply',
+      })
+    );
 
     await expect(
       repo.createReply(reply1.comment_id, createCommentData({ content: 'Nested reply' }))
@@ -915,9 +949,12 @@ describe('BoardCommentsRepository.createReply', () => {
     const repo = new BoardCommentsRepository(db);
     const board = await createTestBoard(db);
     const root = await repo.create(createCommentData({ board_id: board.board_id }));
-    const reply = await repo.createReply(root.comment_id, createCommentData({
-      content: 'Reply',
-    }));
+    const reply = await repo.createReply(
+      root.comment_id,
+      createCommentData({
+        content: 'Reply',
+      })
+    );
 
     const updated = await repo.toggleReaction(reply.comment_id, 'user1', '👍');
 
@@ -961,7 +998,7 @@ describe('BoardCommentsRepository edge cases', () => {
 
     const created = await repo.create(data);
 
-    expect(created.content_preview).toBe('a'.repeat(200) + '...');
+    expect(created.content_preview).toBe(`${'a'.repeat(200)}...`);
   });
 
   dbTest('should handle unicode emojis in content', async ({ db }) => {
@@ -980,7 +1017,8 @@ describe('BoardCommentsRepository edge cases', () => {
   dbTest('should handle markdown content', async ({ db }) => {
     const repo = new BoardCommentsRepository(db);
     const board = await createTestBoard(db);
-    const markdownContent = '# Title\n\nSome **bold** and *italic* text with [links](https://example.com)';
+    const markdownContent =
+      '# Title\n\nSome **bold** and *italic* text with [links](https://example.com)';
     const data = createCommentData({
       board_id: board.board_id,
       content: markdownContent,

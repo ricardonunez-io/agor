@@ -4,15 +4,11 @@
  * Tests for type-safe CRUD operations on git repositories with short ID support.
  */
 
-import { describe, expect, it } from 'vitest';
 import type { UUID } from '@agor/core/types';
+import { describe, expect } from 'vitest';
 import { generateId } from '../../lib/ids';
 import { dbTest } from '../test-helpers';
-import {
-  AmbiguousIdError,
-  EntityNotFoundError,
-  RepositoryError,
-} from './base';
+import { AmbiguousIdError, EntityNotFoundError, RepositoryError } from './base';
 import { RepoRepository } from './repos';
 
 /**
@@ -66,7 +62,9 @@ describe('RepoRepository.create', () => {
     const created = await repo.create(data);
 
     expect(created.repo_id).toBeDefined();
-    expect(created.repo_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(created.repo_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    );
   });
 
   dbTest('should default name to slug if not provided', async ({ db }) => {
@@ -325,7 +323,7 @@ describe('RepoRepository.findAll', () => {
     const repos = await repo.findAll();
 
     expect(repos).toHaveLength(3);
-    expect(repos.map(r => r.slug).sort()).toEqual(['repo-1', 'repo-2', 'repo-3']);
+    expect(repos.map((r) => r.slug).sort()).toEqual(['repo-1', 'repo-2', 'repo-3']);
   });
 
   dbTest('should return fully populated repo objects', async ({ db }) => {
@@ -439,7 +437,7 @@ describe('RepoRepository.update', () => {
     const created = await repo.create(data);
 
     // Wait a bit to ensure timestamp differs
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     const updated = await repo.update(data.repo_id, { name: 'Updated' });
 
@@ -451,9 +449,7 @@ describe('RepoRepository.update', () => {
   dbTest('should throw EntityNotFoundError for non-existent ID', async ({ db }) => {
     const repo = new RepoRepository(db);
 
-    await expect(
-      repo.update('99999999', { name: 'Updated' })
-    ).rejects.toThrow(EntityNotFoundError);
+    await expect(repo.update('99999999', { name: 'Updated' })).rejects.toThrow(EntityNotFoundError);
   });
 
   dbTest('should throw for invalid update (missing remote_url)', async ({ db }) => {
@@ -461,9 +457,7 @@ describe('RepoRepository.update', () => {
     const data = createRepoData();
     await repo.create(data);
 
-    await expect(
-      repo.update(data.repo_id, { remote_url: '' })
-    ).rejects.toThrow(RepositoryError);
+    await expect(repo.update(data.repo_id, { remote_url: '' })).rejects.toThrow(RepositoryError);
   });
 
   dbTest('should preserve unchanged fields', async ({ db }) => {
@@ -673,7 +667,8 @@ describe('RepoRepository edge cases', () => {
 
   dbTest('should handle long URLs', async ({ db }) => {
     const repo = new RepoRepository(db);
-    const longUrl = 'https://github.com/very-long-organization-name/very-long-repository-name-with-many-words.git';
+    const longUrl =
+      'https://github.com/very-long-organization-name/very-long-repository-name-with-many-words.git';
     const data = createRepoData({ remote_url: longUrl });
 
     const created = await repo.create(data);

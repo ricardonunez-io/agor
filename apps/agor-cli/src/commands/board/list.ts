@@ -70,7 +70,7 @@ export default class BoardList extends Command {
 
       // Add rows
       for (const board of boards) {
-        const worktreeCount = boardObjects.filter(bo => bo.board_id === board.board_id).length;
+        const worktreeCount = boardObjects.filter((bo) => bo.board_id === board.board_id).length;
         table.push([
           board.board_id.substring(0, 8),
           `${board.icon || '📋'} ${board.name}`,
@@ -95,7 +95,7 @@ export default class BoardList extends Command {
   }
 
   private async cleanup(client: import('@agor/core/api').AgorClient): Promise<void> {
-    await new Promise<void>(resolve => {
+    await new Promise<void>((resolve) => {
       client.io.once('disconnect', () => resolve());
       client.io.close();
       setTimeout(() => resolve(), 1000);

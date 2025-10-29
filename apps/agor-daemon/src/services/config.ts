@@ -5,7 +5,7 @@
  * Wraps @agor/core/config functions for UI access.
  */
 
-import { type AgorConfig, getConfigValue, loadConfig, saveConfig } from '@agor/core/config';
+import { type AgorConfig, loadConfig, saveConfig } from '@agor/core/config';
 import type { Params } from '@agor/core/types';
 
 /**

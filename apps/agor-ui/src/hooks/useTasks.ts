@@ -3,8 +3,8 @@
  */
 
 import type { AgorClient } from '@agor/core/api';
-import { useCallback, useEffect, useState } from 'react';
 import type { SessionID, Task } from '@agor/core/types';
+import { useCallback, useEffect, useState } from 'react';
 
 interface UseTasksResult {
   tasks: Task[];
@@ -68,9 +68,9 @@ export function useTasks(client: AgorClient | null, sessionId: SessionID | null)
     const handleTaskCreated = (task: Task) => {
       // Only add if it belongs to this session
       if (task.session_id === sessionId) {
-        setTasks(prev => {
+        setTasks((prev) => {
           // Check if task already exists (avoid duplicates)
-          if (prev.some(t => t.task_id === task.task_id)) {
+          if (prev.some((t) => t.task_id === task.task_id)) {
             return prev;
           }
           // Insert in correct position based on created_at
@@ -84,13 +84,13 @@ export function useTasks(client: AgorClient | null, sessionId: SessionID | null)
 
     const handleTaskPatched = (task: Task) => {
       if (task.session_id === sessionId) {
-        setTasks(prev => prev.map(t => (t.task_id === task.task_id ? task : t)));
+        setTasks((prev) => prev.map((t) => (t.task_id === task.task_id ? task : t)));
       }
     };
 
     const handleTaskRemoved = (task: Task) => {
       if (task.session_id === sessionId) {
-        setTasks(prev => prev.filter(t => t.task_id !== task.task_id));
+        setTasks((prev) => prev.filter((t) => t.task_id !== task.task_id));
       }
     };
 

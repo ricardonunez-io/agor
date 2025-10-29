@@ -120,12 +120,12 @@ export default class McpAdd extends Command {
 
       // Add transport-specific config
       if (flags.command) data.command = flags.command;
-      if (flags.args) data.args = flags.args.split(',').map(arg => arg.trim());
+      if (flags.args) data.args = flags.args.split(',').map((arg) => arg.trim());
       if (flags.url) data.url = flags.url;
 
       // Add environment variables
       if (flags.env) {
-        const envPairs = flags.env.split(',').map(pair => pair.trim());
+        const envPairs = flags.env.split(',').map((pair) => pair.trim());
         const envObject: Record<string, string> = {};
         for (const pair of envPairs) {
           const [key, value] = pair.split('=');
@@ -175,7 +175,7 @@ export default class McpAdd extends Command {
       this.log('');
 
       // Close socket
-      await new Promise<void>(resolve => {
+      await new Promise<void>((resolve) => {
         client.io.once('disconnect', () => resolve());
         client.io.close();
         setTimeout(() => resolve(), 1000);

@@ -8,11 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  AmbiguousIdError,
-  EntityNotFoundError,
-  RepositoryError,
-} from './base';
+import { AmbiguousIdError, EntityNotFoundError, RepositoryError } from './base';
 
 // ============================================================================
 // RepositoryError

@@ -13,15 +13,14 @@
  * NOTE: Mocks Codex SDK to avoid external API calls.
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import type { Message, MessageID, SessionID, TaskID } from '../../types';
-import { MessageRole } from '../../types';
-import { generateId } from '../../lib/ids';
-import { CodexTool } from './codex-tool';
-import type { CodexPromptService } from './prompt-service';
+import { describe, expect, it, vi } from 'vitest';
 import type { MessagesRepository } from '../../db/repositories/messages';
 import type { SessionRepository } from '../../db/repositories/sessions';
+import { generateId } from '../../lib/ids';
+import type { Message, MessageID, SessionID, TaskID } from '../../types';
+import { MessageRole } from '../../types';
 import type { StreamingCallbacks } from '../base/types';
+import { CodexTool } from './codex-tool';
 import { DEFAULT_CODEX_MODEL } from './models';
 
 // ============================================================================
@@ -37,7 +36,7 @@ function createMockMessagesRepo() {
   return {
     findBySessionId: vi.fn(async (sessionId: SessionID) => {
       return Array.from(messages.values())
-        .filter(m => m.session_id === sessionId)
+        .filter((m) => m.session_id === sessionId)
         .sort((a, b) => a.index - b.index);
     }),
     create: vi.fn(async (message: Message) => {
@@ -187,7 +186,13 @@ describe('CodexTool - User Message Creation', () => {
     const messagesService = createMockMessagesService();
     const tasksService = createMockTasksService();
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     const sessionId = generateId() as SessionID;
     const taskId = generateId() as TaskID;
@@ -222,7 +227,13 @@ describe('CodexTool - User Message Creation', () => {
     const messagesService = createMockMessagesService();
     const tasksService = createMockTasksService();
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     const sessionId = generateId() as SessionID;
     const longPrompt = 'a'.repeat(300); // 300 chars
@@ -250,7 +261,13 @@ describe('CodexTool - Assistant Message Creation', () => {
     const session = createTestSession({ session_id: sessionId });
     (sessionsRepo as any)._sessions.set(sessionId, session);
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     const prompt = 'Test prompt';
 
@@ -289,7 +306,13 @@ describe('CodexTool - Assistant Message Creation', () => {
     const session = createTestSession({ session_id: sessionId });
     (sessionsRepo as any)._sessions.set(sessionId, session);
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     const prompt = 'Run a command';
 
@@ -350,7 +373,13 @@ describe('CodexTool - Assistant Message Creation', () => {
     const session = createTestSession({ session_id: sessionId });
     (sessionsRepo as any)._sessions.set(sessionId, session);
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     const prompt = 'Run failing command';
 
@@ -377,7 +406,7 @@ describe('CodexTool - Assistant Message Creation', () => {
     expect(messagesService.create).toHaveBeenCalledTimes(2);
 
     const toolMessageCall = messagesService.create.mock.calls[1][0] as Message;
-    const toolResult = (toolMessageCall.content as any[]).find(c => c.type === 'tool_result');
+    const toolResult = (toolMessageCall.content as any[]).find((c) => c.type === 'tool_result');
     expect(toolResult.is_error).toBe(true);
   });
 });
@@ -397,7 +426,13 @@ describe('CodexTool - Thread ID Capture', () => {
     const session = createTestSession({ session_id: sessionId });
     (sessionsRepo as any)._sessions.set(sessionId, session);
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     vi.spyOn(tool as any, 'promptService', 'get').mockReturnValue({
       promptSessionStreaming: vi.fn(async function* () {
@@ -431,7 +466,13 @@ describe('CodexTool - Thread ID Capture', () => {
     });
     (sessionsRepo as any)._sessions.set(sessionId, session);
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     vi.spyOn(tool as any, 'promptService', 'get').mockReturnValue({
       promptSessionStreaming: vi.fn(async function* () {
@@ -466,7 +507,13 @@ describe('CodexTool - Streaming Execution', () => {
     const session = createTestSession({ session_id: sessionId });
     (sessionsRepo as any)._sessions.set(sessionId, session);
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
     const callbacks = createMockStreamingCallbacks();
 
     // Mock partial streaming (NOTE: Codex SDK doesn't actually emit partials, but we test the logic)
@@ -522,7 +569,13 @@ describe('CodexTool - Streaming Execution', () => {
     const session = createTestSession({ session_id: sessionId });
     (sessionsRepo as any)._sessions.set(sessionId, session);
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     vi.spyOn(tool as any, 'promptService', 'get').mockReturnValue({
       promptSessionStreaming: vi.fn(async function* () {
@@ -558,7 +611,13 @@ describe('CodexTool - Non-Streaming Execution', () => {
     const session = createTestSession({ session_id: sessionId });
     (sessionsRepo as any)._sessions.set(sessionId, session);
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     vi.spyOn(tool as any, 'promptService', 'get').mockReturnValue({
       promptSessionStreaming: vi.fn(async function* () {
@@ -600,14 +659,24 @@ describe('CodexTool - Non-Streaming Execution', () => {
     const session = createTestSession({ session_id: sessionId });
     (sessionsRepo as any)._sessions.set(sessionId, session);
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     vi.spyOn(tool as any, 'promptService', 'get').mockReturnValue({
       promptSessionStreaming: vi.fn(async function* () {
         // Emit partials (should be ignored)
         yield { type: 'partial', textChunk: 'Chunk 1', threadId: 'thread_123' };
         yield { type: 'partial', textChunk: 'Chunk 2', threadId: 'thread_123' };
-        yield { type: 'tool_start', toolUse: { id: 'tool_1', name: 'bash', input: {} }, threadId: 'thread_123' };
+        yield {
+          type: 'tool_start',
+          toolUse: { id: 'tool_1', name: 'bash', input: {} },
+          threadId: 'thread_123',
+        };
 
         // Only complete events should be processed
         yield {
@@ -642,7 +711,13 @@ describe('CodexTool - Task Updates', () => {
     const session = createTestSession({ session_id: sessionId });
     (sessionsRepo as any)._sessions.set(sessionId, session);
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     vi.spyOn(tool as any, 'promptService', 'get').mockReturnValue({
       promptSessionStreaming: vi.fn(async function* () {
@@ -670,7 +745,13 @@ describe('CodexTool - Task Updates', () => {
     const session = createTestSession({ session_id: sessionId });
     (sessionsRepo as any)._sessions.set(sessionId, session);
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     vi.spyOn(tool as any, 'promptService', 'get').mockReturnValue({
       promptSessionStreaming: vi.fn(async function* () {
@@ -710,9 +791,15 @@ describe('CodexTool - Message Indexing', () => {
       { message_id: generateId() as MessageID, session_id: sessionId, index: 1 } as Message,
       { message_id: generateId() as MessageID, session_id: sessionId, index: 2 } as Message,
     ];
-    existingMessages.forEach(m => (messagesRepo as any)._messages.set(m.message_id, m));
+    existingMessages.forEach((m) => (messagesRepo as any)._messages.set(m.message_id, m));
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     vi.spyOn(tool as any, 'promptService', 'get').mockReturnValue({
       promptSessionStreaming: vi.fn(async function* () {
@@ -745,7 +832,13 @@ describe('CodexTool - Message Indexing', () => {
     const session = createTestSession({ session_id: sessionId });
     (sessionsRepo as any)._sessions.set(sessionId, session);
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     vi.spyOn(tool as any, 'promptService', 'get').mockReturnValue({
       promptSessionStreaming: vi.fn(async function* () {
@@ -779,7 +872,13 @@ describe('CodexTool - Stop Task', () => {
     const messagesService = createMockMessagesService();
     const tasksService = createMockTasksService();
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     const sessionId = generateId() as SessionID;
     const taskId = generateId() as TaskID;
@@ -802,7 +901,13 @@ describe('CodexTool - Stop Task', () => {
     const messagesService = createMockMessagesService();
     const tasksService = createMockTasksService();
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     const sessionId = generateId() as SessionID;
 
@@ -883,7 +988,13 @@ describe('CodexTool - Content Filtering', () => {
     const session = createTestSession({ session_id: sessionId });
     (sessionsRepo as any)._sessions.set(sessionId, session);
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     vi.spyOn(tool as any, 'promptService', 'get').mockReturnValue({
       promptSessionStreaming: vi.fn(async function* () {
@@ -934,7 +1045,13 @@ describe('CodexTool - Content Filtering', () => {
     const session = createTestSession({ session_id: sessionId });
     (sessionsRepo as any)._sessions.set(sessionId, session);
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     vi.spyOn(tool as any, 'promptService', 'get').mockReturnValue({
       promptSessionStreaming: vi.fn(async function* () {
@@ -985,7 +1102,13 @@ describe('CodexTool - Metadata', () => {
     const session = createTestSession({ session_id: sessionId });
     (sessionsRepo as any)._sessions.set(sessionId, session);
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     vi.spyOn(tool as any, 'promptService', 'get').mockReturnValue({
       promptSessionStreaming: vi.fn(async function* () {
@@ -1014,7 +1137,13 @@ describe('CodexTool - Metadata', () => {
     const session = createTestSession({ session_id: sessionId });
     (sessionsRepo as any)._sessions.set(sessionId, session);
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     vi.spyOn(tool as any, 'promptService', 'get').mockReturnValue({
       promptSessionStreaming: vi.fn(async function* () {
@@ -1043,7 +1172,13 @@ describe('CodexTool - Metadata', () => {
     const session = createTestSession({ session_id: sessionId });
     (sessionsRepo as any)._sessions.set(sessionId, session);
 
-    const tool = new CodexTool(messagesRepo, sessionsRepo, 'api-key', messagesService, tasksService);
+    const tool = new CodexTool(
+      messagesRepo,
+      sessionsRepo,
+      'api-key',
+      messagesService,
+      tasksService
+    );
 
     vi.spyOn(tool as any, 'promptService', 'get').mockReturnValue({
       promptSessionStreaming: vi.fn(async function* () {

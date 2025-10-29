@@ -405,8 +405,8 @@ describe('groupReactions', () => {
       }));
       const result = groupReactions(reactions);
       expect(Object.keys(result)).toHaveLength(50);
-      expect(result['emoji_0']).toEqual(['user_0']);
-      expect(result['emoji_49']).toEqual(['user_49']);
+      expect(result.emoji_0).toEqual(['user_0']);
+      expect(result.emoji_49).toEqual(['user_49']);
     });
   });
 });

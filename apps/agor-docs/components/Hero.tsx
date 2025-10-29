@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import React from 'react';
 import { GifGallery } from './GifGallery';
 import styles from './Hero.module.css';
 import { ParticleBackground } from './ParticleBackground';

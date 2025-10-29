@@ -33,7 +33,7 @@ export default class DaemonStart extends Command {
       this.log(chalk.red('✗ Daemon lifecycle commands only work in production mode.'));
       this.log('');
       this.log(chalk.bold('In development, start the daemon with:'));
-      this.log('  ' + chalk.cyan('cd apps/agor-daemon && pnpm dev'));
+      this.log(`  ${chalk.cyan('cd apps/agor-daemon && pnpm dev')}`);
       this.log('');
       this.exit(1);
     }
@@ -44,7 +44,7 @@ export default class DaemonStart extends Command {
       this.log(chalk.red('✗ Daemon binary not found'));
       this.log('');
       this.log('Your installation may be corrupted. Try reinstalling:');
-      this.log('  ' + chalk.cyan('npm install -g agor-live'));
+      this.log(`  ${chalk.cyan('npm install -g agor-live')}`);
       this.log('');
       this.exit(1);
     }
@@ -57,7 +57,7 @@ export default class DaemonStart extends Command {
       this.log(`Expected location: ${chalk.dim(daemonPath)}`);
       this.log('');
       this.log('Your installation may be corrupted. Try reinstalling:');
-      this.log('  ' + chalk.cyan('npm install -g agor-live'));
+      this.log(`  ${chalk.cyan('npm install -g agor-live')}`);
       this.log('');
       this.exit(1);
     }
@@ -70,7 +70,7 @@ export default class DaemonStart extends Command {
       this.log(chalk.yellow('⚠ Daemon is already running'));
       this.log('');
       this.log('Check status with:');
-      this.log('  ' + chalk.cyan('agor daemon status'));
+      this.log(`  ${chalk.cyan('agor daemon status')}`);
       this.log('');
       this.exit(0);
     }
@@ -96,7 +96,7 @@ export default class DaemonStart extends Command {
 
         // Wait for child to exit
         await new Promise<void>((resolve, reject) => {
-          child.on('exit', code => {
+          child.on('exit', (code) => {
             if (code === 0) {
               resolve();
             } else {
@@ -116,18 +116,18 @@ export default class DaemonStart extends Command {
         this.log(`  URL: ${chalk.cyan(daemonUrl)}`);
         this.log('');
         this.log('View logs with:');
-        this.log('  ' + chalk.cyan('agor daemon logs'));
+        this.log(`  ${chalk.cyan('agor daemon logs')}`);
         this.log('');
 
         // Wait a moment and check if it's actually running
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
         const nowRunning = await isDaemonRunning(daemonUrl);
 
         if (!nowRunning) {
           this.log(chalk.yellow('⚠ Daemon started but not responding'));
           this.log('');
           this.log('Check logs for errors:');
-          this.log('  ' + chalk.cyan('agor daemon logs'));
+          this.log(`  ${chalk.cyan('agor daemon logs')}`);
           this.log('');
         }
       }

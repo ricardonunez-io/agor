@@ -58,10 +58,10 @@ export default class DaemonStatus extends Command {
     if (!running) {
       if (isInstalledPackage()) {
         this.log(chalk.bold('To start the daemon:'));
-        this.log('  ' + chalk.cyan('agor daemon start'));
+        this.log(`  ${chalk.cyan('agor daemon start')}`);
       } else {
         this.log(chalk.bold('To start the daemon:'));
-        this.log('  ' + chalk.cyan('cd apps/agor-daemon && pnpm dev'));
+        this.log(`  ${chalk.cyan('cd apps/agor-daemon && pnpm dev')}`);
       }
       this.log('');
     }

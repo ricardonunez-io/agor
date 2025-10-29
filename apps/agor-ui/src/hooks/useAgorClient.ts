@@ -97,7 +97,7 @@ export function useAgorClient(options: UseAgorClientOptions = {}): UseAgorClient
         }
       });
 
-      client.io.on('disconnect', reason => {
+      client.io.on('disconnect', (reason) => {
         if (mounted) {
           console.log('🔌 Disconnected from daemon:', reason);
           setConnected(false);
@@ -140,7 +140,7 @@ export function useAgorClient(options: UseAgorClientOptions = {}): UseAgorClient
             resolve();
           });
 
-          client.io.once('connect_error', err => {
+          client.io.once('connect_error', (err) => {
             clearTimeout(timeout);
             reject(err);
           });

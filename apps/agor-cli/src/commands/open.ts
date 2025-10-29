@@ -28,7 +28,7 @@ export default class Open extends Command {
       this.log(chalk.red('✗ Daemon is not running'));
       this.log('');
       this.log('Start the daemon first:');
-      this.log('  ' + chalk.cyan('agor daemon start'));
+      this.log(`  ${chalk.cyan('agor daemon start')}`);
       this.log('');
       this.exit(1);
     }
@@ -41,7 +41,7 @@ export default class Open extends Command {
       this.log(chalk.green('✓ Agor UI is ready'));
       this.log('');
       this.log('Open this URL in your browser:');
-      this.log('  ' + chalk.cyan(uiUrl));
+      this.log(`  ${chalk.cyan(uiUrl)}`);
       this.log('');
       this.log(chalk.dim('(GitHub Codespaces will automatically forward the port)'));
       this.log('');
@@ -69,11 +69,11 @@ export default class Open extends Command {
 
       await execAsync(command);
       this.log(chalk.green('✓ Browser opened'));
-    } catch (error) {
+    } catch (_error) {
       this.log(chalk.yellow('⚠ Could not open browser automatically'));
       this.log('');
       this.log('Visit this URL manually:');
-      this.log('  ' + chalk.cyan(uiUrl));
+      this.log(`  ${chalk.cyan(uiUrl)}`);
       this.log('');
     }
   }

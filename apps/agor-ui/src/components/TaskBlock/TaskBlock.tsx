@@ -25,7 +25,6 @@ import {
   DownOutlined,
   FileTextOutlined,
   GithubOutlined,
-  LoadingOutlined,
   LockOutlined,
   MinusCircleOutlined,
   RightOutlined,
@@ -41,7 +40,6 @@ import { useTaskEvents } from '../../hooks/useTaskEvents';
 import { AgentChain } from '../AgentChain';
 import { MessageBlock } from '../MessageBlock';
 import { CreatedByTag } from '../metadata/CreatedByTag';
-import { PermissionRequestBlock } from '../PermissionRequestBlock';
 import {
   ContextWindowPill,
   GitStatePill,
@@ -86,7 +84,7 @@ function isAgentChainMessage(message: Message): boolean {
   // EXCEPTION: User messages with ONLY tool_result blocks are part of agent execution
   // (tool results are technically "user" role per Anthropic API, but they're automated responses)
   if (message.role === MessageRole.USER && Array.isArray(message.content)) {
-    const hasOnlyToolResults = message.content.every(block => block.type === 'tool_result');
+    const hasOnlyToolResults = message.content.every((block) => block.type === 'tool_result');
     if (hasOnlyToolResults) return true; // Part of agent chain, don't break it
   }
 
@@ -103,9 +101,9 @@ function isAgentChainMessage(message: Message): boolean {
 
   // Array content - check what types of blocks we have
   if (Array.isArray(message.content)) {
-    const hasTools = message.content.some(block => block.type === 'tool_use');
+    const hasTools = message.content.some((block) => block.type === 'tool_use');
     const hasThinking = false; // 'thinking' type not in current ContentBlock union
-    const hasText = message.content.some(block => block.type === 'text');
+    const hasText = message.content.some((block) => block.type === 'text');
 
     // If it has tools BUT ALSO has text, treat as mixed message
     // We'll split it: tools go to AgentChain, text goes to MessageBlock
@@ -222,7 +220,7 @@ export const TaskBlock: React.FC<TaskBlockProps> = ({
       : 0;
 
   // Color-code based on usage: green (<50%), yellow (50-80%), red (>80%)
-  const getContextWindowColor = () => {
+  const _getContextWindowColor = () => {
     if (contextWindowPercentage < 50) {
       return token.colorSuccessBg; // Light green
     }
@@ -334,7 +332,7 @@ export const TaskBlock: React.FC<TaskBlockProps> = ({
                     const content = block.message.content as PermissionRequestContent;
                     if (content.status === PermissionStatus.PENDING) {
                       // Check if this is the first pending permission request
-                      isFirstPending = !blocks.slice(0, blockIndex).some(b => {
+                      isFirstPending = !blocks.slice(0, blockIndex).some((b) => {
                         if (b.type === 'message' && b.message.type === 'permission_request') {
                           const c = b.message.content as PermissionRequestContent;
                           return c.status === PermissionStatus.PENDING;

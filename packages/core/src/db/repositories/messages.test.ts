@@ -5,16 +5,16 @@
  * range filtering, and JSON data field handling.
  */
 
-import { describe, expect, it } from 'vitest';
 import type { Message, MessageID, SessionID, TaskID, UUID } from '@agor/core/types';
 import { MessageRole } from '@agor/core/types';
+import { describe, expect } from 'vitest';
 import { generateId } from '../../lib/ids';
 import { dbTest } from '../test-helpers';
-import { SessionRepository } from './sessions';
 import { MessagesRepository } from './messages';
-import { WorktreeRepository } from './worktrees';
 import { RepoRepository } from './repos';
+import { SessionRepository } from './sessions';
 import { TaskRepository } from './tasks';
+import { WorktreeRepository } from './worktrees';
 
 // Counter to ensure unique repo/worktree names across tests
 let testCounter = 0;
@@ -305,7 +305,7 @@ describe('MessagesRepository.findBySessionId', () => {
     expect(sessionMessages[0].index).toBe(1);
     expect(sessionMessages[1].index).toBe(3);
     expect(sessionMessages[2].index).toBe(5);
-    expect(sessionMessages.every(m => m.session_id === sessionId1)).toBe(true);
+    expect(sessionMessages.every((m) => m.session_id === sessionId1)).toBe(true);
   });
 });
 
@@ -334,7 +334,7 @@ describe('MessagesRepository.findByTaskId', () => {
     expect(taskMessages[0].index).toBe(1);
     expect(taskMessages[1].index).toBe(3);
     expect(taskMessages[2].index).toBe(5);
-    expect(taskMessages.every(m => m.task_id === taskId1)).toBe(true);
+    expect(taskMessages.every((m) => m.task_id === taskId1)).toBe(true);
   });
 });
 
@@ -358,8 +358,8 @@ describe('MessagesRepository.findByRange', () => {
     const rangeMessages = await messages.findByRange(sessionId1, 2, 5);
 
     expect(rangeMessages).toHaveLength(4); // 2, 3, 4, 5 (inclusive)
-    expect(rangeMessages.map(m => m.index)).toEqual([2, 3, 4, 5]);
-    expect(rangeMessages.every(m => m.session_id === sessionId1)).toBe(true);
+    expect(rangeMessages.map((m) => m.index)).toEqual([2, 3, 4, 5]);
+    expect(rangeMessages.every((m) => m.session_id === sessionId1)).toBe(true);
   });
 
   dbTest('should handle sparse indexes in range', async ({ db }) => {

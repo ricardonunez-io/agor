@@ -98,7 +98,7 @@ async function migrate() {
 // Run migration
 migrate()
   .then(() => process.exit(0))
-  .catch(error => {
+  .catch((error) => {
     console.error('Fatal error:', error);
     process.exit(1);
   });

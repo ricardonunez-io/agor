@@ -5,7 +5,7 @@
  */
 
 import type { AgorClient } from '@agor/core/api';
-import type { AgenticToolName, Repo, Session, SessionID, Worktree } from '@agor/core/types';
+import type { AgenticToolName, Session, SessionID } from '@agor/core/types';
 import { getDefaultPermissionMode, SessionStatus } from '@agor/core/types';
 import { useState } from 'react';
 import type { NewSessionConfig } from '../components/NewSessionModal';

@@ -2,7 +2,7 @@
  * `agor daemon logs` - View daemon logs
  */
 
-import { Args, Command, Flags } from '@oclif/core';
+import { Command, Flags } from '@oclif/core';
 import chalk from 'chalk';
 import { isInstalledPackage } from '../../lib/context.js';
 import { getLogFilePath, readLogs } from '../../lib/daemon-manager.js';
@@ -32,7 +32,7 @@ export default class DaemonLogs extends Command {
       this.log(chalk.yellow('⚠ Daemon logs are only available in production mode.'));
       this.log('');
       this.log(chalk.bold('In development, view daemon output in the terminal where you ran:'));
-      this.log('  ' + chalk.cyan('cd apps/agor-daemon && pnpm dev'));
+      this.log(`  ${chalk.cyan('cd apps/agor-daemon && pnpm dev')}`);
       this.log('');
       this.exit(1);
     }

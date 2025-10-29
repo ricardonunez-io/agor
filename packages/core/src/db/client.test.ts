@@ -5,14 +5,14 @@
  * Does NOT test LibSQL/Drizzle internals - only our wrapper logic.
  */
 
-import { describe, expect, it, vi } from 'vitest';
 import { createClient } from '@libsql/client';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createDatabase,
   createLocalDatabase,
   DatabaseConnectionError,
-  DEFAULT_DB_PATH,
   type DbConfig,
+  DEFAULT_DB_PATH,
 } from './client';
 
 // Mock @libsql/client to avoid actual database connections

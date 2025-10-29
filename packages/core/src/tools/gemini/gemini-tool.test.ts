@@ -11,13 +11,13 @@
  */
 
 import { execSync } from 'node:child_process';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { generateId } from '../../lib/ids';
-import type { Message, MessageID, SessionID, TaskID } from '../../types';
+import type { Message, SessionID, TaskID } from '../../types';
 import { MessageRole } from '../../types';
 import type { StreamingCallbacks } from '../base/types';
-import { DEFAULT_GEMINI_MODEL } from './models';
 import { GeminiTool } from './gemini-tool';
+import { DEFAULT_GEMINI_MODEL } from './models';
 import type { GeminiPromptService, GeminiStreamEvent } from './prompt-service';
 
 // Mock dependencies
@@ -262,7 +262,13 @@ describe('GeminiTool - executePromptWithStreaming', () => {
     (tool as any).promptService = mockPromptService;
 
     const sessionId = 'test-session' as SessionID;
-    await tool.executePromptWithStreaming(sessionId, 'test', undefined, undefined, streamingCallbacks);
+    await tool.executePromptWithStreaming(
+      sessionId,
+      'test',
+      undefined,
+      undefined,
+      streamingCallbacks
+    );
 
     // Should start streaming
     expect(streamingCallbacks.onStreamStart).toHaveBeenCalledWith(
@@ -330,10 +336,7 @@ describe('GeminiTool - executePromptWithStreaming', () => {
 
     (tool as any).promptService = mockPromptService;
 
-    const result = await tool.executePromptWithStreaming(
-      'session-id' as SessionID,
-      'test'
-    );
+    const result = await tool.executePromptWithStreaming('session-id' as SessionID, 'test');
 
     expect(result).toMatchObject({
       userMessageId: expect.any(String),
@@ -372,10 +375,7 @@ describe('GeminiTool - executePromptWithStreaming', () => {
 
     (tool as any).promptService = mockPromptService;
 
-    const result = await tool.executePromptWithStreaming(
-      'session-id' as SessionID,
-      'test'
-    );
+    const result = await tool.executePromptWithStreaming('session-id' as SessionID, 'test');
 
     expect(result.assistantMessageIds).toHaveLength(2);
     expect(messagesService.create).toHaveBeenCalledTimes(3); // 1 user + 2 assistant
@@ -397,11 +397,7 @@ describe('GeminiTool - executePromptWithStreaming', () => {
     (tool as any).promptService = mockPromptService;
 
     const taskId = generateId() as TaskID;
-    await tool.executePromptWithStreaming(
-      'session-id' as SessionID,
-      'test',
-      taskId
-    );
+    await tool.executePromptWithStreaming('session-id' as SessionID, 'test', taskId);
 
     expect(messagesService.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -496,11 +492,7 @@ describe('GeminiTool - executePromptWithStreaming', () => {
     (tool as any).promptService = mockPromptService;
 
     const taskId = generateId() as TaskID;
-    await tool.executePromptWithStreaming(
-      'session-id' as SessionID,
-      'test',
-      taskId
-    );
+    await tool.executePromptWithStreaming('session-id' as SessionID, 'test', taskId);
 
     expect(tasksService.patch).toHaveBeenCalledWith(taskId, {
       model: DEFAULT_GEMINI_MODEL,
@@ -549,9 +541,9 @@ describe('GeminiTool - executePrompt', () => {
   it('should throw if not initialized with repositories', async () => {
     const tool = new GeminiTool();
 
-    await expect(
-      tool.executePrompt('session-id' as SessionID, 'test prompt')
-    ).rejects.toThrow('GeminiTool not initialized with repositories');
+    await expect(tool.executePrompt('session-id' as SessionID, 'test prompt')).rejects.toThrow(
+      'GeminiTool not initialized with repositories'
+    );
   });
 
   it('should skip partial events in non-streaming mode', async () => {
@@ -724,11 +716,7 @@ describe('GeminiTool - stopTask', () => {
     const sessionsRepo = createMockSessionsRepo();
     const mockPromptService = createMockPromptService();
 
-    const tool = new GeminiTool(
-      messagesRepo as any,
-      sessionsRepo as any,
-      'test-key'
-    );
+    const tool = new GeminiTool(messagesRepo as any, sessionsRepo as any, 'test-key');
 
     (tool as any).promptService = mockPromptService;
 
@@ -744,11 +732,7 @@ describe('GeminiTool - stopTask', () => {
     const sessionsRepo = createMockSessionsRepo();
     const mockPromptService = createMockPromptService();
 
-    const tool = new GeminiTool(
-      messagesRepo as any,
-      sessionsRepo as any,
-      'test-key'
-    );
+    const tool = new GeminiTool(messagesRepo as any, sessionsRepo as any, 'test-key');
 
     (tool as any).promptService = mockPromptService;
 
@@ -776,11 +760,7 @@ describe('GeminiTool - stopTask', () => {
       }),
     };
 
-    const tool = new GeminiTool(
-      messagesRepo as any,
-      sessionsRepo as any,
-      'test-key'
-    );
+    const tool = new GeminiTool(messagesRepo as any, sessionsRepo as any, 'test-key');
 
     (tool as any).promptService = mockPromptService;
 
@@ -797,11 +777,7 @@ describe('GeminiTool - stopTask', () => {
     const sessionsRepo = createMockSessionsRepo();
     const mockPromptService = createMockPromptService();
 
-    const tool = new GeminiTool(
-      messagesRepo as any,
-      sessionsRepo as any,
-      'test-key'
-    );
+    const tool = new GeminiTool(messagesRepo as any, sessionsRepo as any, 'test-key');
 
     (tool as any).promptService = mockPromptService;
 
@@ -856,10 +832,7 @@ describe('GeminiTool - Edge Cases', () => {
 
     (tool as any).promptService = mockPromptService;
 
-    const result = await tool.executePromptWithStreaming(
-      'session-id' as SessionID,
-      'test'
-    );
+    const result = await tool.executePromptWithStreaming('session-id' as SessionID, 'test');
 
     expect(result.assistantMessageIds).toHaveLength(1);
   });
@@ -905,9 +878,7 @@ describe('GeminiTool - Edge Cases', () => {
       promptSessionStreaming: vi.fn().mockImplementation(async function* () {
         yield {
           type: 'complete',
-          content: [
-            { type: 'tool_use', id: 'tool-1', name: 'test', input: {} },
-          ],
+          content: [{ type: 'tool_use', id: 'tool-1', name: 'test', input: {} }],
           toolUses: [{ id: 'tool-1', name: 'test', input: {} }],
           resolvedModel: DEFAULT_GEMINI_MODEL,
         } as GeminiStreamEvent;
@@ -1160,9 +1131,7 @@ describe('GeminiTool - Type Safety', () => {
 
     const assistantMessageCall = vi.mocked(messagesService.create).mock.calls[1][0];
     expect(Array.isArray(assistantMessageCall.content)).toBe(true);
-    expect(assistantMessageCall.content).toEqual([
-      { type: 'text', text: 'Hello world' },
-    ]);
+    expect(assistantMessageCall.content).toEqual([{ type: 'text', text: 'Hello world' }]);
   });
 
   it('should properly type user message content as string', async () => {

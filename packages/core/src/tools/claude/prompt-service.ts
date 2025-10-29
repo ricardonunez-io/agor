@@ -141,23 +141,28 @@ export class ClaudePromptService {
       query: result,
       resolvedModel,
       getStderr,
-    } = await setupQuery(sessionId, prompt, {
-      sessionsRepo: this.sessionsRepo,
-      messagesRepo: this.messagesRepo,
-      apiKey: this.apiKey,
-      sessionMCPRepo: this.sessionMCPRepo,
-      mcpServerRepo: this.mcpServerRepo,
-      permissionService: this.permissionService,
-      tasksService: this.tasksService,
-      sessionsService: this.sessionsService,
-      messagesService: this.messagesService,
-      worktreesRepo: this.worktreesRepo,
-      permissionLocks: this.permissionLocks,
-    }, {
-      taskId,
-      permissionMode,
-      resume: true,
-    });
+    } = await setupQuery(
+      sessionId,
+      prompt,
+      {
+        sessionsRepo: this.sessionsRepo,
+        messagesRepo: this.messagesRepo,
+        apiKey: this.apiKey,
+        sessionMCPRepo: this.sessionMCPRepo,
+        mcpServerRepo: this.mcpServerRepo,
+        permissionService: this.permissionService,
+        tasksService: this.tasksService,
+        sessionsService: this.sessionsService,
+        messagesService: this.messagesService,
+        worktreesRepo: this.worktreesRepo,
+        permissionLocks: this.permissionLocks,
+      },
+      {
+        taskId,
+        permissionMode,
+        resume: true,
+      }
+    );
 
     // Get session for reference (needed to check existing sdk_session_id)
     const session = await this.sessionsRepo?.findById(sessionId);
@@ -221,7 +226,7 @@ export class ClaudePromptService {
         }
 
         // If we got an end event, break the outer loop
-        if (events.some(e => e.type === 'end')) {
+        if (events.some((e) => e.type === 'end')) {
           break;
         }
       }
@@ -269,23 +274,28 @@ export class ClaudePromptService {
    * @returns Complete assistant response with metadata
    */
   async promptSession(sessionId: SessionID, prompt: string): Promise<PromptResult> {
-    const { query: result, getStderr } = await setupQuery(sessionId, prompt, {
-      sessionsRepo: this.sessionsRepo,
-      messagesRepo: this.messagesRepo,
-      apiKey: this.apiKey,
-      sessionMCPRepo: this.sessionMCPRepo,
-      mcpServerRepo: this.mcpServerRepo,
-      permissionService: this.permissionService,
-      tasksService: this.tasksService,
-      sessionsService: this.sessionsService,
-      messagesService: this.messagesService,
-      worktreesRepo: this.worktreesRepo,
-      permissionLocks: this.permissionLocks,
-    }, {
-      taskId: undefined,
-      permissionMode: undefined,
-      resume: false,
-    });
+    const { query: result, getStderr } = await setupQuery(
+      sessionId,
+      prompt,
+      {
+        sessionsRepo: this.sessionsRepo,
+        messagesRepo: this.messagesRepo,
+        apiKey: this.apiKey,
+        sessionMCPRepo: this.sessionMCPRepo,
+        mcpServerRepo: this.mcpServerRepo,
+        permissionService: this.permissionService,
+        tasksService: this.tasksService,
+        sessionsService: this.sessionsService,
+        messagesService: this.messagesService,
+        worktreesRepo: this.worktreesRepo,
+        permissionLocks: this.permissionLocks,
+      },
+      {
+        taskId: undefined,
+        permissionMode: undefined,
+        resume: false,
+      }
+    );
 
     // Get session for reference
     const session = await this.sessionsRepo?.findById(sessionId);

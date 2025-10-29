@@ -45,7 +45,7 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({
 }) => {
   const isEmpty = stats.repoCount === 0 && stats.worktreeCount === 0 && stats.sessionCount === 0;
   const isActive = stats.sessionCount > 0;
-  const isPartial = !isEmpty && !isActive;
+  const _isPartial = !isEmpty && !isActive;
 
   const handleDismiss = () => {
     onDismiss();

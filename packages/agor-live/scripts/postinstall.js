@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
+import { existsSync, mkdirSync, symlinkSync, unlinkSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
-import { existsSync, mkdirSync, symlinkSync, unlinkSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,7 +25,7 @@ try {
   if (existsSync(coreSymlink)) {
     try {
       unlinkSync(coreSymlink);
-    } catch (err) {
+    } catch (_err) {
       // Ignore errors if it's not a symlink
     }
   }

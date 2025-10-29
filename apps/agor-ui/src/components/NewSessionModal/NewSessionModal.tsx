@@ -91,7 +91,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   };
 
   const handleCreate = () => {
-    form.validateFields().then(values => {
+    form.validateFields().then((values) => {
       const config: NewSessionConfig = {
         worktree_id: worktreeId,
         agent: selectedAgent,
@@ -162,7 +162,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
               marginTop: 8,
             }}
           >
-            {availableAgents.map(agent => (
+            {availableAgents.map((agent) => (
               <AgentSelectionCard
                 key={agent.id}
                 agent={agent}

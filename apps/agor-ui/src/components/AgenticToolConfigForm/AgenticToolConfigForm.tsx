@@ -10,7 +10,6 @@
  */
 
 import type { AgenticToolName, MCPServer } from '@agor/core/types';
-import { getDefaultPermissionMode } from '@agor/core/types';
 import { Form } from 'antd';
 import { MCPServerSelect } from '../MCPServerSelect';
 import { ModelSelector } from '../ModelSelector';

@@ -1,5 +1,5 @@
 // src/types/worktree.ts
-import type { BoardID, SessionID, UUID, WorktreeID } from './id';
+import type { BoardID, UUID, WorktreeID } from './id';
 import type { WorktreeName } from './repo';
 
 /**

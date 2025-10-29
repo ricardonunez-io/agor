@@ -5,15 +5,11 @@
  * board object management (zones/text), and JSON field handling.
  */
 
-import { describe, expect, it } from 'vitest';
 import type { Board, BoardObject, UUID } from '@agor/core/types';
+import { describe, expect } from 'vitest';
 import { generateId } from '../../lib/ids';
 import { dbTest } from '../test-helpers';
-import {
-  AmbiguousIdError,
-  EntityNotFoundError,
-  RepositoryError,
-} from './base';
+import { AmbiguousIdError, EntityNotFoundError } from './base';
 import { BoardRepository } from './boards';
 
 /**
@@ -64,7 +60,9 @@ describe('BoardRepository.create', () => {
     const created = await repo.create(data);
 
     expect(created.board_id).toBeDefined();
-    expect(created.board_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(created.board_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    );
   });
 
   dbTest('should default to "Untitled Board" if name not provided', async ({ db }) => {
@@ -365,7 +363,7 @@ describe('BoardRepository.findAll', () => {
     const boards = await repo.findAll();
 
     expect(boards).toHaveLength(3);
-    expect(boards.map(b => b.name).sort()).toEqual(['Board 1', 'Board 2', 'Board 3']);
+    expect(boards.map((b) => b.name).sort()).toEqual(['Board 1', 'Board 2', 'Board 3']);
   });
 
   dbTest('should return fully populated board objects', async ({ db }) => {
@@ -473,7 +471,7 @@ describe('BoardRepository.update', () => {
     const data = createBoardData();
     const created = await repo.create(data);
 
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     const updated = await repo.update(data.board_id!, { name: 'Updated' });
 
@@ -485,9 +483,7 @@ describe('BoardRepository.update', () => {
   dbTest('should throw EntityNotFoundError for non-existent ID', async ({ db }) => {
     const repo = new BoardRepository(db);
 
-    await expect(
-      repo.update('99999999', { name: 'Updated' })
-    ).rejects.toThrow(EntityNotFoundError);
+    await expect(repo.update('99999999', { name: 'Updated' })).rejects.toThrow(EntityNotFoundError);
   });
 
   dbTest('should preserve unchanged fields', async ({ db }) => {
@@ -597,7 +593,7 @@ describe('BoardRepository.getDefault', () => {
     expect(first.board_id).toBe(second.board_id);
 
     const allBoards = await repo.findAll();
-    const defaultBoards = allBoards.filter(b => b.slug === 'default');
+    const defaultBoards = allBoards.filter((b) => b.slug === 'default');
     expect(defaultBoards).toHaveLength(1);
   });
 });
@@ -709,9 +705,9 @@ describe('BoardRepository.upsertBoardObject', () => {
     const repo = new BoardRepository(db);
     const textObject: BoardObject = { type: 'text', x: 100, y: 200, content: 'Test' };
 
-    await expect(
-      repo.upsertBoardObject('99999999', 'text-1', textObject)
-    ).rejects.toThrow(EntityNotFoundError);
+    await expect(repo.upsertBoardObject('99999999', 'text-1', textObject)).rejects.toThrow(
+      EntityNotFoundError
+    );
   });
 });
 
@@ -789,9 +785,7 @@ describe('BoardRepository.removeBoardObject', () => {
   dbTest('should throw EntityNotFoundError for non-existent board', async ({ db }) => {
     const repo = new BoardRepository(db);
 
-    await expect(
-      repo.removeBoardObject('99999999', 'text-1')
-    ).rejects.toThrow(EntityNotFoundError);
+    await expect(repo.removeBoardObject('99999999', 'text-1')).rejects.toThrow(EntityNotFoundError);
   });
 });
 

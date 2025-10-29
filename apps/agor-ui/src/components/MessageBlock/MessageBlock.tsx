@@ -100,7 +100,7 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({
           }
           onDeny={
             canInteract && onPermissionDecision && sessionId && taskId
-              ? messageId => {
+              ? (messageId) => {
                   onPermissionDecision(
                     sessionId,
                     content.request_id,
@@ -132,7 +132,7 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({
   const shouldUseTyping = isStreaming && hasContent;
 
   // Get current user's emoji
-  const currentUser = users.find(u => u.user_id === currentUserId);
+  const currentUser = users.find((u) => u.user_id === currentUserId);
   const userEmoji = currentUser?.emoji || '👤';
 
   // Skip rendering if message has no content
@@ -199,8 +199,8 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({
   const { textBeforeTools, toolBlocks, textAfterTools } = getContentBlocks();
 
   // Skip rendering if message has no meaningful content
-  const hasTextBefore = textBeforeTools.some(text => text.trim().length > 0);
-  const hasTextAfter = textAfterTools.some(text => text.trim().length > 0);
+  const hasTextBefore = textBeforeTools.some((text) => text.trim().length > 0);
+  const hasTextAfter = textAfterTools.some((text) => text.trim().length > 0);
   const hasTools = toolBlocks.length > 0;
 
   if (!hasTextBefore && !hasTextAfter && !hasTools) {

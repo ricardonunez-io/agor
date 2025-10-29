@@ -29,14 +29,13 @@ import {
 import type { TokenUsage } from '../../utils/pricing';
 import type { ImportOptions, ITool, SessionData, ToolCapabilities } from '../base';
 import { loadClaudeSession } from './import/load-session';
+import { transcriptsToMessages } from './import/message-converter';
 import {
   createAssistantMessage,
   createUserMessage,
   createUserMessageFromContent,
   extractTokenUsage,
 } from './message-builder';
-import { transcriptsToMessages } from './import/message-converter';
-import { DEFAULT_CLAUDE_MODEL } from './models';
 import { ClaudePromptService } from './prompt-service';
 
 /**
@@ -197,7 +196,13 @@ export class ClaudeTool implements ITool {
     let nextIndex = existingMessages.length;
 
     // Create user message
-    const userMessage = await createUserMessage(sessionId, prompt, taskId, nextIndex++, this.messagesService!);
+    const userMessage = await createUserMessage(
+      sessionId,
+      prompt,
+      taskId,
+      nextIndex++,
+      this.messagesService!
+    );
 
     // Execute prompt via Agent SDK with streaming
     const assistantMessageIds: MessageID[] = [];
@@ -442,7 +447,13 @@ export class ClaudeTool implements ITool {
     let nextIndex = existingMessages.length;
 
     // Create user message
-    const userMessage = await createUserMessage(sessionId, prompt, taskId, nextIndex++, this.messagesService!);
+    const userMessage = await createUserMessage(
+      sessionId,
+      prompt,
+      taskId,
+      nextIndex++,
+      this.messagesService!
+    );
 
     // Execute prompt via Agent SDK
     const assistantMessageIds: MessageID[] = [];

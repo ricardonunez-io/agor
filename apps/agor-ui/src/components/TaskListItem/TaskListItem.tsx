@@ -6,7 +6,6 @@ import {
   EditOutlined,
   FileTextOutlined,
   GithubOutlined,
-  LoadingOutlined,
   MessageOutlined,
   ToolOutlined,
 } from '@ant-design/icons';

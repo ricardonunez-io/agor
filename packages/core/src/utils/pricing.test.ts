@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  calculateTokenCost,
-  formatCost,
-  formatTokenCount,
-  type TokenUsage,
-} from './pricing';
 import type { AgenticToolName } from '../types';
+import { calculateTokenCost, formatCost, formatTokenCount, type TokenUsage } from './pricing';
 
 describe('calculateTokenCost', () => {
   describe('claude-code', () => {

@@ -20,7 +20,6 @@ import {
   CloseCircleOutlined,
   DownOutlined,
   FileTextOutlined,
-  LoadingOutlined,
   RightOutlined,
 } from '@ant-design/icons';
 import type { ThoughtChainProps } from '@ant-design/x';
@@ -399,10 +398,10 @@ export const AgentChain: React.FC<AgentChainProps> = ({ messages }) => {
           cursor: 'pointer',
           transition: 'all 0.2s',
         }}
-        onMouseEnter={e => {
+        onMouseEnter={(e) => {
           e.currentTarget.style.borderColor = token.colorPrimaryBorder;
         }}
-        onMouseLeave={e => {
+        onMouseLeave={(e) => {
           e.currentTarget.style.borderColor = token.colorBorder;
         }}
       >

@@ -48,7 +48,7 @@ export async function appendSessionContextToCLAUDEmd(
     let existingContent = '';
     try {
       existingContent = await fs.readFile(claudeMdPath, 'utf-8');
-    } catch (readError) {
+    } catch (_readError) {
       // File doesn't exist - that's ok, we'll create it
       console.log(`📝 CLAUDE.md doesn't exist at ${claudeMdPath}, will create it`);
     }

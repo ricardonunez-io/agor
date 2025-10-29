@@ -7,7 +7,6 @@
 
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk/sdk';
 import type { MCPServerRepository } from '../../db/repositories/mcp-servers';

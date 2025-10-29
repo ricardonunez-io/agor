@@ -5,21 +5,21 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import yaml from 'js-yaml';
-import type { AgorConfig } from './types';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getAgorHome,
   getConfigPath,
+  getConfigValue,
+  getDaemonUrl,
   getDefaultConfig,
+  initConfig,
   loadConfig,
   saveConfig,
-  initConfig,
-  getConfigValue,
   setConfigValue,
   unsetConfigValue,
-  getDaemonUrl,
 } from './config-manager';
+import type { AgorConfig } from './types';
 
 /**
  * Helper: Create test config data
@@ -96,14 +96,14 @@ describe('getDefaultConfig', () => {
 
 describe('loadConfig', () => {
   let tempDir: string;
-  let originalHome: string;
+  let _originalHome: string;
 
   beforeEach(async () => {
     // Create temp directory for testing
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agor-test-'));
 
     // Mock os.homedir to use temp directory
-    originalHome = os.homedir();
+    _originalHome = os.homedir();
     vi.spyOn(os, 'homedir').mockReturnValue(tempDir);
   });
 

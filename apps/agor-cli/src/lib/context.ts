@@ -49,7 +49,7 @@ export function getDaemonPath(): string | null {
 
   // Find the agor-live package root by looking for dist/cli in the path
   // Then construct path to daemon from there
-  const cliDistIndex = dirname.indexOf(path.sep + 'dist' + path.sep + 'cli');
+  const cliDistIndex = dirname.indexOf(`${path.sep}dist${path.sep}cli`);
   if (cliDistIndex === -1) {
     // Fallback: couldn't find dist/cli, use relative path
     return path.resolve(dirname, '../../daemon/index.js');

@@ -6,7 +6,7 @@
  */
 
 import { BoardRepository, type Database } from '@agor/core/db';
-import type { Board, BoardObject, QueryParams, SessionID } from '@agor/core/types';
+import type { Board, BoardObject, QueryParams } from '@agor/core/types';
 import { DrizzleService } from '../adapters/drizzle';
 
 /**

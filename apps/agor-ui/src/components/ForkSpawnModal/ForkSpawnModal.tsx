@@ -85,7 +85,7 @@ export const ForkSpawnModal: React.FC<ForkSpawnModalProps> = ({
         </Typography.Text>
         <TextArea
           value={prompt}
-          onChange={e => setPrompt(e.target.value)}
+          onChange={(e) => setPrompt(e.target.value)}
           placeholder={
             action === 'fork' ? 'Try a different approach by...' : 'Work on this subsession...'
           }

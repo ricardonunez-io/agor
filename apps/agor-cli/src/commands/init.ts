@@ -89,7 +89,7 @@ export default class Init extends Command {
   private async listDirs(path: string): Promise<string[]> {
     try {
       const entries = await readdir(path, { withFileTypes: true });
-      return entries.filter(e => e.isDirectory()).map(e => e.name);
+      return entries.filter((e) => e.isDirectory()).map((e) => e.name);
     } catch {
       return [];
     }
@@ -520,7 +520,7 @@ export default class Init extends Command {
       ]);
 
       await setConfigValue('credentials.ANTHROPIC_API_KEY', anthropicKey);
-      this.log(chalk.green('   ✓') + ' Anthropic API key saved');
+      this.log(`${chalk.green('   ✓')} Anthropic API key saved`);
     }
 
     // OpenAI API Key
@@ -550,7 +550,7 @@ export default class Init extends Command {
       ]);
 
       await setConfigValue('credentials.OPENAI_API_KEY', openaiKey);
-      this.log(chalk.green('   ✓') + ' OpenAI API key saved');
+      this.log(`${chalk.green('   ✓')} OpenAI API key saved`);
     }
 
     // Google Gemini API Key
@@ -580,7 +580,7 @@ export default class Init extends Command {
       ]);
 
       await setConfigValue('credentials.GEMINI_API_KEY', geminiKey);
-      this.log(chalk.green('   ✓') + ' Gemini API key saved');
+      this.log(`${chalk.green('   ✓')} Gemini API key saved`);
     }
 
     this.log('');

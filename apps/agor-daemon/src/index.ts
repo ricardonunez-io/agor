@@ -41,16 +41,7 @@ import {
 import { type PermissionDecision, PermissionService } from '@agor/core/permissions';
 import { registerHandlebarsHelpers } from '@agor/core/templates/handlebars-helpers';
 import { ClaudeTool, CodexTool, GeminiTool } from '@agor/core/tools';
-import type {
-  Board,
-  Message,
-  Paginated,
-  Params,
-  Session,
-  SessionID,
-  Task,
-  User,
-} from '@agor/core/types';
+import type { Message, Paginated, Params, Session, SessionID, Task, User } from '@agor/core/types';
 import { SessionStatus, TaskStatus } from '@agor/core/types';
 import type { TokenUsage } from '@agor/core/utils/pricing';
 // Import Claude SDK's PermissionMode type for ClaudeTool method signatures
@@ -246,7 +237,7 @@ async function main() {
         maxHttpBufferSize: 1e6, // 1MB max message size
         transports: ['websocket', 'polling'], // Prefer WebSocket
       },
-      io => {
+      (io) => {
         // Store Socket.io server instance for shutdown
         socketServer = io;
 
@@ -255,7 +246,7 @@ async function main() {
         let lastLoggedCount = 0;
 
         // Configure Socket.io for cursor presence events
-        io.on('connection', socket => {
+        io.on('connection', (socket) => {
           activeConnections++;
           console.log(
             `🔌 Socket.io connection established: ${socket.id} (total: ${activeConnections})`
@@ -305,7 +296,7 @@ async function main() {
           });
 
           // Track disconnections
-          socket.on('disconnect', reason => {
+          socket.on('disconnect', (reason) => {
             activeConnections--;
             console.log(
               `🔌 Socket.io disconnected: ${socket.id} (reason: ${reason}, remaining: ${activeConnections})`
@@ -313,7 +304,7 @@ async function main() {
           });
 
           // Handle socket errors
-          socket.on('error', error => {
+          socket.on('error', (error) => {
             console.error(`❌ Socket.io error on ${socket.id}:`, error);
           });
         });
@@ -330,7 +321,7 @@ async function main() {
   );
 
   // Configure channels to broadcast events to all connected clients
-  app.on('connection', connection => {
+  app.on('connection', (connection) => {
     // Join all connections to the 'everybody' channel
     app.channel('everybody').join(connection);
   });
@@ -484,7 +475,7 @@ async function main() {
       // Return all session-MCP relationships
       // This allows the UI to fetch all relationships in one call
       const rows = await db.select().from(sessionMcpServers).all();
-      return rows.map(row => ({
+      return rows.map((row) => ({
         session_id: row.session_id,
         mcp_server_id: row.mcp_server_id,
         enabled: Boolean(row.enabled),
@@ -501,7 +492,7 @@ async function main() {
   app.service('sessions').hooks({
     before: {
       create: [
-        async context => {
+        async (context) => {
           // Inject user_id if authenticated, otherwise use 'anonymous'
           const user = (context.params as { user?: { user_id: string; email: string } }).user;
           const userId = user?.user_id || 'anonymous';
@@ -515,7 +506,7 @@ async function main() {
           );
 
           if (Array.isArray(context.data)) {
-            context.data.forEach(item => {
+            context.data.forEach((item) => {
               if (!item.created_by) (item as Record<string, unknown>).created_by = userId;
             });
           } else if (context.data && !context.data.created_by) {
@@ -550,7 +541,7 @@ async function main() {
     },
     after: {
       create: [
-        async context => {
+        async (context) => {
           // Generate MCP session token for this session
           const { generateSessionToken } = await import('./mcp/tokens.js');
           const session = context.result as Session;
@@ -584,7 +575,7 @@ async function main() {
   app.service('tasks').hooks({
     before: {
       create: [
-        async context => {
+        async (context) => {
           // Inject user_id if authenticated, otherwise use 'anonymous'
           const user = (context.params as { user?: { user_id: string; email: string } }).user;
           const userId = user?.user_id || 'anonymous';
@@ -598,7 +589,7 @@ async function main() {
           );
 
           if (Array.isArray(context.data)) {
-            context.data.forEach(item => {
+            context.data.forEach((item) => {
               if (!item.created_by) (item as Record<string, unknown>).created_by = userId;
             });
           } else if (context.data && !context.data.created_by) {
@@ -613,14 +604,14 @@ async function main() {
   app.service('boards').hooks({
     before: {
       create: [
-        async context => {
+        async (context) => {
           // Inject user_id if authenticated, otherwise use 'anonymous'
           const userId =
             (context.params as { user?: { user_id: string; email: string } }).user?.user_id ||
             'anonymous';
 
           if (Array.isArray(context.data)) {
-            context.data.forEach(item => {
+            context.data.forEach((item) => {
               if (!item.created_by) (item as Record<string, unknown>).created_by = userId;
             });
           } else if (context.data && !context.data.created_by) {
@@ -630,7 +621,7 @@ async function main() {
         },
       ],
       patch: [
-        async context => {
+        async (context) => {
           // Handle atomic board object operations via _action parameter
           const contextData = context.data || {};
           const { _action, objectId, objectData, objects, deleteAssociatedSessions } =
@@ -755,7 +746,7 @@ async function main() {
   app.service('authentication').hooks({
     after: {
       create: [
-        async context => {
+        async (context) => {
           // Only add refresh token for non-anonymous authentication
           if (context.result?.user && context.result.user.user_id !== 'anonymous') {
             // Generate refresh token (30 days)
@@ -1031,7 +1022,7 @@ async function main() {
             chunk,
           });
         },
-        onStreamEnd: messageId => {
+        onStreamEnd: (messageId) => {
           console.debug(
             `📡 [${new Date().toISOString()}] Streaming end: ${messageId.substring(0, 8)}`
           );
@@ -1112,7 +1103,7 @@ async function main() {
         }
 
         executeMethod
-          .then(async result => {
+          .then(async (result) => {
             try {
               // PHASE 3: Mark task as completed and update message count
               // (Messages already created with task_id, no need to patch)
@@ -1189,7 +1180,7 @@ async function main() {
               });
             }
           })
-          .catch(async error => {
+          .catch(async (error) => {
             console.error(`❌ Error executing prompt for task ${task.task_id}:`, error);
 
             // Check if error might be due to stale/invalid Agent SDK resume session
@@ -1710,7 +1701,7 @@ async function main() {
 
   // Also check for sessions that had orphaned tasks (even if session status wasn't RUNNING)
   // This handles cases where task was stuck but session status wasn't updated
-  const sessionIdsWithOrphanedTasks = new Set(orphanedTasks.map(t => t.session_id));
+  const sessionIdsWithOrphanedTasks = new Set(orphanedTasks.map((t) => t.session_id));
   if (sessionIdsWithOrphanedTasks.size > 0) {
     console.log(
       `   Checking ${sessionIdsWithOrphanedTasks.size} session(s) with orphaned tasks...`
@@ -1771,7 +1762,7 @@ async function main() {
       // Close Socket.io connections (this also closes the HTTP server)
       if (socketServer) {
         console.log('🔌 Closing Socket.io and HTTP server...');
-        await new Promise<void>(resolve => {
+        await new Promise<void>((resolve) => {
           socketServer?.close(() => {
             console.log('✅ Server closed');
             resolve();
@@ -1780,7 +1771,7 @@ async function main() {
       } else {
         // Fallback: close HTTP server directly if Socket.io wasn't initialized
         await new Promise<void>((resolve, reject) => {
-          server.close(err => {
+          server.close((err) => {
             if (err) {
               console.error('❌ Error closing server:', err);
               reject(err);
@@ -1804,7 +1795,7 @@ async function main() {
 }
 
 // Start the daemon
-main().catch(error => {
+main().catch((error) => {
   console.error('Failed to start daemon:', error);
   process.exit(1);
 });

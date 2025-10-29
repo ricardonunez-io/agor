@@ -117,7 +117,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   // Merge streaming messages with DB messages
   const allMessages = useMemo(() => {
     // Filter out DB messages that are already in streaming (avoid duplicates)
-    const dbOnlyMessages = messages.filter(msg => !streamingMessages.has(msg.message_id));
+    const dbOnlyMessages = messages.filter((msg) => !streamingMessages.has(msg.message_id));
 
     // Combine and sort by timestamp
     return ([...dbOnlyMessages, ...Array.from(streamingMessages.values())] as Message[]).sort(
@@ -129,9 +129,9 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   const taskWithMessages = useMemo(() => {
     if (tasks.length === 0) return [];
 
-    return tasks.map(task => ({
+    return tasks.map((task) => ({
       task,
-      messages: allMessages.filter(msg => msg.task_id === task.task_id),
+      messages: allMessages.filter((msg) => msg.task_id === task.task_id),
     }));
   }, [tasks, allMessages]);
 

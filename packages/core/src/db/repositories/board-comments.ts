@@ -21,7 +21,7 @@ import {
  * Generate content preview (first 200 chars)
  */
 function generatePreview(content: string): string {
-  return content.length > 200 ? content.slice(0, 200) + '...' : content;
+  return content.length > 200 ? `${content.slice(0, 200)}...` : content;
 }
 
 /**
@@ -130,7 +130,7 @@ export class BoardCommentsRepository
       throw new AmbiguousIdError(
         'BoardComment',
         id,
-        results.map(r => formatShortId(r.comment_id as UUID))
+        results.map((r) => formatShortId(r.comment_id as UUID))
       );
     }
 
@@ -248,7 +248,7 @@ export class BoardCommentsRepository
       }
 
       const rows = await query.all();
-      return rows.map(row => this.rowToComment(row));
+      return rows.map((row) => this.rowToComment(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to find comments: ${error instanceof Error ? error.message : String(error)}`,
@@ -394,7 +394,7 @@ export class BoardCommentsRepository
    */
   async findMentions(userId: string, boardId?: string): Promise<BoardComment[]> {
     const comments = await this.findAll({ board_id: boardId });
-    return comments.filter(comment => comment.mentions?.includes(userId as UUID));
+    return comments.filter((comment) => comment.mentions?.includes(userId as UUID));
   }
 
   /**
@@ -402,13 +402,13 @@ export class BoardCommentsRepository
    */
   async bulkCreate(comments: Partial<BoardComment>[]): Promise<BoardComment[]> {
     try {
-      const inserts = comments.map(comment => this.commentToInsert(comment));
+      const inserts = comments.map((comment) => this.commentToInsert(comment));
 
       // Batch insert
       await this.db.insert(boardComments).values(inserts);
 
       // Fetch all created comments
-      const commentIds = inserts.map(insert => insert.comment_id);
+      const commentIds = inserts.map((insert) => insert.comment_id);
       const rows = await this.db
         .select()
         .from(boardComments)
@@ -420,7 +420,7 @@ export class BoardCommentsRepository
         )
         .all();
 
-      return rows.map(row => this.rowToComment(row));
+      return rows.map((row) => this.rowToComment(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to bulk create comments: ${error instanceof Error ? error.message : String(error)}`,
@@ -445,7 +445,7 @@ export class BoardCommentsRepository
       }
 
       const reactions = comment.reactions || [];
-      const existingIndex = reactions.findIndex(r => r.user_id === userId && r.emoji === emoji);
+      const existingIndex = reactions.findIndex((r) => r.user_id === userId && r.emoji === emoji);
 
       let updatedReactions: typeof reactions;
       if (existingIndex >= 0) {

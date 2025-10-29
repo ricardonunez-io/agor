@@ -42,7 +42,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({ users, onCreate, onUpdat
   };
 
   const handleCreate = () => {
-    form.validateFields().then(values => {
+    form.validateFields().then((values) => {
       onCreate?.({
         email: values.email,
         password: values.password,
@@ -89,7 +89,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({ users, onCreate, onUpdat
         setEditModalOpen(false);
         setEditingUser(null);
       })
-      .catch(err => {
+      .catch((err) => {
         console.error('Validation failed:', err);
       });
   };

@@ -3,9 +3,9 @@
  */
 
 import type { AgorClient } from '@agor/core/api';
+import type { Board, UUID } from '@agor/core/types';
 import { message } from 'antd';
 import { useState } from 'react';
-import type { Board, UUID } from '@agor/core/types';
 
 interface UseBoardActionsResult {
   createBoard: (board: Partial<Board>) => Promise<Board | null>;

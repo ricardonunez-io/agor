@@ -34,7 +34,7 @@ export const NewWorktreeModal: React.FC<NewWorktreeModalProps> = ({
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
   const [isFormValid, setIsFormValid] = useState(false);
 
-  const selectedRepo = repos.find(r => r.repo_id === selectedRepoId);
+  const selectedRepo = repos.find((r) => r.repo_id === selectedRepoId);
 
   // Form validation handler
   const handleValuesChange = useCallback(() => {
@@ -55,10 +55,10 @@ export const NewWorktreeModal: React.FC<NewWorktreeModalProps> = ({
     const lastRepoId = localStorage.getItem('agor-last-repo-id');
 
     // If we have a last used repo and it still exists, use it
-    if (lastRepoId && repos.some(r => r.repo_id === lastRepoId)) {
+    if (lastRepoId && repos.some((r) => r.repo_id === lastRepoId)) {
       form.setFieldsValue({
         repoId: lastRepoId,
-        sourceBranch: repos.find(r => r.repo_id === lastRepoId)?.default_branch,
+        sourceBranch: repos.find((r) => r.repo_id === lastRepoId)?.default_branch,
       });
       setSelectedRepoId(lastRepoId);
       // Trigger validation check
@@ -80,7 +80,7 @@ export const NewWorktreeModal: React.FC<NewWorktreeModalProps> = ({
     setSelectedRepoId(repoId);
 
     // Auto-populate source branch from repo's default branch
-    const repo = repos.find(r => r.repo_id === repoId);
+    const repo = repos.find((r) => r.repo_id === repoId);
     if (repo?.default_branch) {
       form.setFieldValue('sourceBranch', repo.default_branch);
     }

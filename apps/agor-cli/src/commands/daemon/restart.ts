@@ -20,8 +20,8 @@ export default class DaemonRestart extends Command {
       this.log(chalk.red('✗ Daemon lifecycle commands only work in production mode.'));
       this.log('');
       this.log(chalk.bold('In development, restart the daemon with:'));
-      this.log('  1. ' + chalk.cyan('Use Ctrl+C in the daemon terminal'));
-      this.log('  2. ' + chalk.cyan('cd apps/agor-daemon && pnpm dev'));
+      this.log(`  1. ${chalk.cyan('Use Ctrl+C in the daemon terminal')}`);
+      this.log(`  2. ${chalk.cyan('cd apps/agor-daemon && pnpm dev')}`);
       this.log('');
       this.exit(1);
     }
@@ -32,7 +32,7 @@ export default class DaemonRestart extends Command {
       this.log(chalk.red('✗ Daemon binary not found'));
       this.log('');
       this.log('Your installation may be corrupted. Try reinstalling:');
-      this.log('  ' + chalk.cyan('npm install -g agor-live'));
+      this.log(`  ${chalk.cyan('npm install -g agor-live')}`);
       this.log('');
       this.exit(1);
     }
@@ -45,7 +45,7 @@ export default class DaemonRestart extends Command {
       }
 
       // Wait a moment before starting
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Start daemon
       const pid = startDaemon(daemonPath);
@@ -55,11 +55,11 @@ export default class DaemonRestart extends Command {
       this.log(`  PID: ${chalk.cyan(String(pid))}`);
       this.log('');
       this.log('View logs with:');
-      this.log('  ' + chalk.cyan('agor daemon logs'));
+      this.log(`  ${chalk.cyan('agor daemon logs')}`);
       this.log('');
 
       // Wait a moment and check if it's actually running
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       const daemonUrl = await getDaemonUrl();
       const running = await isDaemonRunning(daemonUrl);
 
@@ -67,7 +67,7 @@ export default class DaemonRestart extends Command {
         this.log(chalk.yellow('⚠ Daemon started but not responding'));
         this.log('');
         this.log('Check logs for errors:');
-        this.log('  ' + chalk.cyan('agor daemon logs'));
+        this.log(`  ${chalk.cyan('agor daemon logs')}`);
         this.log('');
       }
     } catch (error) {

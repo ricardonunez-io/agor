@@ -4,21 +4,17 @@
  * Tests for type-safe CRUD operations on tasks with short ID support.
  */
 
-import { describe, expect, it } from 'vitest';
 import type { Task, UUID } from '@agor/core/types';
 import { TaskStatus } from '@agor/core/types';
+import { describe, expect } from 'vitest';
 import { generateId } from '../../lib/ids';
-import { dbTest } from '../test-helpers';
-import {
-  AmbiguousIdError,
-  EntityNotFoundError,
-  RepositoryError,
-} from './base';
-import { TaskRepository } from './tasks';
-import { SessionRepository } from './sessions';
-import { WorktreeRepository } from './worktrees';
-import { RepoRepository } from './repos';
 import type { Database } from '../client';
+import { dbTest } from '../test-helpers';
+import { AmbiguousIdError, EntityNotFoundError, RepositoryError } from './base';
+import { RepoRepository } from './repos';
+import { SessionRepository } from './sessions';
+import { TaskRepository } from './tasks';
+import { WorktreeRepository } from './worktrees';
 
 /**
  * Create test task data
@@ -117,7 +113,9 @@ describe('TaskRepository.create', () => {
     const created = await taskRepo.create(data);
 
     expect(created.task_id).toBeDefined();
-    expect(created.task_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(created.task_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    );
   });
 
   dbTest('should default status to CREATED', async ({ db }) => {
@@ -401,7 +399,7 @@ describe('TaskRepository.findAll', () => {
     const tasks = await taskRepo.findAll();
 
     expect(tasks).toHaveLength(3);
-    expect(tasks.map(t => t.description).sort()).toEqual(['Task 1', 'Task 2', 'Task 3']);
+    expect(tasks.map((t) => t.description).sort()).toEqual(['Task 1', 'Task 2', 'Task 3']);
   });
 
   dbTest('should return fully populated task objects', async ({ db }) => {
@@ -447,15 +445,24 @@ describe('TaskRepository.findBySession', () => {
     const session1 = await createSessionWithDeps(db);
     const session2 = await createSessionWithDeps(db);
 
-    await taskRepo.create(createTaskData({ session_id: session1, description: 'Session 1 Task 1' }));
-    await taskRepo.create(createTaskData({ session_id: session1, description: 'Session 1 Task 2' }));
-    await taskRepo.create(createTaskData({ session_id: session2, description: 'Session 2 Task 1' }));
+    await taskRepo.create(
+      createTaskData({ session_id: session1, description: 'Session 1 Task 1' })
+    );
+    await taskRepo.create(
+      createTaskData({ session_id: session1, description: 'Session 1 Task 2' })
+    );
+    await taskRepo.create(
+      createTaskData({ session_id: session2, description: 'Session 2 Task 1' })
+    );
 
     const tasks = await taskRepo.findBySession(session1);
 
     expect(tasks).toHaveLength(2);
-    expect(tasks.every(t => t.session_id === session1)).toBe(true);
-    expect(tasks.map(t => t.description).sort()).toEqual(['Session 1 Task 1', 'Session 1 Task 2']);
+    expect(tasks.every((t) => t.session_id === session1)).toBe(true);
+    expect(tasks.map((t) => t.description).sort()).toEqual([
+      'Session 1 Task 1',
+      'Session 1 Task 2',
+    ]);
   });
 
   dbTest('should return tasks ordered by created_at', async ({ db }) => {
@@ -464,9 +471,9 @@ describe('TaskRepository.findBySession', () => {
 
     // Create tasks with small delays to ensure different timestamps
     await taskRepo.create(createTaskData({ session_id: sessionId, description: 'First' }));
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
     await taskRepo.create(createTaskData({ session_id: sessionId, description: 'Second' }));
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
     await taskRepo.create(createTaskData({ session_id: sessionId, description: 'Third' }));
 
     const tasks = await taskRepo.findBySession(sessionId);
@@ -513,16 +520,36 @@ describe('TaskRepository.findRunning', () => {
     const taskRepo = new TaskRepository(db);
     const sessionId = await createSessionWithDeps(db);
 
-    await taskRepo.create(createTaskData({ session_id: sessionId, status: TaskStatus.RUNNING, description: 'Running 1' }));
-    await taskRepo.create(createTaskData({ session_id: sessionId, status: TaskStatus.CREATED, description: 'Created' }));
-    await taskRepo.create(createTaskData({ session_id: sessionId, status: TaskStatus.RUNNING, description: 'Running 2' }));
-    await taskRepo.create(createTaskData({ session_id: sessionId, status: TaskStatus.COMPLETED, description: 'Completed' }));
+    await taskRepo.create(
+      createTaskData({
+        session_id: sessionId,
+        status: TaskStatus.RUNNING,
+        description: 'Running 1',
+      })
+    );
+    await taskRepo.create(
+      createTaskData({ session_id: sessionId, status: TaskStatus.CREATED, description: 'Created' })
+    );
+    await taskRepo.create(
+      createTaskData({
+        session_id: sessionId,
+        status: TaskStatus.RUNNING,
+        description: 'Running 2',
+      })
+    );
+    await taskRepo.create(
+      createTaskData({
+        session_id: sessionId,
+        status: TaskStatus.COMPLETED,
+        description: 'Completed',
+      })
+    );
 
     const running = await taskRepo.findRunning();
 
     expect(running).toHaveLength(2);
-    expect(running.every(t => t.status === TaskStatus.RUNNING)).toBe(true);
-    expect(running.map(t => t.description).sort()).toEqual(['Running 1', 'Running 2']);
+    expect(running.every((t) => t.status === TaskStatus.RUNNING)).toBe(true);
+    expect(running.map((t) => t.description).sort()).toEqual(['Running 1', 'Running 2']);
   });
 
   dbTest('should return running tasks from all sessions', async ({ db }) => {
@@ -555,7 +582,7 @@ describe('TaskRepository.findByStatus', () => {
     const completed = await taskRepo.findByStatus(TaskStatus.COMPLETED);
 
     expect(completed).toHaveLength(2);
-    expect(completed.every(t => t.status === TaskStatus.COMPLETED)).toBe(true);
+    expect(completed.every((t) => t.status === TaskStatus.COMPLETED)).toBe(true);
   });
 
   dbTest('should return empty array for status with no tasks', async ({ db }) => {
@@ -668,9 +695,9 @@ describe('TaskRepository.update', () => {
 
   dbTest('should throw EntityNotFoundError for non-existent ID', async ({ db }) => {
     const taskRepo = new TaskRepository(db);
-    await expect(
-      taskRepo.update('99999999', { status: TaskStatus.COMPLETED })
-    ).rejects.toThrow(EntityNotFoundError);
+    await expect(taskRepo.update('99999999', { status: TaskStatus.COMPLETED })).rejects.toThrow(
+      EntityNotFoundError
+    );
   });
 });
 
@@ -747,10 +774,12 @@ describe('TaskRepository edge cases', () => {
     expect(empty.full_prompt).toBe('');
 
     // Multiline and special characters
-    const special = await taskRepo.create(createTaskData({
-      session_id: sessionId,
-      full_prompt: 'Line 1\nLine 2\n"quotes" \'apostrophes\' $special',
-    }));
+    const special = await taskRepo.create(
+      createTaskData({
+        session_id: sessionId,
+        full_prompt: 'Line 1\nLine 2\n"quotes" \'apostrophes\' $special',
+      })
+    );
     expect(special.full_prompt).toContain('Line 1\nLine 2');
     expect(special.full_prompt).toContain('"quotes"');
   });

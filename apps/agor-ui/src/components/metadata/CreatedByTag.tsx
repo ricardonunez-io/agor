@@ -27,7 +27,7 @@ export const CreatedByTag: React.FC<CreatedByTagProps> = ({
   }
 
   // Look up the user
-  const user = users.find(u => u.user_id === createdBy);
+  const user = users.find((u) => u.user_id === createdBy);
 
   // If user not found or is anonymous, show minimal tag
   if (!user || createdBy === 'anonymous') {

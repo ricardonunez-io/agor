@@ -94,7 +94,7 @@ export class RepoRepository implements BaseRepository<Repo, Partial<Repo>> {
       throw new AmbiguousIdError(
         'Repo',
         id,
-        results.map(r => formatShortId(r.repo_id as UUID))
+        results.map((r) => formatShortId(r.repo_id as UUID))
       );
     }
 
@@ -166,7 +166,7 @@ export class RepoRepository implements BaseRepository<Repo, Partial<Repo>> {
   async findAll(): Promise<Repo[]> {
     try {
       const rows = await this.db.select().from(repos).all();
-      return rows.map(row => this.rowToRepo(row));
+      return rows.map((row) => this.rowToRepo(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to find all repos: ${error instanceof Error ? error.message : String(error)}`,
@@ -267,10 +267,7 @@ export class RepoRepository implements BaseRepository<Repo, Partial<Repo>> {
    */
   async count(): Promise<number> {
     try {
-      const result = await this.db
-        .select({ count: sql<number>`count(*)` })
-        .from(repos)
-        .get();
+      const result = await this.db.select({ count: sql<number>`count(*)` }).from(repos).get();
 
       return result?.count ?? 0;
     } catch (error) {

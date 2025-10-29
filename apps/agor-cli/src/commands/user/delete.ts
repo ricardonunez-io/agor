@@ -45,7 +45,7 @@ export default class UserDelete extends Command {
       const users = (Array.isArray(result) ? result : result.data) as User[];
 
       const user = users.find(
-        u => u.email === args.user || u.user_id === args.user || u.user_id.startsWith(args.user)
+        (u) => u.email === args.user || u.user_id === args.user || u.user_id.startsWith(args.user)
       );
 
       if (!user) {
@@ -80,7 +80,7 @@ export default class UserDelete extends Command {
       this.log(`  ID:    ${chalk.gray(user.user_id.substring(0, 8))}`);
 
       // Clean up socket
-      await new Promise<void>(resolve => {
+      await new Promise<void>((resolve) => {
         client.io.once('disconnect', () => resolve());
         client.io.close();
         setTimeout(() => resolve(), 1000);

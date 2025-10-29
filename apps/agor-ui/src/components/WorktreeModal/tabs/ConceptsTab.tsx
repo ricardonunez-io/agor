@@ -1,7 +1,6 @@
 // @ts-nocheck - ConceptsTab has type errors, will be refactored
 import type { AgorClient } from '@agor/core/api';
 import type { ContextFileDetail, ContextFileListItem, Worktree } from '@agor/core/types';
-import { InfoCircleOutlined } from '@ant-design/icons';
 import { Alert, Space, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { MarkdownFileCollection } from '../../MarkdownFileCollection/MarkdownFileCollection';

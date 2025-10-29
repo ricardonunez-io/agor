@@ -111,7 +111,7 @@ export class TaskRepository implements BaseRepository<Task, Partial<Task>> {
       throw new AmbiguousIdError(
         'Task',
         id,
-        results.map(r => formatShortId(r.task_id as UUID))
+        results.map((r) => formatShortId(r.task_id as UUID))
       );
     }
 
@@ -152,19 +152,21 @@ export class TaskRepository implements BaseRepository<Task, Partial<Task>> {
         return [];
       }
 
-      const inserts = taskList.map(task => this.taskToInsert(task));
+      const inserts = taskList.map((task) => this.taskToInsert(task));
 
       // Bulk insert all tasks
       await this.db.insert(tasks).values(inserts);
 
       // Retrieve all inserted tasks
-      const taskIds = inserts.map(t => t.task_id);
+      const taskIds = inserts.map((t) => t.task_id);
       const rows = await this.db
         .select()
         .from(tasks)
-        .where(sql`${tasks.task_id} IN ${sql.raw(`(${taskIds.map(id => `'${id}'`).join(',')})`)}`);
+        .where(
+          sql`${tasks.task_id} IN ${sql.raw(`(${taskIds.map((id) => `'${id}'`).join(',')})`)}`
+        );
 
-      return rows.map(row => this.rowToTask(row));
+      return rows.map((row) => this.rowToTask(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to bulk create tasks: ${error instanceof Error ? error.message : String(error)}`,
@@ -198,7 +200,7 @@ export class TaskRepository implements BaseRepository<Task, Partial<Task>> {
   async findAll(): Promise<Task[]> {
     try {
       const rows = await this.db.select().from(tasks).all();
-      return rows.map(row => this.rowToTask(row));
+      return rows.map((row) => this.rowToTask(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to find all tasks: ${error instanceof Error ? error.message : String(error)}`,
@@ -219,7 +221,7 @@ export class TaskRepository implements BaseRepository<Task, Partial<Task>> {
         .orderBy(tasks.created_at)
         .all();
 
-      return rows.map(row => this.rowToTask(row));
+      return rows.map((row) => this.rowToTask(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to find tasks by session: ${error instanceof Error ? error.message : String(error)}`,
@@ -239,7 +241,7 @@ export class TaskRepository implements BaseRepository<Task, Partial<Task>> {
         .where(eq(tasks.status, TaskStatus.RUNNING))
         .all();
 
-      return rows.map(row => this.rowToTask(row));
+      return rows.map((row) => this.rowToTask(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to find running tasks: ${error instanceof Error ? error.message : String(error)}`,
@@ -255,7 +257,7 @@ export class TaskRepository implements BaseRepository<Task, Partial<Task>> {
     try {
       const rows = await this.db.select().from(tasks).where(eq(tasks.status, status)).all();
 
-      return rows.map(row => this.rowToTask(row));
+      return rows.map((row) => this.rowToTask(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to find tasks by status: ${error instanceof Error ? error.message : String(error)}`,

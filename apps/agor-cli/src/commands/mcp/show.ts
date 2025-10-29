@@ -38,7 +38,7 @@ export default class McpShow extends Command {
           query: { $limit: 1 },
         });
         const servers = (Array.isArray(result) ? result : result.data) as MCPServer[];
-        server = servers.find(s => s.name === args.id) || null;
+        server = servers.find((s) => s.name === args.id) || null;
       }
 
       if (!server) {
@@ -149,7 +149,7 @@ export default class McpShow extends Command {
   }
 
   private async cleanup(client: import('@agor/core/api').AgorClient): Promise<void> {
-    await new Promise<void>(resolve => {
+    await new Promise<void>((resolve) => {
       client.io.once('disconnect', () => resolve());
       client.io.close();
       setTimeout(() => resolve(), 1000);

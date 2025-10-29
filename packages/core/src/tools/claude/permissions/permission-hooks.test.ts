@@ -8,20 +8,29 @@
  * - Hook context handling and decision flow
  */
 
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import * as os from 'node:os';
-import type { PreToolUseHookInput, HookJSONOutput } from '@anthropic-ai/claude-agent-sdk/sdk';
-import { updateProjectSettings, createPreToolUseHook } from './permission-hooks';
-import type { PermissionService } from '../../../permissions/permission-service';
-import type { SessionRepository } from '../../../db/repositories/sessions';
+import * as path from 'node:path';
+import type { PreToolUseHookInput } from '@anthropic-ai/claude-agent-sdk/sdk';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MessagesRepository } from '../../../db/repositories/messages';
+import type { SessionRepository } from '../../../db/repositories/sessions';
 import type { WorktreeRepository } from '../../../db/repositories/worktrees';
-import type { MessagesService, SessionsService, TasksService } from '../claude-tool';
-import type { Session, Message, SessionID, TaskID, MessageID, Worktree, UUID, WorktreeID } from '../../../types';
-import { MessageRole, PermissionStatus, PermissionScope, TaskStatus } from '../../../types';
 import { generateId } from '../../../lib/ids';
+import type { PermissionService } from '../../../permissions/permission-service';
+import type {
+  Message,
+  MessageID,
+  Session,
+  SessionID,
+  TaskID,
+  UUID,
+  Worktree,
+  WorktreeID,
+} from '../../../types';
+import { MessageRole, PermissionScope, PermissionStatus, TaskStatus } from '../../../types';
+import type { MessagesService, SessionsService, TasksService } from '../claude-tool';
+import { createPreToolUseHook, updateProjectSettings } from './permission-hooks';
 
 describe('updateProjectSettings', () => {
   let tmpDir: string;
@@ -231,7 +240,9 @@ describe('createPreToolUseHook', () => {
     tasksService?: Partial<TasksService>;
     sessionsRepo?: Partial<SessionRepository>;
     messagesRepo?: Partial<MessagesRepository>;
-    messagesService?: Partial<MessagesService> & { patch?: (id: string, data: any) => Promise<any> };
+    messagesService?: Partial<MessagesService> & {
+      patch?: (id: string, data: any) => Promise<any>;
+    };
     sessionsService?: Partial<SessionsService>;
     worktreesRepo?: Partial<WorktreeRepository>;
     session?: Session;
@@ -280,7 +291,9 @@ describe('createPreToolUseHook', () => {
       findBySessionId: vi.fn().mockResolvedValue([]),
     };
 
-    const messagesService: Partial<MessagesService> & { patch?: (id: string, data: any) => Promise<any> } = {
+    const messagesService: Partial<MessagesService> & {
+      patch?: (id: string, data: any) => Promise<any>;
+    } = {
       create: vi.fn().mockResolvedValue({ message_id: messageId }),
       patch: vi.fn().mockResolvedValue({}),
     };
@@ -298,8 +311,12 @@ describe('createPreToolUseHook', () => {
       tasksService: (overrides?.tasksService ?? tasksService) as TasksService,
       sessionsRepo: (overrides?.sessionsRepo ?? sessionsRepo) as SessionRepository,
       messagesRepo: (overrides?.messagesRepo ?? messagesRepo) as MessagesRepository,
-      messagesService: (overrides?.messagesService ?? messagesService) as MessagesService | undefined,
-      sessionsService: (overrides?.sessionsService ?? sessionsService) as SessionsService | undefined,
+      messagesService: (overrides?.messagesService ?? messagesService) as
+        | MessagesService
+        | undefined,
+      sessionsService: (overrides?.sessionsService ?? sessionsService) as
+        | SessionsService
+        | undefined,
       worktreesRepo: (overrides?.worktreesRepo ?? worktreesRepo) as WorktreeRepository | undefined,
       permissionLocks,
       session: overrides?.session ?? session,
@@ -308,7 +325,10 @@ describe('createPreToolUseHook', () => {
   }
 
   // Helper to create PreToolUse input
-  function createToolInput(toolName = 'Bash', toolInput: unknown = { command: 'ls' }): PreToolUseHookInput {
+  function createToolInput(
+    toolName = 'Bash',
+    toolInput: unknown = { command: 'ls' }
+  ): PreToolUseHookInput {
     return {
       hook_event_name: 'PreToolUse',
       session_id: sessionId,
@@ -347,7 +367,7 @@ describe('createPreToolUseHook', () => {
   it('should wait for existing permission lock before checking', async () => {
     const deps = createMockDeps();
     let lockResolved = false;
-    const existingLock = new Promise<void>(resolve => {
+    const existingLock = new Promise<void>((resolve) => {
       setTimeout(() => {
         lockResolved = true;
         resolve();
@@ -890,7 +910,10 @@ describe('createPreToolUseHook', () => {
       callCount++;
       // First call: after waiting for lock, still no permission
       // Second call: not needed because tool gets allowed on first check
-      return { ...deps.session, permission_config: { allowedTools: callCount === 1 ? [] : ['Bash'] } };
+      return {
+        ...deps.session,
+        permission_config: { allowedTools: callCount === 1 ? [] : ['Bash'] },
+      };
     });
 
     (deps.permissionService.waitForDecision as ReturnType<typeof vi.fn>).mockResolvedValue({

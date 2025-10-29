@@ -96,7 +96,7 @@ export default class McpList extends Command {
   }
 
   private async cleanup(client: import('@agor/core/api').AgorClient): Promise<void> {
-    await new Promise<void>(resolve => {
+    await new Promise<void>((resolve) => {
       client.io.once('disconnect', () => resolve());
       client.io.close();
       setTimeout(() => resolve(), 1000);

@@ -119,7 +119,7 @@ export default class UserCreate extends Command {
       this.log(chalk.gray('  2. Login via UI: http://localhost:5173'));
 
       // Clean up socket
-      await new Promise<void>(resolve => {
+      await new Promise<void>((resolve) => {
         client.io.once('disconnect', () => resolve());
         client.io.close();
         setTimeout(() => resolve(), 1000);

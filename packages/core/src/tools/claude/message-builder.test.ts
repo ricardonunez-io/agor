@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
+import { generateId } from '../../lib/ids';
+import type { MessageID, SessionID, TaskID } from '../../types';
+import { MessageRole } from '../../types';
+import type { MessagesService, TasksService } from './claude-tool';
 import {
   createAssistantMessage,
   createUserMessage,
   createUserMessageFromContent,
   extractTokenUsage,
 } from './message-builder';
-import { generateId } from '../../lib/ids';
-import { MessageRole } from '../../types';
-import type { Message, MessageID, SessionID, TaskID } from '../../types';
-import type { MessagesService, TasksService } from './claude-tool';
 
 describe('extractTokenUsage', () => {
   describe('valid token usage extraction', () => {
@@ -287,7 +287,13 @@ describe('createUserMessage', () => {
     const sessionId = generateId() as SessionID;
     const multilinePrompt = 'Line 1\nLine 2\nLine 3';
 
-    const result = await createUserMessage(sessionId, multilinePrompt, undefined, 0, messagesService);
+    const result = await createUserMessage(
+      sessionId,
+      multilinePrompt,
+      undefined,
+      0,
+      messagesService
+    );
 
     expect(result.content).toBe(multilinePrompt);
     expect(result.content_preview).toBe(multilinePrompt);
@@ -885,9 +891,7 @@ describe('createAssistantMessage', () => {
     const messagesService = createMockMessagesService();
     const sessionId = generateId() as SessionID;
     const messageId = generateId() as MessageID;
-    const content = [
-      { type: 'text', text: 'Code: `const x = 1;`\n\n**Bold** and *italic*' },
-    ];
+    const content = [{ type: 'text', text: 'Code: `const x = 1;`\n\n**Bold** and *italic*' }];
 
     const result = await createAssistantMessage(
       sessionId,

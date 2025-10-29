@@ -8,8 +8,8 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { simpleGit } from 'simple-git';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   cloneRepo,
   createWorktree,
@@ -116,7 +116,9 @@ describe('extractRepoName', () => {
 
   it('should handle complex repo names', () => {
     expect(extractRepoName('https://github.com/org/repo-with-dashes.git')).toBe('repo-with-dashes');
-    expect(extractRepoName('https://github.com/org/repo_with_underscores.git')).toBe('repo_with_underscores');
+    expect(extractRepoName('https://github.com/org/repo_with_underscores.git')).toBe(
+      'repo_with_underscores'
+    );
   });
 });
 
@@ -137,7 +139,9 @@ describe('getWorktreesDir', () => {
 describe('getWorktreePath', () => {
   it('should construct worktree path from repo slug and name', () => {
     const worktreePath = getWorktreePath('org/repo', 'feature-1');
-    expect(worktreePath).toBe(path.join(os.homedir(), '.agor', 'worktrees', 'org/repo', 'feature-1'));
+    expect(worktreePath).toBe(
+      path.join(os.homedir(), '.agor', 'worktrees', 'org/repo', 'feature-1')
+    );
   });
 
   it('should handle repo slugs with special characters', () => {
@@ -566,7 +570,8 @@ describe('createWorktree', () => {
     expect(await getCurrentBranch(worktreeDir)).toBe('new-feature');
 
     // Verify it was based on feature-branch (should have feature.txt)
-    const featureFileExists = await fs.access(path.join(worktreeDir, 'feature.txt'))
+    const featureFileExists = await fs
+      .access(path.join(worktreeDir, 'feature.txt'))
       .then(() => true)
       .catch(() => false);
     expect(featureFileExists).toBe(true);
@@ -645,7 +650,7 @@ describe('listWorktrees', () => {
     const realWorktree1 = await fs.realpath(worktree1);
     const realWorktree2 = await fs.realpath(worktree2);
 
-    const worktreePaths = worktrees.map(w => w.path);
+    const worktreePaths = worktrees.map((w) => w.path);
     expect(worktreePaths).toContain(realRepoDir);
     expect(worktreePaths).toContain(realWorktree1);
     expect(worktreePaths).toContain(realWorktree2);
@@ -659,7 +664,7 @@ describe('listWorktrees', () => {
 
     const worktrees = await listWorktrees(repoDir);
     const realWorktreeDir = await fs.realpath(worktreeDir);
-    const testWorktree = worktrees.find(w => w.path === realWorktreeDir);
+    const testWorktree = worktrees.find((w) => w.path === realWorktreeDir);
 
     expect(testWorktree).toBeDefined();
     expect(testWorktree?.name).toBe('worktree');
@@ -681,7 +686,7 @@ describe('listWorktrees', () => {
 
       const worktrees = await listWorktrees(repoDir);
       const realWorktreeDir = await fs.realpath(worktreeDir);
-      const detachedWorktree = worktrees.find(w => w.path === realWorktreeDir);
+      const detachedWorktree = worktrees.find((w) => w.path === realWorktreeDir);
 
       expect(detachedWorktree).toBeDefined();
       expect(detachedWorktree?.sha).toBe(sha);
@@ -720,7 +725,7 @@ describe('removeWorktree', () => {
     // Verify worktree removed
     worktrees = await listWorktrees(repoDir);
     expect(worktrees.length).toBe(initialCount - 1);
-    expect(worktrees.find(w => w.path === worktreeDir)).toBeUndefined();
+    expect(worktrees.find((w) => w.path === worktreeDir)).toBeUndefined();
   });
 });
 
@@ -940,9 +945,9 @@ describe('cloneRepo', () => {
     await fs.mkdir(targetDir, { recursive: true });
     await fs.writeFile(path.join(targetDir, 'not-git.txt'), 'content', 'utf-8');
 
-    await expect(
-      cloneRepo({ url: 'file://' + remoteDir, targetDir })
-    ).rejects.toThrow('not a valid git repository');
+    await expect(cloneRepo({ url: `file://${remoteDir}`, targetDir })).rejects.toThrow(
+      'not a valid git repository'
+    );
   });
 
   it('should handle bare clone option', async () => {
@@ -958,13 +963,15 @@ describe('cloneRepo', () => {
 
     // Note: isGitRepo uses 'git status' which fails on bare repos
     // Verify bare clone by checking for no working directory files
-    const readmeExists = await fs.access(path.join(result.path, 'README.md'))
+    const readmeExists = await fs
+      .access(path.join(result.path, 'README.md'))
       .then(() => true)
       .catch(() => false);
     expect(readmeExists).toBe(false);
 
     // Verify it has git objects directory (indicates bare repo)
-    const objectsExists = await fs.access(path.join(result.path, 'objects'))
+    const objectsExists = await fs
+      .access(path.join(result.path, 'objects'))
       .then(() => true)
       .catch(() => false);
     expect(objectsExists).toBe(true);

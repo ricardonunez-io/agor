@@ -18,7 +18,7 @@ export default class DaemonStop extends Command {
       this.log(chalk.red('✗ Daemon lifecycle commands only work in production mode.'));
       this.log('');
       this.log(chalk.bold('In development, stop the daemon with:'));
-      this.log('  ' + chalk.cyan('Use Ctrl+C in the daemon terminal'));
+      this.log(`  ${chalk.cyan('Use Ctrl+C in the daemon terminal')}`);
       this.log('');
       this.exit(1);
     }

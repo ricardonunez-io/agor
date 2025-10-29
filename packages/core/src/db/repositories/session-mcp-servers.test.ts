@@ -5,16 +5,23 @@
  * including FK validation, bulk operations, and enabled state toggling.
  */
 
-import { describe, expect, it } from 'vitest';
-import type { MCPServer, MCPServerID, Session, SessionID, UUID, WorktreeID } from '@agor/core/types';
+import type {
+  MCPServer,
+  MCPServerID,
+  Session,
+  SessionID,
+  UUID,
+  WorktreeID,
+} from '@agor/core/types';
 import { SessionStatus } from '@agor/core/types';
+import { describe, expect } from 'vitest';
 import { generateId } from '../../lib/ids';
 import { dbTest } from '../test-helpers';
-import { EntityNotFoundError, RepositoryError } from './base';
-import { SessionMCPServerRepository } from './session-mcp-servers';
-import { SessionRepository } from './sessions';
+import { EntityNotFoundError } from './base';
 import { MCPServerRepository } from './mcp-servers';
 import { RepoRepository } from './repos';
+import { SessionMCPServerRepository } from './session-mcp-servers';
+import { SessionRepository } from './sessions';
 import { WorktreeRepository } from './worktrees';
 
 /**
@@ -97,15 +104,9 @@ async function setupTestData(db: any) {
   const session = await sessionRepo.create(createSessionData(worktree.worktree_id));
 
   // Create MCP servers
-  const server1 = await mcpServerRepo.create(
-    createMCPServerData({ name: 'test-server-1' })
-  );
-  const server2 = await mcpServerRepo.create(
-    createMCPServerData({ name: 'test-server-2' })
-  );
-  const server3 = await mcpServerRepo.create(
-    createMCPServerData({ name: 'test-server-3' })
-  );
+  const server1 = await mcpServerRepo.create(createMCPServerData({ name: 'test-server-1' }));
+  const server2 = await mcpServerRepo.create(createMCPServerData({ name: 'test-server-2' }));
+  const server3 = await mcpServerRepo.create(createMCPServerData({ name: 'test-server-3' }));
 
   return { session, server1, server2, server3 };
 }
@@ -158,9 +159,9 @@ describe('SessionMCPServerRepository.addServer', () => {
     const repo = new SessionMCPServerRepository(db);
     const invalidSessionId = generateId() as SessionID;
 
-    await expect(
-      repo.addServer(invalidSessionId, server1.mcp_server_id)
-    ).rejects.toThrow(EntityNotFoundError);
+    await expect(repo.addServer(invalidSessionId, server1.mcp_server_id)).rejects.toThrow(
+      EntityNotFoundError
+    );
   });
 
   dbTest('should throw EntityNotFoundError for invalid MCP server', async ({ db }) => {
@@ -168,9 +169,9 @@ describe('SessionMCPServerRepository.addServer', () => {
     const repo = new SessionMCPServerRepository(db);
     const invalidServerId = generateId() as MCPServerID;
 
-    await expect(
-      repo.addServer(session.session_id, invalidServerId)
-    ).rejects.toThrow(EntityNotFoundError);
+    await expect(repo.addServer(session.session_id, invalidServerId)).rejects.toThrow(
+      EntityNotFoundError
+    );
   });
 
   dbTest('should allow multiple servers for one session', async ({ db }) => {
@@ -183,7 +184,7 @@ describe('SessionMCPServerRepository.addServer', () => {
 
     const servers = await repo.listServers(session.session_id);
     expect(servers).toHaveLength(3);
-    const serverIds = servers.map(s => s.mcp_server_id);
+    const serverIds = servers.map((s) => s.mcp_server_id);
     expect(serverIds).toContain(server1.mcp_server_id);
     expect(serverIds).toContain(server2.mcp_server_id);
     expect(serverIds).toContain(server3.mcp_server_id);
@@ -209,14 +210,17 @@ describe('SessionMCPServerRepository.removeServer', () => {
     expect(servers).toHaveLength(0);
   });
 
-  dbTest('should throw EntityNotFoundError when removing non-existent relationship', async ({ db }) => {
-    const { session, server1 } = await setupTestData(db);
-    const repo = new SessionMCPServerRepository(db);
+  dbTest(
+    'should throw EntityNotFoundError when removing non-existent relationship',
+    async ({ db }) => {
+      const { session, server1 } = await setupTestData(db);
+      const repo = new SessionMCPServerRepository(db);
 
-    await expect(
-      repo.removeServer(session.session_id, server1.mcp_server_id)
-    ).rejects.toThrow(EntityNotFoundError);
-  });
+      await expect(repo.removeServer(session.session_id, server1.mcp_server_id)).rejects.toThrow(
+        EntityNotFoundError
+      );
+    }
+  );
 
   dbTest('should only remove specified server, not others', async ({ db }) => {
     const { session, server1, server2, server3 } = await setupTestData(db);
@@ -230,7 +234,7 @@ describe('SessionMCPServerRepository.removeServer', () => {
 
     const servers = await repo.listServers(session.session_id);
     expect(servers).toHaveLength(2);
-    const serverIds = servers.map(s => s.mcp_server_id);
+    const serverIds = servers.map((s) => s.mcp_server_id);
     expect(serverIds).toContain(server1.mcp_server_id);
     expect(serverIds).toContain(server3.mcp_server_id);
     expect(serverIds).not.toContain(server2.mcp_server_id);
@@ -335,7 +339,7 @@ describe('SessionMCPServerRepository.listServers', () => {
 
     const enabledServers = await repo.listServers(session.session_id, true);
     expect(enabledServers).toHaveLength(2);
-    const enabledIds = enabledServers.map(s => s.mcp_server_id);
+    const enabledIds = enabledServers.map((s) => s.mcp_server_id);
     expect(enabledIds).toContain(server1.mcp_server_id);
     expect(enabledIds).toContain(server3.mcp_server_id);
     expect(enabledIds).not.toContain(server2.mcp_server_id);
@@ -389,7 +393,7 @@ describe('SessionMCPServerRepository.setServers', () => {
 
     const servers = await repo.listServers(session.session_id);
     expect(servers).toHaveLength(2);
-    const serverIds = servers.map(s => s.mcp_server_id);
+    const serverIds = servers.map((s) => s.mcp_server_id);
     expect(serverIds).toContain(server2.mcp_server_id);
     expect(serverIds).toContain(server3.mcp_server_id);
     expect(serverIds).not.toContain(server1.mcp_server_id);
@@ -435,9 +439,9 @@ describe('SessionMCPServerRepository.setServers', () => {
     const repo = new SessionMCPServerRepository(db);
     const invalidSessionId = generateId() as SessionID;
 
-    await expect(
-      repo.setServers(invalidSessionId, [server1.mcp_server_id])
-    ).rejects.toThrow(EntityNotFoundError);
+    await expect(repo.setServers(invalidSessionId, [server1.mcp_server_id])).rejects.toThrow(
+      EntityNotFoundError
+    );
   });
 
   dbTest('should deduplicate server IDs in input array', async ({ db }) => {

@@ -36,7 +36,7 @@ export default class UserList extends Command {
       }
 
       // Convert to User type
-      const userList: User[] = rows.map(row => {
+      const userList: User[] = rows.map((row) => {
         const data = row.data as { avatar?: string; preferences?: Record<string, unknown> };
         return {
           user_id: row.user_id as User['user_id'],

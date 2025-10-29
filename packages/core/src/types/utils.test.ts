@@ -58,20 +58,10 @@ describe('isDefined', () => {
   });
 
   it('should work with object arrays', () => {
-    const input = [
-      { id: 1 },
-      null,
-      { id: 2 },
-      undefined,
-      { id: 3 },
-    ];
+    const input = [{ id: 1 }, null, { id: 2 }, undefined, { id: 3 }];
     const result = input.filter(isDefined);
 
-    expect(result).toEqual([
-      { id: 1 },
-      { id: 2 },
-      { id: 3 },
-    ]);
+    expect(result).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
   });
 
   it('should preserve empty strings and zero values', () => {
@@ -254,16 +244,7 @@ describe('isNonEmptyString', () => {
 
   it('should filter empty and whitespace from practical example', () => {
     // Real-world example: filtering user input
-    const userInputs = [
-      'Alice',
-      '',
-      '  ',
-      'Bob',
-      '\t\t',
-      '  Charlie  ',
-      '\n',
-      'Diana',
-    ];
+    const userInputs = ['Alice', '', '  ', 'Bob', '\t\t', '  Charlie  ', '\n', 'Diana'];
 
     const validNames = userInputs.filter(isNonEmptyString);
 
@@ -289,9 +270,7 @@ describe('isDefined and isNonEmptyString integration', () => {
     ];
 
     // First filter out null/undefined, then filter out empty strings
-    const result = input
-      .filter(isDefined)
-      .filter(isNonEmptyString);
+    const result = input.filter(isDefined).filter(isNonEmptyString);
 
     expect(result).toEqual(['valid', 'another', 'last']);
   });
@@ -307,9 +286,7 @@ describe('isDefined and isNonEmptyString integration', () => {
       'Charlie',
     ];
 
-    const validNames = names
-      .filter(isDefined)
-      .filter(isNonEmptyString);
+    const validNames = names.filter(isDefined).filter(isNonEmptyString);
 
     expect(validNames).toEqual(['Alice', 'Bob', 'Charlie']);
   });
@@ -324,7 +301,7 @@ describe('isDefined and isNonEmptyString integration', () => {
     ];
 
     const validNames = data
-      .map(d => d.name)
+      .map((d) => d.name)
       .filter(isDefined)
       .filter(isNonEmptyString);
 
@@ -345,9 +322,7 @@ describe('isDefined and isNonEmptyString integration', () => {
     ];
 
     // Extract only valid string IDs
-    const validStringIds = possibleIds
-      .filter(isDefined)
-      .filter(isNonEmptyString);
+    const validStringIds = possibleIds.filter(isDefined).filter(isNonEmptyString);
 
     expect(validStringIds).toEqual(['id-123', 'id-456', 'id-789']);
   });

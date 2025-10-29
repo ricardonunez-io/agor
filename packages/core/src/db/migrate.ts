@@ -567,7 +567,7 @@ export async function initializeDatabase(db: Database): Promise<void> {
         try {
           const tableInfo = await db.run(sql`PRAGMA table_info(board_comments)`);
           const hasReactionsColumn = tableInfo.rows.some(
-            row => (row as unknown as { name: string }).name === 'reactions'
+            (row) => (row as unknown as { name: string }).name === 'reactions'
           );
 
           if (!hasReactionsColumn) {

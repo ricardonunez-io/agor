@@ -682,10 +682,10 @@ function AppContent() {
       const currentIds = sessionMcpServerIds[sessionId] || [];
 
       // Find servers to add (in new list but not in current)
-      const toAdd = mcpServerIds.filter(id => !currentIds.includes(id));
+      const toAdd = mcpServerIds.filter((id) => !currentIds.includes(id));
 
       // Find servers to remove (in current list but not in new)
-      const toRemove = currentIds.filter(id => !mcpServerIds.includes(id));
+      const toRemove = currentIds.filter((id) => !mcpServerIds.includes(id));
 
       // Add new relationships
       for (const serverId of toAdd) {
@@ -727,7 +727,7 @@ function AppContent() {
   const handleResolveComment = async (commentId: string) => {
     if (!client) return;
     try {
-      const comment = comments.find(c => c.comment_id === commentId);
+      const comment = comments.find((c) => c.comment_id === commentId);
       await client.service('board-comments').patch(commentId, {
         resolved: !comment?.resolved,
       });
@@ -782,8 +782,8 @@ function AppContent() {
 
   // Generate repo reference options for dropdowns
   const allOptions = getRepoReferenceOptions(repos, worktrees);
-  const worktreeOptions = allOptions.filter(opt => opt.type === 'managed-worktree');
-  const repoOptions = allOptions.filter(opt => opt.type === 'managed');
+  const _worktreeOptions = allOptions.filter((opt) => opt.type === 'managed-worktree');
+  const _repoOptions = allOptions.filter((opt) => opt.type === 'managed');
 
   // Handle onboarding dismissal
   const handleDismissOnboarding = async () => {

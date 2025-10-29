@@ -1,4 +1,4 @@
-import type { BoardID, SessionID, WorktreeID } from './id';
+import type { BoardID, WorktreeID } from './id';
 
 /**
  * Board object types for canvas annotations

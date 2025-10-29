@@ -7,13 +7,8 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type {
-  HookJSONOutput,
-  PreToolUseHookInput,
-} from '@anthropic-ai/claude-agent-sdk/sdk';
+import type { HookJSONOutput, PreToolUseHookInput } from '@anthropic-ai/claude-agent-sdk/sdk';
 import type { MessagesRepository } from '../../../db/repositories/messages';
-import type { MCPServerRepository } from '../../../db/repositories/mcp-servers';
-import type { SessionMCPServerRepository } from '../../../db/repositories/session-mcp-servers';
 import type { SessionRepository } from '../../../db/repositories/sessions';
 import type { WorktreeRepository } from '../../../db/repositories/worktrees';
 import { generateId } from '../../../lib/ids';
@@ -58,9 +53,7 @@ export async function updateProjectSettings(
   }
   if (changes.denyTools) {
     if (!settings.permissions.deny) settings.permissions.deny = [];
-    settings.permissions.deny = [
-      ...new Set([...settings.permissions.deny, ...changes.denyTools]),
-    ];
+    settings.permissions.deny = [...new Set([...settings.permissions.deny, ...changes.denyTools])];
   }
 
   // Ensure .claude directory exists
@@ -132,7 +125,7 @@ export function createPreToolUseHook(
       console.log(
         `🔒 No permission found for ${input.tool_name}, creating lock and prompting user...`
       );
-      const newLock = new Promise<void>(resolve => {
+      const newLock = new Promise<void>((resolve) => {
         releaseLock = resolve;
       });
       deps.permissionLocks.set(sessionId, newLock);
@@ -211,8 +204,7 @@ export function createPreToolUseHook(
       // Update permission request message with approval/denial
       if (deps.messagesService) {
         const baseContent =
-          typeof permissionMessage.content === 'object' &&
-          !Array.isArray(permissionMessage.content)
+          typeof permissionMessage.content === 'object' && !Array.isArray(permissionMessage.content)
             ? permissionMessage.content
             : {};
         // biome-ignore lint/suspicious/noExplicitAny: FeathersJS service has patch method but type definition is incomplete

@@ -62,7 +62,7 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
 
   // Helper to get repo name from repo_id
   const getRepoName = (repoId: string): string => {
-    const repo = repos.find(r => r.repo_id === repoId);
+    const repo = repos.find((r) => r.repo_id === repoId);
     return repo?.name || 'Unknown Repo';
   };
 
@@ -129,14 +129,14 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
   // Get selected repo's default branch
   const getDefaultBranch = (): string => {
     if (!selectedRepoId) return 'main';
-    const repo = repos.find(r => r.repo_id === selectedRepoId);
+    const repo = repos.find((r) => r.repo_id === selectedRepoId);
     return repo?.default_branch || 'main';
   };
 
   // Update source branch when repo changes
   const handleRepoChange = (repoId: string) => {
     setSelectedRepoId(repoId);
-    const repo = repos.find(r => r.repo_id === repoId);
+    const repo = repos.find((r) => r.repo_id === repoId);
     const defaultBranch = repo?.default_branch || 'main';
     form.setFieldValue('sourceBranch', defaultBranch);
   };
@@ -206,7 +206,7 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
       render: (_: unknown, record: Worktree) => {
         const status = record.environment_instance?.status;
         const healthStatus = record.environment_instance?.last_health_check?.status;
-        const repo = repos.find(r => r.repo_id === record.repo_id);
+        const repo = repos.find((r) => r.repo_id === record.repo_id);
         const hasEnvConfig = !!repo?.environment_config;
 
         const isRunningOrHealthy =
@@ -222,7 +222,7 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
                   size="small"
                   icon={<PlayCircleOutlined />}
                   disabled={isRunningOrHealthy}
-                  onClick={e => {
+                  onClick={(e) => {
                     e.stopPropagation();
                     onStartEnvironment?.(record.worktree_id);
                   }}
@@ -232,7 +232,7 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
                   type="text"
                   size="small"
                   icon={<PoweroffOutlined />}
-                  onClick={e => {
+                  onClick={(e) => {
                     e.stopPropagation();
                     onStopEnvironment?.(record.worktree_id);
                   }}
@@ -243,7 +243,7 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
                     type="text"
                     size="small"
                     icon={<GlobalOutlined />}
-                    onClick={e => {
+                    onClick={(e) => {
                       e.stopPropagation();
                       // Render the URL template with worktree context
                       const templateContext = {
@@ -321,15 +321,15 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
             type="text"
             size="small"
             icon={<EditOutlined />}
-            onClick={e => {
+            onClick={(e) => {
               e.stopPropagation();
               onRowClick?.(record);
             }}
           />
           <DeleteWorktreePopconfirm
             worktree={record}
-            sessionCount={sessions.filter(s => s.worktree_id === record.worktree_id).length}
-            onConfirm={deleteFromFilesystem =>
+            sessionCount={sessions.filter((s) => s.worktree_id === record.worktree_id).length}
+            onConfirm={(deleteFromFilesystem) =>
               handleDelete(record.worktree_id, deleteFromFilesystem)
             }
           >
@@ -338,7 +338,7 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
               size="small"
               icon={<DeleteOutlined />}
               danger
-              onClick={e => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
             />
           </DeleteWorktreePopconfirm>
         </Space>
@@ -423,7 +423,7 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
           rowKey="worktree_id"
           pagination={{ pageSize: 10 }}
           size="small"
-          onRow={record => ({
+          onRow={(record) => ({
             onClick: () => onRowClick?.(record),
             style: { cursor: onRowClick ? 'pointer' : 'default' },
           })}

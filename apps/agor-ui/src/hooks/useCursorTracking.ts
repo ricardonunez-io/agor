@@ -5,10 +5,10 @@
  */
 
 import type { AgorClient } from '@agor/core/api';
+import type { BoardID, CursorMoveEvent } from '@agor/core/types';
 import { useCallback, useEffect, useRef } from 'react';
 import type { ReactFlowInstance } from 'reactflow';
 import { PRESENCE_CONFIG } from '../config/presence';
-import type { BoardID, CursorMoveEvent } from '@agor/core/types';
 
 interface UseCursorTrackingOptions {
   client: AgorClient | null;

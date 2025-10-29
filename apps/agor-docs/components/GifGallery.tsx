@@ -1,4 +1,3 @@
-import React from 'react';
 import styles from './GifGallery.module.css';
 import { GifModal } from './GifModal';
 
@@ -28,7 +27,7 @@ const gifs = [
 export function GifGallery() {
   return (
     <div className={styles.gifGrid}>
-      {gifs.map(gif => (
+      {gifs.map((gif) => (
         <GifModal key={gif.src} src={gif.src} alt={gif.alt} caption={gif.caption} />
       ))}
     </div>

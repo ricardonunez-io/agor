@@ -4,16 +4,16 @@
  * Tests for board object CRUD operations with worktree positioning.
  */
 
-import { describe, expect } from 'vitest';
 import type { BoardID, UUID, WorktreeID } from '@agor/core/types';
+import { describe, expect } from 'vitest';
 import { generateId } from '../../lib/ids';
-import { dbTest } from '../test-helpers';
+import type { Database } from '../client';
 import { boards } from '../schema';
+import { dbTest } from '../test-helpers';
 import { EntityNotFoundError, RepositoryError } from './base';
 import { BoardObjectRepository } from './board-objects';
 import { RepoRepository } from './repos';
 import { WorktreeRepository } from './worktrees';
-import type { Database } from '../client';
 
 /**
  * Create test repo data
@@ -237,15 +237,9 @@ describe('BoardObjectRepository.findAll', () => {
     const boRepo = new BoardObjectRepository(db);
 
     const repo = await repoRepo.create(createRepoData());
-    const wt1 = await wtRepo.create(
-      createWorktreeData({ repo_id: repo.repo_id, name: 'wt1' })
-    );
-    const wt2 = await wtRepo.create(
-      createWorktreeData({ repo_id: repo.repo_id, name: 'wt2' })
-    );
-    const wt3 = await wtRepo.create(
-      createWorktreeData({ repo_id: repo.repo_id, name: 'wt3' })
-    );
+    const wt1 = await wtRepo.create(createWorktreeData({ repo_id: repo.repo_id, name: 'wt1' }));
+    const wt2 = await wtRepo.create(createWorktreeData({ repo_id: repo.repo_id, name: 'wt2' }));
+    const wt3 = await wtRepo.create(createWorktreeData({ repo_id: repo.repo_id, name: 'wt3' }));
 
     const boardId1 = await createBoard(db, { name: 'Board 1' });
     const boardId2 = await createBoard(db, { name: 'Board 2' });
@@ -269,7 +263,7 @@ describe('BoardObjectRepository.findAll', () => {
     const all = await boRepo.findAll();
 
     expect(all).toHaveLength(3);
-    expect(all.map(o => o.worktree_id).sort()).toEqual(
+    expect(all.map((o) => o.worktree_id).sort()).toEqual(
       [wt1.worktree_id, wt2.worktree_id, wt3.worktree_id].sort()
     );
   });
@@ -323,15 +317,9 @@ describe('BoardObjectRepository.findByBoardId', () => {
     const boRepo = new BoardObjectRepository(db);
 
     const repo = await repoRepo.create(createRepoData());
-    const wt1 = await wtRepo.create(
-      createWorktreeData({ repo_id: repo.repo_id, name: 'wt1' })
-    );
-    const wt2 = await wtRepo.create(
-      createWorktreeData({ repo_id: repo.repo_id, name: 'wt2' })
-    );
-    const wt3 = await wtRepo.create(
-      createWorktreeData({ repo_id: repo.repo_id, name: 'wt3' })
-    );
+    const wt1 = await wtRepo.create(createWorktreeData({ repo_id: repo.repo_id, name: 'wt1' }));
+    const wt2 = await wtRepo.create(createWorktreeData({ repo_id: repo.repo_id, name: 'wt2' }));
+    const wt3 = await wtRepo.create(createWorktreeData({ repo_id: repo.repo_id, name: 'wt3' }));
 
     const boardId1 = await createBoard(db, { name: 'Board 1' });
     const boardId2 = await createBoard(db, { name: 'Board 2' });
@@ -355,8 +343,8 @@ describe('BoardObjectRepository.findByBoardId', () => {
     const board1Objects = await boRepo.findByBoardId(boardId1);
 
     expect(board1Objects).toHaveLength(2);
-    expect(board1Objects.every(o => o.board_id === boardId1)).toBe(true);
-    expect(board1Objects.map(o => o.worktree_id).sort()).toEqual(
+    expect(board1Objects.every((o) => o.board_id === boardId1)).toBe(true);
+    expect(board1Objects.map((o) => o.worktree_id).sort()).toEqual(
       [wt1.worktree_id, wt2.worktree_id].sort()
     );
 
@@ -371,12 +359,8 @@ describe('BoardObjectRepository.findByBoardId', () => {
     const boRepo = new BoardObjectRepository(db);
 
     const repo = await repoRepo.create(createRepoData());
-    const wt1 = await wtRepo.create(
-      createWorktreeData({ repo_id: repo.repo_id, name: 'wt1' })
-    );
-    const wt2 = await wtRepo.create(
-      createWorktreeData({ repo_id: repo.repo_id, name: 'wt2' })
-    );
+    const wt1 = await wtRepo.create(createWorktreeData({ repo_id: repo.repo_id, name: 'wt1' }));
+    const wt2 = await wtRepo.create(createWorktreeData({ repo_id: repo.repo_id, name: 'wt2' }));
 
     const boardId = await createBoard(db);
 
@@ -394,8 +378,8 @@ describe('BoardObjectRepository.findByBoardId', () => {
 
     const objects = await boRepo.findByBoardId(boardId);
 
-    const obj1 = objects.find(o => o.worktree_id === wt1.worktree_id);
-    const obj2 = objects.find(o => o.worktree_id === wt2.worktree_id);
+    const obj1 = objects.find((o) => o.worktree_id === wt1.worktree_id);
+    const obj2 = objects.find((o) => o.worktree_id === wt2.worktree_id);
 
     expect(obj1?.position).toEqual({ x: 111, y: 222 });
     expect(obj1?.zone_id).toBe('zone-1');
@@ -449,12 +433,8 @@ describe('BoardObjectRepository.findByObjectId', () => {
     const boRepo = new BoardObjectRepository(db);
 
     const repo = await repoRepo.create(createRepoData());
-    const wt1 = await wtRepo.create(
-      createWorktreeData({ repo_id: repo.repo_id, name: 'wt1' })
-    );
-    const wt2 = await wtRepo.create(
-      createWorktreeData({ repo_id: repo.repo_id, name: 'wt2' })
-    );
+    const wt1 = await wtRepo.create(createWorktreeData({ repo_id: repo.repo_id, name: 'wt1' }));
+    const wt2 = await wtRepo.create(createWorktreeData({ repo_id: repo.repo_id, name: 'wt2' }));
     const boardId = await createBoard(db);
 
     const obj1 = await boRepo.create({
@@ -525,12 +505,8 @@ describe('BoardObjectRepository.findByWorktreeId', () => {
     const boRepo = new BoardObjectRepository(db);
 
     const repo = await repoRepo.create(createRepoData());
-    const wt1 = await wtRepo.create(
-      createWorktreeData({ repo_id: repo.repo_id, name: 'wt1' })
-    );
-    const wt2 = await wtRepo.create(
-      createWorktreeData({ repo_id: repo.repo_id, name: 'wt2' })
-    );
+    const wt1 = await wtRepo.create(createWorktreeData({ repo_id: repo.repo_id, name: 'wt1' }));
+    const wt2 = await wtRepo.create(createWorktreeData({ repo_id: repo.repo_id, name: 'wt2' }));
     const boardId = await createBoard(db);
 
     await boRepo.create({
@@ -623,9 +599,9 @@ describe('BoardObjectRepository.updatePosition', () => {
   dbTest('should throw EntityNotFoundError for non-existent object', async ({ db }) => {
     const boRepo = new BoardObjectRepository(db);
 
-    await expect(
-      boRepo.updatePosition('non-existent-id', { x: 100, y: 100 })
-    ).rejects.toThrow(EntityNotFoundError);
+    await expect(boRepo.updatePosition('non-existent-id', { x: 100, y: 100 })).rejects.toThrow(
+      EntityNotFoundError
+    );
   });
 
   dbTest('should handle negative position updates', async ({ db }) => {
@@ -810,12 +786,8 @@ describe('BoardObjectRepository.remove', () => {
     const boRepo = new BoardObjectRepository(db);
 
     const repo = await repoRepo.create(createRepoData());
-    const wt1 = await wtRepo.create(
-      createWorktreeData({ repo_id: repo.repo_id, name: 'wt1' })
-    );
-    const wt2 = await wtRepo.create(
-      createWorktreeData({ repo_id: repo.repo_id, name: 'wt2' })
-    );
+    const wt1 = await wtRepo.create(createWorktreeData({ repo_id: repo.repo_id, name: 'wt1' }));
+    const wt2 = await wtRepo.create(createWorktreeData({ repo_id: repo.repo_id, name: 'wt2' }));
     const boardId = await createBoard(db);
 
     const obj1 = await boRepo.create({
@@ -895,9 +867,7 @@ describe('BoardObjectRepository.removeByWorktreeId', () => {
   dbTest('should not throw for worktree not on any board', async ({ db }) => {
     const boRepo = new BoardObjectRepository(db);
 
-    await expect(
-      boRepo.removeByWorktreeId(generateId() as WorktreeID)
-    ).resolves.not.toThrow();
+    await expect(boRepo.removeByWorktreeId(generateId() as WorktreeID)).resolves.not.toThrow();
   });
 
   dbTest('should not affect other worktrees', async ({ db }) => {
@@ -906,12 +876,8 @@ describe('BoardObjectRepository.removeByWorktreeId', () => {
     const boRepo = new BoardObjectRepository(db);
 
     const repo = await repoRepo.create(createRepoData());
-    const wt1 = await wtRepo.create(
-      createWorktreeData({ repo_id: repo.repo_id, name: 'wt1' })
-    );
-    const wt2 = await wtRepo.create(
-      createWorktreeData({ repo_id: repo.repo_id, name: 'wt2' })
-    );
+    const wt1 = await wtRepo.create(createWorktreeData({ repo_id: repo.repo_id, name: 'wt1' }));
+    const wt2 = await wtRepo.create(createWorktreeData({ repo_id: repo.repo_id, name: 'wt2' }));
     const boardId = await createBoard(db);
 
     await boRepo.create({

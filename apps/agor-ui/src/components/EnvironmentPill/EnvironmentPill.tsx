@@ -31,7 +31,7 @@ export function EnvironmentPill({ repo, worktree, onEdit }: EnvironmentPillProps
         <Tag
           color="default"
           style={{ cursor: 'pointer', userSelect: 'none', opacity: 0.6 }}
-          onClick={e => {
+          onClick={(e) => {
             e.stopPropagation();
             onEdit?.();
           }}
@@ -86,7 +86,6 @@ export function EnvironmentPill({ repo, worktree, onEdit }: EnvironmentPillProps
         return environmentUrl ? `Starting... - ${environmentUrl}` : 'Starting...';
       case 'error':
         return 'Environment error - click to configure';
-      case 'stopped':
       default:
         return 'Stopped - click to configure';
     }
@@ -121,7 +120,7 @@ export function EnvironmentPill({ repo, worktree, onEdit }: EnvironmentPillProps
               href={environmentUrl}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={e => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',

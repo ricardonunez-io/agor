@@ -68,7 +68,7 @@ export const AgentSelectionCard: React.FC<AgentSelectionCardProps> = ({
               type="text"
               size="small"
               icon={<DownloadOutlined />}
-              onClick={e => {
+              onClick={(e) => {
                 e.stopPropagation();
                 onInstall?.();
               }}

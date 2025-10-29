@@ -4,9 +4,9 @@
  * Displays user avatars with tooltips and optional cursor panning
  */
 
+import type { ActiveUser } from '@agor/core/types';
 import { Avatar, Tooltip, theme } from 'antd';
 import type { CSSProperties } from 'react';
-import type { ActiveUser } from '@agor/core/types';
 import './Facepile.css';
 
 const { useToken } = theme;

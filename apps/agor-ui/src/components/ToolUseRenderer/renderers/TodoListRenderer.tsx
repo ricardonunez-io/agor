@@ -78,7 +78,6 @@ const TodoItemRow: React.FC<{ todo: TodoItem; index: number }> = ({ todo, index 
             }}
           />
         );
-      case 'pending':
       default:
         return <CircleIcon color={token.colorTextSecondary} />;
     }
@@ -105,7 +104,6 @@ const TodoItemRow: React.FC<{ todo: TodoItem; index: number }> = ({ todo, index 
           color: token.colorText,
           fontWeight: 500,
         };
-      case 'pending':
       default:
         return {
           ...baseStyle,
@@ -153,8 +151,8 @@ export const TodoListRenderer: React.FC<TodoListRendererProps> = ({ toolUseId, i
   }
 
   // Count statuses for summary
-  const completedCount = todos.filter(t => t.status === 'completed').length;
-  const inProgressCount = todos.filter(t => t.status === 'in_progress').length;
+  const completedCount = todos.filter((t) => t.status === 'completed').length;
+  const inProgressCount = todos.filter((t) => t.status === 'in_progress').length;
   const totalCount = todos.length;
 
   return (

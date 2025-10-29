@@ -1,13 +1,13 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { SessionID } from '../../types';
 import {
-  generateSessionContext,
   appendSessionContextToCLAUDEmd,
+  generateSessionContext,
   removeSessionContextFromCLAUDEmd,
 } from './session-context';
-import type { SessionID } from '../../types';
 
 describe('generateSessionContext', () => {
   it('should generate context with full and short IDs', () => {
@@ -74,7 +74,9 @@ describe('appendSessionContextToCLAUDEmd', () => {
     expect(content).toContain('# My Project');
     expect(content).toContain('This is important content');
     expect(content).toContain('## Agor Session Context');
-    expect(content.indexOf('# My Project')).toBeLessThan(content.indexOf('## Agor Session Context'));
+    expect(content.indexOf('# My Project')).toBeLessThan(
+      content.indexOf('## Agor Session Context')
+    );
   });
 
   it('should be idempotent when context already exists', async () => {

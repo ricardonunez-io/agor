@@ -1,6 +1,6 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { validateDirectory } from './validation';
 import * as fs from 'node:fs/promises';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { validateDirectory } from './validation';
 
 vi.mock('node:fs/promises');
 
@@ -130,9 +130,7 @@ describe('validateDirectory', () => {
     error.code = 'ENOENT';
     vi.mocked(fs.stat).mockRejectedValue(error);
 
-    await expect(validateDirectory('/path')).rejects.toThrow(
-      'Directory does not exist: /path'
-    );
+    await expect(validateDirectory('/path')).rejects.toThrow('Directory does not exist: /path');
   });
 
   it('should handle symlinks to directories', async () => {

@@ -4,13 +4,19 @@
  * Tests async permission request/decision flow for Claude Agent SDK PreToolUse hooks.
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { PermissionService, type PermissionRequest, type PermissionDecision } from './permission-service';
-import { PermissionScope } from '../types/message';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionID, TaskID } from '../types';
+import { PermissionScope } from '../types/message';
+import {
+  type PermissionDecision,
+  type PermissionRequest,
+  PermissionService,
+} from './permission-service';
 
 // Helper to create test permission request
-function createRequest(overrides?: Partial<Omit<PermissionRequest, 'sessionId'>>): Omit<PermissionRequest, 'sessionId'> {
+function createRequest(
+  overrides?: Partial<Omit<PermissionRequest, 'sessionId'>>
+): Omit<PermissionRequest, 'sessionId'> {
   return {
     requestId: 'test-request-123',
     taskId: 'test-task-456' as TaskID,
@@ -96,13 +102,13 @@ describe('PermissionService.emitRequest', () => {
     const sessionId = 'session-789' as SessionID;
     const tools = ['Bash', 'Write', 'Edit', 'Read', 'Glob'];
 
-    tools.forEach(toolName => {
+    tools.forEach((toolName) => {
       const request = createRequest({ toolName });
       service.emitRequest(sessionId, request);
     });
 
     expect(emitEvent).toHaveBeenCalledTimes(tools.length);
-    expect(emitEvent.mock.calls.map(c => (c[1] as PermissionRequest).toolName)).toEqual(tools);
+    expect(emitEvent.mock.calls.map((c) => (c[1] as PermissionRequest).toolName)).toEqual(tools);
   });
 
   it('should preserve all request fields', () => {
@@ -276,9 +282,15 @@ describe('PermissionService.waitForDecision', () => {
     const req3 = service.waitForDecision('req-3', 'task-3' as TaskID, signal);
 
     // Resolve in different order
-    service.resolvePermission(createDecision({ requestId: 'req-2', taskId: 'task-2' as TaskID, allow: false }));
-    service.resolvePermission(createDecision({ requestId: 'req-1', taskId: 'task-1' as TaskID, allow: true }));
-    service.resolvePermission(createDecision({ requestId: 'req-3', taskId: 'task-3' as TaskID, allow: true }));
+    service.resolvePermission(
+      createDecision({ requestId: 'req-2', taskId: 'task-2' as TaskID, allow: false })
+    );
+    service.resolvePermission(
+      createDecision({ requestId: 'req-1', taskId: 'task-1' as TaskID, allow: true })
+    );
+    service.resolvePermission(
+      createDecision({ requestId: 'req-3', taskId: 'task-3' as TaskID, allow: true })
+    );
 
     const [result1, result2, result3] = await Promise.all([req1, req2, req3]);
 
@@ -483,10 +495,14 @@ describe('PermissionService multi-user scenarios', () => {
     const waitPromise = service.waitForDecision(requestId, taskId, signal);
 
     // User B approves first
-    service.resolvePermission(createDecision({ requestId, taskId, allow: true, decidedBy: 'user-b' }));
+    service.resolvePermission(
+      createDecision({ requestId, taskId, allow: true, decidedBy: 'user-b' })
+    );
 
     // User A denies second (should have no effect)
-    service.resolvePermission(createDecision({ requestId, taskId, allow: false, decidedBy: 'user-a' }));
+    service.resolvePermission(
+      createDecision({ requestId, taskId, allow: false, decidedBy: 'user-a' })
+    );
 
     const result = await waitPromise;
     expect(result.allow).toBe(true);
@@ -500,11 +516,14 @@ describe('PermissionService multi-user scenarios', () => {
     service.emitRequest(sessionId, request);
 
     // Event should be emitted (which would broadcast to all connected clients)
-    expect(emitEvent).toHaveBeenCalledWith('permission:request', expect.objectContaining({
-      sessionId,
-      requestId: request.requestId,
-      taskId: request.taskId,
-    }));
+    expect(emitEvent).toHaveBeenCalledWith(
+      'permission:request',
+      expect.objectContaining({
+        sessionId,
+        requestId: request.requestId,
+        taskId: request.taskId,
+      })
+    );
   });
 });
 

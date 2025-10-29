@@ -7,15 +7,14 @@
 import bcrypt from 'bcryptjs';
 import { describe, expect, it } from 'vitest';
 import { generateId } from '../lib/ids';
-import type { UserID } from '../types';
 import { dbTest } from './test-helpers';
 import {
-  createUser,
-  userExists,
-  getUserByEmail,
-  createDefaultAdminUser,
-  DEFAULT_ADMIN_USER,
   type CreateUserData,
+  createDefaultAdminUser,
+  createUser,
+  DEFAULT_ADMIN_USER,
+  getUserByEmail,
+  userExists,
 } from './user-utils';
 
 /**
@@ -47,7 +46,7 @@ describe('createUser', () => {
 
     expect(user.user_id).toBeDefined();
     expect(user.user_id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
     );
     expect(user.email).toBe('test@example.com');
     expect(user.name).toBe('Test User');
@@ -148,7 +147,7 @@ describe('createUser', () => {
     await createUser(db, data);
 
     await expect(createUser(db, data)).rejects.toThrow(
-      'User with email duplicate@example.com already exists',
+      'User with email duplicate@example.com already exists'
     );
   });
 
@@ -173,18 +172,9 @@ describe('createUser', () => {
   });
 
   dbTest('should create multiple users with unique emails', async ({ db }) => {
-    const user1 = await createUser(
-      db,
-      createUserData({ email: 'user1@example.com' }),
-    );
-    const user2 = await createUser(
-      db,
-      createUserData({ email: 'user2@example.com' }),
-    );
-    const user3 = await createUser(
-      db,
-      createUserData({ email: 'user3@example.com' }),
-    );
+    const user1 = await createUser(db, createUserData({ email: 'user1@example.com' }));
+    const user2 = await createUser(db, createUserData({ email: 'user2@example.com' }));
+    const user3 = await createUser(db, createUserData({ email: 'user3@example.com' }));
 
     expect(user1.user_id).not.toBe(user2.user_id);
     expect(user2.user_id).not.toBe(user3.user_id);
@@ -207,10 +197,7 @@ describe('createUser', () => {
 
   dbTest('should set created_at and updated_at to same timestamp', async ({ db }) => {
     const before = Date.now();
-    const user = await createUser(
-      db,
-      createUserData({ email: 'time@example.com' }),
-    );
+    const user = await createUser(db, createUserData({ email: 'time@example.com' }));
     const after = Date.now();
 
     expect(user.created_at.getTime()).toBeGreaterThanOrEqual(before);
@@ -353,10 +340,7 @@ describe('getUserByEmail', () => {
   });
 
   dbTest('should be case-sensitive for email lookups', async ({ db }) => {
-    await createUser(
-      db,
-      createUserData({ email: 'case@example.com', name: 'Case Test' }),
-    );
+    await createUser(db, createUserData({ email: 'case@example.com', name: 'Case Test' }));
 
     const found = await getUserByEmail(db, 'CASE@example.com');
 
@@ -405,14 +389,8 @@ describe('getUserByEmail', () => {
   });
 
   dbTest('should distinguish between multiple users', async ({ db }) => {
-    await createUser(
-      db,
-      createUserData({ email: 'user1@example.com', name: 'User One' }),
-    );
-    await createUser(
-      db,
-      createUserData({ email: 'user2@example.com', name: 'User Two' }),
-    );
+    await createUser(db, createUserData({ email: 'user1@example.com', name: 'User One' }));
+    await createUser(db, createUserData({ email: 'user2@example.com', name: 'User Two' }));
 
     const user1 = await getUserByEmail(db, 'user1@example.com');
     const user2 = await getUserByEmail(db, 'user2@example.com');
@@ -423,10 +401,7 @@ describe('getUserByEmail', () => {
   });
 
   dbTest('should not expose password in returned user object', async ({ db }) => {
-    await createUser(
-      db,
-      createUserData({ email: 'secure@example.com', password: 'secret123' }),
-    );
+    await createUser(db, createUserData({ email: 'secure@example.com', password: 'secret123' }));
 
     const user = await getUserByEmail(db, 'secure@example.com');
 
@@ -486,13 +461,11 @@ describe('createDefaultAdminUser', () => {
     await createDefaultAdminUser(db);
 
     await expect(createDefaultAdminUser(db)).rejects.toThrow(
-      'Admin user already exists (email: admin@agor.live)',
+      'Admin user already exists (email: admin@agor.live)'
     );
   });
 
-  dbTest('should throw error if admin email exists with different user', async ({
-    db,
-  }) => {
+  dbTest('should throw error if admin email exists with different user', async ({ db }) => {
     // Create a user with the admin email manually
     await createUser(db, {
       email: 'admin@agor.live',
@@ -501,9 +474,7 @@ describe('createDefaultAdminUser', () => {
       role: 'member',
     });
 
-    await expect(createDefaultAdminUser(db)).rejects.toThrow(
-      'Admin user already exists',
-    );
+    await expect(createDefaultAdminUser(db)).rejects.toThrow('Admin user already exists');
   });
 
   dbTest('should use createUser internally', async ({ db }) => {
@@ -543,7 +514,7 @@ describe('User utilities integration', () => {
       createUserData({
         email: 'lifecycle@example.com',
         name: 'Lifecycle User',
-      }),
+      })
     );
 
     // Verify user exists
@@ -559,19 +530,19 @@ describe('User utilities integration', () => {
   dbTest('should handle mixed user roles in same database', async ({ db }) => {
     const owner = await createUser(
       db,
-      createUserData({ email: 'owner@example.com', role: 'owner' }),
+      createUserData({ email: 'owner@example.com', role: 'owner' })
     );
     const admin = await createUser(
       db,
-      createUserData({ email: 'admin@example.com', role: 'admin' }),
+      createUserData({ email: 'admin@example.com', role: 'admin' })
     );
     const member = await createUser(
       db,
-      createUserData({ email: 'member@example.com', role: 'member' }),
+      createUserData({ email: 'member@example.com', role: 'member' })
     );
     const viewer = await createUser(
       db,
-      createUserData({ email: 'viewer@example.com', role: 'viewer' }),
+      createUserData({ email: 'viewer@example.com', role: 'viewer' })
     );
 
     expect(owner.role).toBe('owner');
@@ -590,14 +561,8 @@ describe('User utilities integration', () => {
     const admin = await createDefaultAdminUser(db);
 
     // Create regular users
-    const user1 = await createUser(
-      db,
-      createUserData({ email: 'user1@example.com' }),
-    );
-    const user2 = await createUser(
-      db,
-      createUserData({ email: 'user2@example.com' }),
-    );
+    const user1 = await createUser(db, createUserData({ email: 'user1@example.com' }));
+    const user2 = await createUser(db, createUserData({ email: 'user2@example.com' }));
 
     // All should exist independently
     expect(await userExists(db, 'admin@agor.live')).toBe(true);

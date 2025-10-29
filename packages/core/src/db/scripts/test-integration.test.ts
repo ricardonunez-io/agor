@@ -7,10 +7,10 @@
  * JSON serialization, and genealogy queries.
  */
 
-import { describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
+import { describe, expect, it } from 'vitest';
 import { formatShortId, generateId } from '../../lib/ids';
-import type { Session, SessionID, TaskID, UserID, WorktreeID } from '../../types';
+import type { Session, SessionID, TaskID, UserID } from '../../types';
 import { SessionStatus, TaskStatus } from '../../types';
 import { createDatabase } from '../client';
 import { initializeDatabase, seedInitialData } from '../migrate';
@@ -120,8 +120,7 @@ describe('Database Initialization', () => {
 describe('ID Generation', () => {
   it('should generate valid UUIDv7 format', () => {
     const id = generateId();
-    const uuidv7Regex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+    const uuidv7Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
     expect(id).toMatch(uuidv7Regex);
   });
