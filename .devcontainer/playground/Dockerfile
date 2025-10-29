@@ -13,8 +13,10 @@ RUN curl -fsSL "$(curl -s https://api.github.com/repos/cli/cli/releases/latest |
     mv /tmp/gh_*/bin/gh /usr/local/bin/ && \
     rm -rf /tmp/gh_*
 
-# Install foundation packages (cached unless these change)
-RUN npm install -g @anthropic-ai/claude-code@latest @google/gemini-cli@latest @openai/codex@latest
+# Install foundation packages one at a time (more robust against npm hiccups)
+RUN npm install -g @anthropic-ai/claude-code@latest && \
+    npm install -g @google/gemini-cli@latest && \
+    npm install -g @openai/codex@latest
 
 # Copy package.json as cache-buster for agor-live (rebuilds only when version changes)
 COPY packages/agor-live/package.json /tmp/agor-live-package.json
