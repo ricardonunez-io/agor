@@ -10,18 +10,18 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk/sdk';
-import type { MessagesRepository } from '../../db/repositories/messages';
 import type { MCPServerRepository } from '../../db/repositories/mcp-servers';
+import type { MessagesRepository } from '../../db/repositories/messages';
 import type { SessionMCPServerRepository } from '../../db/repositories/session-mcp-servers';
 import type { SessionRepository } from '../../db/repositories/sessions';
 import type { WorktreeRepository } from '../../db/repositories/worktrees';
 import { validateDirectory } from '../../lib/validation';
 import type { PermissionService } from '../../permissions/permission-service';
 import type { MCPServersConfig, SessionID, TaskID } from '../../types';
+import type { MessagesService, SessionsService, TasksService } from './claude-tool';
 import { DEFAULT_CLAUDE_MODEL } from './models';
 import { createPreToolUseHook } from './permissions/permission-hooks';
 import { appendSessionContextToCLAUDEmd } from './session-context';
-import type { MessagesService, SessionsService, TasksService } from './claude-tool';
 
 /**
  * Get path to Claude Code executable
@@ -333,8 +333,7 @@ export async function setupQuery(
     console.log(`🔌 Configuring Agor MCP server (self-access to daemon)`);
     const mcpConfig = {
       agor: {
-        name: 'agor',
-        type: 'http' as const,
+        transport: 'http' as const,
         url: `${daemonUrl}/mcp?sessionToken=${mcpToken}`,
       },
     };
@@ -347,9 +346,7 @@ export async function setupQuery(
   }
 
   // Fetch and configure MCP servers for this session (hierarchical scoping)
-  // NOTE: Currently disabled for testing session resumption
-  // biome-ignore lint/correctness/noConstantCondition: Temporarily disabled for testing
-  if (false && deps.sessionMCPRepo && deps.mcpServerRepo) {
+  if (deps.sessionMCPRepo && deps.mcpServerRepo) {
     try {
       const allServers: Array<{
         // biome-ignore lint/suspicious/noExplicitAny: MCPServer type from multiple sources
@@ -431,9 +428,7 @@ export async function setupQuery(
       }
       const uniqueServers = Array.from(serverMap.values());
 
-      console.log(
-        `   ✅ Total: ${uniqueServers.length} unique MCP server(s) after deduplication`
-      );
+      console.log(`   ✅ Total: ${uniqueServers.length} unique MCP server(s) after deduplication`);
 
       if (uniqueServers.length > 0) {
         // Convert to SDK format
@@ -443,23 +438,27 @@ export async function setupQuery(
         for (const { server, source } of uniqueServers) {
           console.log(`   - ${server.name} (${server.transport}) [${source}]`);
 
-          // Build server config
-          const serverConfig: {
-            transport?: 'stdio' | 'http' | 'sse';
-            command?: string;
-            args?: string[];
-            url?: string;
-            env?: Record<string, string>;
-          } = {
-            transport: server.transport,
-          };
-
-          if (server.command) serverConfig.command = server.command;
-          if (server.args) serverConfig.args = server.args;
-          if (server.url) serverConfig.url = server.url;
-          if (server.env) serverConfig.env = server.env;
-
-          mcpConfig[server.name] = serverConfig;
+          // Build server config based on transport type
+          if (server.transport === 'stdio') {
+            mcpConfig[server.name] = {
+              transport: 'stdio' as const,
+              command: server.command,
+              args: server.args || [],
+              env: server.env,
+            };
+          } else if (server.transport === 'http') {
+            mcpConfig[server.name] = {
+              transport: 'http' as const,
+              url: server.url,
+              env: server.env,
+            };
+          } else if (server.transport === 'sse') {
+            mcpConfig[server.name] = {
+              transport: 'sse' as const,
+              url: server.url,
+              env: server.env,
+            };
+          }
 
           // Add tools to allowlist
           if (server.tools) {
@@ -469,8 +468,15 @@ export async function setupQuery(
           }
         }
 
-        queryOptions.mcpServers = mcpConfig;
-        console.log(`   🔧 MCP config being passed to SDK:`, JSON.stringify(mcpConfig, null, 2));
+        // Merge with existing MCP servers (preserve Agor MCP server)
+        queryOptions.mcpServers = {
+          ...(queryOptions.mcpServers || {}),
+          ...mcpConfig,
+        };
+        console.log(
+          `   🔧 MCP config being passed to SDK:`,
+          JSON.stringify(queryOptions.mcpServers, null, 2)
+        );
         if (allowedTools.length > 0) {
           queryOptions.allowedTools = allowedTools;
           console.log(`   🔧 Allowing ${allowedTools.length} MCP tools`);
