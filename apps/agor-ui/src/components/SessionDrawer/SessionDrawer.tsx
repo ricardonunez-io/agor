@@ -362,7 +362,14 @@ const SessionDrawer = ({
           <div style={{ flex: 1 }}>
             <div style={{ marginBottom: 4 }}>
               <Typography.Text strong style={{ fontSize: 18 }}>
-                {session.title || session.description || session.agentic_tool}
+                {(() => {
+                  const displayText = session.title || session.description || session.agentic_tool;
+                  // Truncate description (first prompt) to 100 chars if no explicit title
+                  if (!session.title && session.description && session.description.length > 100) {
+                    return session.description.substring(0, 100) + '...';
+                  }
+                  return displayText;
+                })()}
               </Typography.Text>
               <Badge
                 status={getStatusColor()}

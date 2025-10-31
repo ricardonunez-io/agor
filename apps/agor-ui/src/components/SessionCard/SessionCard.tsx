@@ -230,7 +230,14 @@ const SessionCard = ({
         {/* Title/Description */}
         {(session.title || session.description) && (
           <Typography.Text strong style={{ fontSize: 16, display: 'block', marginBottom: 8 }}>
-            {session.title || session.description}
+            {(() => {
+              const displayText = session.title || session.description;
+              // Truncate description (first prompt) to 100 chars if no explicit title
+              if (!session.title && session.description && session.description.length > 100) {
+                return session.description.substring(0, 100) + '...';
+              }
+              return displayText;
+            })()}
           </Typography.Text>
         )}
 
