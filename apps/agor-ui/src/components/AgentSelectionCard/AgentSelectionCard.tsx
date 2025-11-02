@@ -7,7 +7,7 @@ interface AgenticToolOption {
   id: string; // AgenticToolName as string
   name: string;
   icon: string;
-  installed: boolean;
+  installed?: boolean;
   installable?: boolean;
   version?: string;
   description?: string;
@@ -26,7 +26,8 @@ export const AgentSelectionCard: React.FC<AgentSelectionCardProps> = ({
   onClick,
   onInstall,
 }) => {
-  const isDisabled = !agent.installed;
+  // Treat agents as available by default unless explicitly marked as not installed
+  const isDisabled = agent.installed === false;
 
   return (
     <Card
@@ -49,15 +50,7 @@ export const AgentSelectionCard: React.FC<AgentSelectionCardProps> = ({
             <Typography.Text strong style={{ fontSize: '14px' }}>
               {agent.name}
             </Typography.Text>
-            {agent.installed ? (
-              <Tag
-                icon={<CheckCircleOutlined />}
-                color="success"
-                style={{ fontSize: '11px', padding: '0 6px' }}
-              >
-                Installed
-              </Tag>
-            ) : (
+            {agent.installed === false && (
               <Tag color="orange" style={{ fontSize: '11px', padding: '0 6px' }}>
                 COMING SOON
               </Tag>
@@ -68,7 +61,7 @@ export const AgentSelectionCard: React.FC<AgentSelectionCardProps> = ({
               type="text"
               size="small"
               icon={<DownloadOutlined />}
-              onClick={(e) => {
+              onClick={e => {
                 e.stopPropagation();
                 onInstall?.();
               }}

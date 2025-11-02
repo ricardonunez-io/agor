@@ -33,6 +33,10 @@ export class WorktreeRepository implements BaseRepository<Worktree, Partial<Work
       ref: row.ref,
       worktree_unique_id: row.worktree_unique_id,
       board_id: (row.board_id as UUID | null) ?? undefined, // Top-level column
+      schedule_enabled: row.schedule_enabled ?? false,
+      schedule_cron: row.schedule_cron ?? undefined,
+      schedule_last_triggered_at: row.schedule_last_triggered_at ?? undefined,
+      schedule_next_run_at: row.schedule_next_run_at ?? undefined,
       ...row.data,
     };
   }
@@ -55,6 +59,10 @@ export class WorktreeRepository implements BaseRepository<Worktree, Partial<Work
       worktree_unique_id: worktree.worktree_unique_id!, // Required field
       // Explicitly convert undefined to null for Drizzle (undefined values are ignored in set())
       board_id: worktree.board_id === undefined ? null : worktree.board_id || null,
+      schedule_enabled: worktree.schedule_enabled ?? false,
+      schedule_cron: worktree.schedule_cron ?? null,
+      schedule_last_triggered_at: worktree.schedule_last_triggered_at ?? null,
+      schedule_next_run_at: worktree.schedule_next_run_at ?? null,
       data: {
         path: worktree.path!,
         base_ref: worktree.base_ref,
@@ -68,6 +76,7 @@ export class WorktreeRepository implements BaseRepository<Worktree, Partial<Work
         environment_instance: worktree.environment_instance,
         last_used: worktree.last_used ?? new Date(now).toISOString(),
         custom_context: worktree.custom_context,
+        schedule: worktree.schedule,
       },
     };
   }
@@ -108,7 +117,7 @@ export class WorktreeRepository implements BaseRepository<Worktree, Partial<Work
       throw new AmbiguousIdError(
         'Worktree',
         prefix,
-        matches.map((m) => formatShortId(m.worktree_id as UUID))
+        matches.map(m => formatShortId(m.worktree_id as UUID))
       );
     }
 
@@ -124,11 +133,11 @@ export class WorktreeRepository implements BaseRepository<Worktree, Partial<Work
         .select()
         .from(worktrees)
         .where(eq(worktrees.repo_id, filter.repo_id));
-      return rows.map((row) => this.rowToWorktree(row));
+      return rows.map(row => this.rowToWorktree(row));
     }
 
     const rows = await this.db.select().from(worktrees);
-    return rows.map((row) => this.rowToWorktree(row));
+    return rows.map(row => this.rowToWorktree(row));
   }
 
   /**

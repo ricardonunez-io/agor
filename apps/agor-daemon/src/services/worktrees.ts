@@ -22,6 +22,7 @@ import type {
   Worktree,
   WorktreeID,
 } from '@agor/core/types';
+import { getNextRunTime, validateCron } from '@agor/core/utils/cron';
 import { DrizzleService } from '../adapters/drizzle';
 
 /**
@@ -68,7 +69,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
   }
 
   /**
-   * Override patch to handle board_objects when board_id changes
+   * Override patch to handle board_objects when board_id changes and schedule validation
    */
   async patch(id: WorktreeID, data: Partial<Worktree>, params?: WorktreeParams): Promise<Worktree> {
     // Get current worktree to check if board_id is changing
@@ -76,6 +77,41 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     const oldBoardId = currentWorktree.board_id;
     const boardIdProvided = Object.hasOwn(data, 'board_id');
     const newBoardId = data.board_id;
+
+    // ===== SCHEDULER VALIDATION =====
+
+    // Validate cron expression if schedule_cron is being updated
+    if (data.schedule_cron !== undefined && data.schedule_cron !== null) {
+      try {
+        validateCron(data.schedule_cron);
+      } catch (error) {
+        throw new Error(
+          `Invalid cron expression: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+
+      // Compute next_run_at if cron is valid
+      try {
+        const nextRunAt = getNextRunTime(data.schedule_cron);
+        data.schedule_next_run_at = nextRunAt;
+      } catch (error) {
+        console.error('Failed to compute next_run_at:', error);
+        // Don't fail the patch if next_run_at computation fails
+        // Scheduler will handle it on next tick
+      }
+    }
+
+    // If schedule_enabled is being set to true, ensure schedule config exists
+    if (data.schedule_enabled === true && !currentWorktree.schedule && !data.schedule) {
+      throw new Error(
+        'Cannot enable schedule without schedule configuration. Please provide schedule config in data.schedule.'
+      );
+    }
+
+    // If schedule_enabled is being set to false, clear next_run_at
+    if (data.schedule_enabled === false) {
+      data.schedule_next_run_at = undefined;
+    }
 
     // Call parent patch
     const updatedWorktree = (await super.patch(id, data, params)) as Worktree;
@@ -352,7 +388,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
           stdio: 'inherit', // Show output directly in daemon logs
         });
 
-        childProcess.on('exit', (code) => {
+        childProcess.on('exit', code => {
           if (code === 0) {
             console.log(`✅ Start command completed successfully for ${worktree.name}`);
             resolve();
@@ -435,7 +471,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
             stdio: 'inherit',
           });
 
-          stopProcess.on('exit', (code) => {
+          stopProcess.on('exit', code => {
             if (code === 0) {
               resolve();
             } else {
@@ -507,7 +543,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       await this.stopEnvironment(id, params);
 
       // Wait a bit for processes to clean up
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
     // Start
@@ -704,7 +740,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
           stderr += data.toString();
         });
 
-        childProcess.on('exit', (code) => {
+        childProcess.on('exit', code => {
           clearTimeout(timeout);
           if (code === 0 || stdout.length > 0) {
             resolve({ stdout, stderr, truncated });
@@ -713,7 +749,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
           }
         });
 
-        childProcess.on('error', (error) => {
+        childProcess.on('error', error => {
           clearTimeout(timeout);
           reject(error);
         });

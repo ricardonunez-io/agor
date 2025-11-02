@@ -174,5 +174,74 @@ export interface Session {
    * Example: { "teamName": "Backend", "sprintNumber": 42 }
    * Access in templates: {{ session.context.teamName }}
    */
-  custom_context?: Record<string, unknown>;
+  custom_context?: Record<string, unknown> & {
+    /**
+     * Scheduled run metadata (populated by scheduler)
+     *
+     * Present only if this session was created by the scheduler.
+     * Contains execution details and config snapshot at run time.
+     */
+    scheduled_run?: ScheduledRunMetadata;
+  };
+
+  // ===== Scheduler Tracking =====
+
+  /**
+   * Authoritative run ID for scheduled sessions (Unix timestamp in ms)
+   *
+   * Stores the exact scheduled time (rounded to minute), NOT when session was created.
+   * Used for deduplication and retention cleanup.
+   *
+   * Example: Midnight run scheduled for 2025-11-03 00:00:00 UTC
+   * Even if triggered at 00:00:32, we store 00:00:00 (1730592000000)
+   *
+   * This becomes the unique run identifier to prevent duplicate scheduling.
+   */
+  scheduled_run_at?: number;
+
+  /**
+   * Whether this session was created by the scheduler
+   *
+   * Materialized for UI filtering (show clock icon) and analytics.
+   * True = created by scheduler, False = created manually by user
+   */
+  scheduled_from_worktree: boolean;
+}
+
+/**
+ * Metadata for sessions created by the scheduler
+ *
+ * Stored in session.custom_context.scheduled_run
+ */
+export interface ScheduledRunMetadata {
+  /**
+   * Rendered prompt after Handlebars template substitution
+   *
+   * Example:
+   * Template: "Check PR {{worktree.pull_request_url}}"
+   * Rendered: "Check PR https://github.com/org/repo/pull/42"
+   */
+  rendered_prompt: string;
+
+  /**
+   * Run number for this schedule (1st, 2nd, 3rd, ...)
+   *
+   * Increments with each run. Useful for tracking execution history.
+   */
+  run_index: number;
+
+  /**
+   * Snapshot of schedule config at execution time
+   *
+   * Preserves configuration even if schedule is later modified or deleted.
+   * Useful for debugging and understanding past runs.
+   */
+  schedule_config_snapshot?: {
+    /** Cron expression that triggered this run */
+    cron: string;
+    /** Timezone for cron evaluation */
+    timezone: string;
+    /** Retention policy at run time */
+    retention: number;
+  };
 }

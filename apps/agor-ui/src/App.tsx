@@ -2,6 +2,7 @@ import { getRepoReferenceOptions } from '@agor/core/config/browser';
 import { Alert, App as AntApp, ConfigProvider, Spin, theme } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { AVAILABLE_AGENTS } from './components/AgentSelectionGrid';
 import { App as AgorApp } from './components/App';
 import { LoginPage } from './components/LoginPage';
 import { MobileApp } from './components/mobile/MobileApp';
@@ -16,14 +17,6 @@ import {
   useSessionActions,
 } from './hooks';
 import { isMobileDevice } from './utils/deviceDetection';
-
-// Available agentic tools (formerly "agents")
-const availableAgents = [
-  { id: 'claude-code', name: 'Claude Code', icon: '🤖', installed: true, installable: true },
-  { id: 'codex', name: 'Codex', icon: '💻', installed: true, installable: true },
-  { id: 'gemini', name: 'Gemini', icon: '💎', installed: true, installable: true },
-  { id: 'cursor', name: 'Cursor', icon: '✏️', installed: false, installable: false },
-];
 
 /**
  * DeviceRouter - Redirects users to mobile or desktop site based on device detection
@@ -121,7 +114,7 @@ function AppContent() {
   // Get current user from users array (real-time updates via WebSocket)
   // This ensures we get the latest onboarding_completed status
   // Fall back to user from auth if users array hasn't loaded yet
-  const currentUser = user ? users.find((u) => u.user_id === user.user_id) || user : null;
+  const currentUser = user ? users.find(u => u.user_id === user.user_id) || user : null;
 
   // Memoize welcome modal stats to prevent unnecessary re-renders
   const welcomeStats = useMemo(
@@ -739,10 +732,10 @@ function AppContent() {
       const currentIds = sessionMcpServerIds[sessionId] || [];
 
       // Find servers to add (in new list but not in current)
-      const toAdd = mcpServerIds.filter((id) => !currentIds.includes(id));
+      const toAdd = mcpServerIds.filter(id => !currentIds.includes(id));
 
       // Find servers to remove (in current list but not in new)
-      const toRemove = currentIds.filter((id) => !mcpServerIds.includes(id));
+      const toRemove = currentIds.filter(id => !mcpServerIds.includes(id));
 
       // Add new relationships
       for (const serverId of toAdd) {
@@ -784,7 +777,7 @@ function AppContent() {
   const handleResolveComment = async (commentId: string) => {
     if (!client) return;
     try {
-      const comment = comments.find((c) => c.comment_id === commentId);
+      const comment = comments.find(c => c.comment_id === commentId);
       await client.service('board-comments').patch(commentId, {
         resolved: !comment?.resolved,
       });
@@ -839,8 +832,8 @@ function AppContent() {
 
   // Generate repo reference options for dropdowns
   const allOptions = getRepoReferenceOptions(repos, worktrees);
-  const _worktreeOptions = allOptions.filter((opt) => opt.type === 'managed-worktree');
-  const _repoOptions = allOptions.filter((opt) => opt.type === 'managed');
+  const _worktreeOptions = allOptions.filter(opt => opt.type === 'managed-worktree');
+  const _repoOptions = allOptions.filter(opt => opt.type === 'managed');
 
   // Handle onboarding dismissal
   const handleDismissOnboarding = async () => {
@@ -952,7 +945,7 @@ function AppContent() {
                 user={user}
                 sessions={sessions}
                 tasks={tasks}
-                availableAgents={availableAgents}
+                availableAgents={AVAILABLE_AGENTS}
                 boards={boards}
                 boardObjects={boardObjects}
                 comments={comments}

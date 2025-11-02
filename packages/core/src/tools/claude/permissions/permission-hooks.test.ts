@@ -279,6 +279,7 @@ describe('createPreToolUseHook', () => {
       tasks: [],
       message_count: 0,
       permission_config: { allowedTools: [] },
+      scheduled_from_worktree: false,
     };
 
     const sessionsRepo: Partial<SessionRepository> = {
@@ -366,7 +367,7 @@ describe('createPreToolUseHook', () => {
   it('should wait for existing permission lock before checking', async () => {
     const deps = createMockDeps();
     let lockResolved = false;
-    const existingLock = new Promise<void>((resolve) => {
+    const existingLock = new Promise<void>(resolve => {
       setTimeout(() => {
         lockResolved = true;
         resolve();
@@ -724,6 +725,7 @@ describe('createPreToolUseHook', () => {
       created_by: generateId() as UUID,
       new_branch: false,
       last_used: new Date().toISOString(),
+      schedule_enabled: false,
     };
 
     (deps.worktreesRepo?.findById as ReturnType<typeof vi.fn>).mockResolvedValue(worktree);

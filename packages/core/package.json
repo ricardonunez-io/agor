@@ -95,6 +95,11 @@
       "types": "./dist/utils/permission-mode-mapper.d.ts",
       "import": "./dist/utils/permission-mode-mapper.js",
       "require": "./dist/utils/permission-mode-mapper.cjs"
+    },
+    "./utils/cron": {
+      "types": "./dist/utils/cron.d.ts",
+      "import": "./dist/utils/cron.js",
+      "require": "./dist/utils/cron.cjs"
     }
   },
   "scripts": {
@@ -117,9 +122,9 @@
     "@feathersjs/authentication": "^5.0.35",
     "@feathersjs/authentication-client": "^5.0.35",
     "@feathersjs/authentication-local": "^5.0.35",
+    "@feathersjs/errors": "^5.0.35",
     "@feathersjs/express": "^5.0.29",
     "@feathersjs/feathers": "^5.0.29",
-    "@feathersjs/errors": "^5.0.35",
     "@feathersjs/socketio": "^5.0.29",
     "@feathersjs/socketio-client": "^5.0.29",
     "@google/gemini-cli-core": "^0.9.0",
@@ -127,6 +132,8 @@
     "@libsql/client": "^0.15.15",
     "@openai/codex-sdk": "^0.47.0",
     "bcryptjs": "^2.4.3",
+    "cron-parser": "^5.4.0",
+    "cronstrue": "^3.9.0",
     "drizzle-orm": "^0.44.6",
     "js-yaml": "^4.1.0",
     "simple-git": "^3.28.0",

@@ -181,6 +181,140 @@ export interface Worktree {
    * User-defined variables for zone triggers, reports, etc.
    */
   custom_context?: Record<string, unknown>;
+
+  // ===== Scheduler Configuration =====
+
+  /**
+   * Whether this worktree has an active schedule
+   *
+   * Materialized for efficient scheduler queries.
+   * Only enabled schedules are evaluated during scheduler ticks.
+   */
+  schedule_enabled: boolean;
+
+  /**
+   * Cron expression for schedule (if scheduled)
+   *
+   * Standard cron format (minute hour day month weekday).
+   * All times in UTC.
+   *
+   * Examples:
+   * - "0 9 * * 1-5" - 9am weekdays
+   * - "0 *\/4 * * *" - Every 4 hours
+   * - "0 2 * * 1" - 2am every Monday
+   */
+  schedule_cron?: string;
+
+  /**
+   * Last time this schedule was triggered (Unix timestamp in ms)
+   *
+   * Used for deduplication and recovery.
+   * Stores the exact scheduled time (rounded to minute), not execution time.
+   */
+  schedule_last_triggered_at?: number;
+
+  /**
+   * Next scheduled run time (Unix timestamp in ms)
+   *
+   * Computed from cron expression.
+   * Materialized for UI display ("Next run in 2h 15m").
+   */
+  schedule_next_run_at?: number;
+
+  /**
+   * Full schedule configuration (JSON blob)
+   *
+   * Contains template, agent config, retention policy.
+   * Only present if schedule_enabled = true.
+   */
+  schedule?: WorktreeScheduleConfig;
+}
+
+/**
+ * Worktree schedule configuration
+ *
+ * Defines how and when to automatically spawn sessions.
+ * Schedules are evaluated in UTC and use Handlebars templates for prompts.
+ */
+export interface WorktreeScheduleConfig {
+  /**
+   * IANA timezone for cron evaluation
+   *
+   * Default: 'UTC'
+   * All schedules run in UTC regardless of this setting.
+   * This field is for future timezone support.
+   */
+  timezone: string;
+
+  /**
+   * Handlebars template for prompt
+   *
+   * Available variables:
+   * - {{worktree.name}}, {{worktree.ref}}
+   * - {{worktree.issue_url}}, {{worktree.pull_request_url}}
+   * - {{worktree.notes}}, {{worktree.custom_context.*}}
+   * - {{board.name}}, {{board.custom_context.*}}
+   * - {{schedule.cron}}, {{schedule.scheduled_time}}
+   *
+   * Example: "Check PR {{worktree.pull_request_url}} for new comments"
+   */
+  prompt_template: string;
+
+  /**
+   * Agent to use for scheduled sessions
+   */
+  agentic_tool: 'claude-code' | 'cursor' | 'codex' | 'gemini';
+
+  /**
+   * How many scheduled sessions to keep
+   *
+   * - retention > 0: Keep last N sessions, delete older ones
+   * - retention = 0: Keep forever (infinite retention)
+   *
+   * Retention cleanup runs async after session creation.
+   */
+  retention: number;
+
+  /**
+   * Permission mode for spawned sessions
+   *
+   * Controls tool approval behavior.
+   * Examples: 'auto', 'ask', 'default'
+   */
+  permission_mode?: string;
+
+  /**
+   * Model configuration for spawned sessions
+   */
+  model_config?: {
+    mode: 'default' | 'custom';
+    model?: string; // e.g., 'opus' for complex tasks
+  };
+
+  /**
+   * MCP servers to attach to spawned sessions
+   *
+   * Default: ['agor'] (Agor's internal MCP for self-awareness)
+   * Users can add additional MCP servers via UI.
+   */
+  mcp_server_ids?: string[];
+
+  /**
+   * Additional context files to load
+   *
+   * Example: ['ARCHITECTURE.md', 'API.md']
+   */
+  context_files?: string[];
+
+  /**
+   * When this schedule was created (Unix timestamp in ms)
+   */
+  created_at: number;
+
+  /**
+   * User who created this schedule
+   */
+  created_by: string;
 }
 
 /**

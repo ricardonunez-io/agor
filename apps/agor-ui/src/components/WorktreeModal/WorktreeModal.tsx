@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { ConceptsTab } from './tabs/ConceptsTab';
 import { EnvironmentTab } from './tabs/EnvironmentTab';
 import { GeneralTab } from './tabs/GeneralTab';
+import { ScheduleTab } from './tabs/ScheduleTab';
 
 export interface WorktreeModalProps {
   open: boolean;
@@ -89,6 +90,11 @@ export const WorktreeModal: React.FC<WorktreeModalProps> = ({
             key: 'concepts',
             label: 'Concepts',
             children: <ConceptsTab worktree={worktree} client={client} />,
+          },
+          {
+            key: 'schedule',
+            label: 'Schedule',
+            children: <ScheduleTab worktree={worktree} onUpdate={onUpdateWorktree} />,
           },
         ]}
       />

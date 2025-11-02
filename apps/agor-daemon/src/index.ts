@@ -114,6 +114,7 @@ import { createHealthMonitor } from './services/health-monitor';
 import { createMCPServersService } from './services/mcp-servers';
 import { createMessagesService } from './services/messages';
 import { createReposService } from './services/repos';
+import { SchedulerService } from './services/scheduler';
 import { createSessionMCPServersService } from './services/session-mcp-servers';
 import { createSessionsService } from './services/sessions';
 import { createTasksService } from './services/tasks';
@@ -2391,6 +2392,15 @@ async function main() {
   console.log(`     - /context`);
   console.log(`     - /users`);
 
+  // Start scheduler service (background worker)
+  const schedulerService = new SchedulerService(db, app, {
+    tickInterval: 30000, // 30 seconds
+    gracePeriod: 120000, // 2 minutes
+    debug: process.env.NODE_ENV !== 'production',
+  });
+  schedulerService.start();
+  console.log(`🔄 Scheduler started (tick interval: 30s)`);
+
   // Graceful shutdown handler
   const shutdown = async (signal: string) => {
     console.log(`\n⏳ Received ${signal}, shutting down gracefully...`);
@@ -2402,6 +2412,10 @@ async function main() {
       // Clean up terminal sessions
       console.log('🖥️  Cleaning up terminal sessions...');
       terminalsService.cleanup();
+
+      // Stop scheduler
+      console.log('🔄 Stopping scheduler...');
+      schedulerService.stop();
 
       // Close Socket.io connections (this also closes the HTTP server)
       if (socketServer) {

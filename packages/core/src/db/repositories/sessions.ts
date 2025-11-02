@@ -40,15 +40,17 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
       created_by: row.created_by,
       worktree_id: row.worktree_id as UUID,
       ...row.data,
-      tasks: row.data.tasks.map((id) => id as UUID),
+      tasks: row.data.tasks.map(id => id as UUID),
       genealogy: {
         parent_session_id: row.parent_session_id as UUID | undefined,
         forked_from_session_id: row.forked_from_session_id as UUID | undefined,
         fork_point_task_id: genealogyData.fork_point_task_id as UUID | undefined,
         spawn_point_task_id: genealogyData.spawn_point_task_id as UUID | undefined,
-        children: genealogyData.children.map((id) => id as UUID),
+        children: genealogyData.children.map(id => id as UUID),
       },
       permission_config: row.data.permission_config,
+      scheduled_run_at: row.scheduled_run_at ?? undefined,
+      scheduled_from_worktree: row.scheduled_from_worktree ?? false,
     };
   }
 
@@ -74,6 +76,8 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
       parent_session_id: session.genealogy?.parent_session_id ?? null,
       forked_from_session_id: session.genealogy?.forked_from_session_id ?? null,
       worktree_id: session.worktree_id,
+      scheduled_run_at: session.scheduled_run_at ?? null,
+      scheduled_from_worktree: session.scheduled_from_worktree ?? false,
       data: {
         agentic_tool_version: session.agentic_tool_version,
         sdk_session_id: session.sdk_session_id, // Preserve SDK session ID for conversation continuity
@@ -125,7 +129,7 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
       throw new AmbiguousIdError(
         'Session',
         id,
-        results.map((r) => formatShortId(r.session_id as UUID))
+        results.map(r => formatShortId(r.session_id as UUID))
       );
     }
 
@@ -189,7 +193,7 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
   async findAll(): Promise<Session[]> {
     try {
       const rows = await this.db.select().from(sessions).all();
-      return rows.map((row) => this.rowToSession(row));
+      return rows.map(row => this.rowToSession(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to find all sessions: ${error instanceof Error ? error.message : String(error)}`,
@@ -205,7 +209,7 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
     try {
       const rows = await this.db.select().from(sessions).where(eq(sessions.status, status)).all();
 
-      return rows.map((row) => this.rowToSession(row));
+      return rows.map(row => this.rowToSession(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to find sessions by status: ${error instanceof Error ? error.message : String(error)}`,
@@ -225,7 +229,7 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
 
       // For now, return all sessions (board filtering will be done at service layer)
       // TODO: Add board_id as materialized column if frequently filtered
-      return rows.map((row) => this.rowToSession(row));
+      return rows.map(row => this.rowToSession(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to find sessions by board: ${error instanceof Error ? error.message : String(error)}`,
@@ -253,7 +257,7 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
         )
         .all();
 
-      return rows.map((row) => this.rowToSession(row));
+      return rows.map(row => this.rowToSession(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to find child sessions: ${error instanceof Error ? error.message : String(error)}`,
@@ -394,7 +398,10 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
    */
   async count(): Promise<number> {
     try {
-      const result = await this.db.select({ count: sql<number>`count(*)` }).from(sessions).get();
+      const result = await this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(sessions)
+        .get();
 
       return result?.count ?? 0;
     } catch (error) {

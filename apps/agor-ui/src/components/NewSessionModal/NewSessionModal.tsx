@@ -1,22 +1,13 @@
 import type { AgenticToolName, MCPServer, Worktree } from '@agor/core/types';
 import { getDefaultPermissionMode } from '@agor/core/types';
-
-// UI-only type for agent selection (different from AgenticTool which has UUIDv7 ID)
-interface AgenticToolOption {
-  id: string; // AgenticToolName as string
-  name: string;
-  icon: string;
-  installed: boolean;
-  installable?: boolean;
-  version?: string;
-  description?: string;
-}
-
 import { DownOutlined } from '@ant-design/icons';
 import { Alert, Collapse, Form, Input, Modal, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { AgenticToolConfigForm } from '../AgenticToolConfigForm';
-import { AgentSelectionCard } from '../AgentSelectionCard';
+import {
+  type AgenticToolOption,
+  AgentSelectionGrid,
+} from '../AgentSelectionGrid/AgentSelectionGrid';
 import type { ModelConfig } from '../ModelSelector';
 
 const { TextArea } = Input;
@@ -91,7 +82,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   };
 
   const handleCreate = () => {
-    form.validateFields().then((values) => {
+    form.validateFields().then(values => {
       const config: NewSessionConfig = {
         worktree_id: worktreeId,
         agent: selectedAgent,
@@ -146,32 +137,15 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
 
         {/* Agent Selection */}
         <Form.Item label="Select Coding Agent" required>
-          {!selectedAgent && (
-            <Typography.Text
-              type="secondary"
-              style={{ fontSize: 12, marginBottom: 8, display: 'block' }}
-            >
-              Click on an agent card to select it
-            </Typography.Text>
-          )}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, 1fr)',
-              gap: 8,
-              marginTop: 8,
-            }}
-          >
-            {availableAgents.map((agent) => (
-              <AgentSelectionCard
-                key={agent.id}
-                agent={agent}
-                selected={selectedAgent === agent.id}
-                onClick={() => setSelectedAgent(agent.id)}
-                onInstall={() => handleInstall(agent.id)}
-              />
-            ))}
-          </div>
+          <AgentSelectionGrid
+            agents={availableAgents}
+            selectedAgentId={selectedAgent}
+            onSelect={setSelectedAgent}
+            onInstall={handleInstall}
+            columns={3}
+            showHelperText={true}
+            showComparisonLink={true}
+          />
         </Form.Item>
 
         {/* Session Title */}

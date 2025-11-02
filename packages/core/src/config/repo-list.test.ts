@@ -64,6 +64,7 @@ describe('getRepoReferenceOptions', () => {
         created_at: new Date('2024-01-01').toISOString(),
         updated_at: new Date('2024-01-01').toISOString(),
         last_used: new Date('2024-01-01').toISOString(),
+        schedule_enabled: false,
       },
     ];
 
@@ -116,6 +117,7 @@ describe('getRepoReferenceOptions', () => {
         created_at: new Date('2024-01-01').toISOString(),
         updated_at: new Date('2024-01-01').toISOString(),
         last_used: new Date('2024-01-01').toISOString(),
+        schedule_enabled: false,
       },
       {
         worktree_id: 'wt_01933e4c5678a8f39d2e1c4b5a6f7c35' as UUID,
@@ -130,6 +132,7 @@ describe('getRepoReferenceOptions', () => {
         created_at: new Date('2024-01-01').toISOString(),
         updated_at: new Date('2024-01-01').toISOString(),
         last_used: new Date('2024-01-01').toISOString(),
+        schedule_enabled: false,
       },
       {
         worktree_id: 'wt_01934c2e9012a8f39d2e1c4b5a6f7c35' as UUID,
@@ -144,6 +147,7 @@ describe('getRepoReferenceOptions', () => {
         created_at: new Date('2024-01-01').toISOString(),
         updated_at: new Date('2024-01-01').toISOString(),
         last_used: new Date('2024-01-01').toISOString(),
+        schedule_enabled: false,
       },
     ];
 
@@ -194,6 +198,7 @@ describe('getRepoReferenceOptions', () => {
         created_at: new Date('2024-01-01').toISOString(),
         updated_at: new Date('2024-01-01').toISOString(),
         last_used: new Date('2024-01-01').toISOString(),
+        schedule_enabled: false,
       },
       {
         worktree_id: 'wt_orphaned1234a8f39d2e1c4b5a6f7c35' as UUID,
@@ -208,14 +213,15 @@ describe('getRepoReferenceOptions', () => {
         created_at: new Date('2024-01-01').toISOString(),
         updated_at: new Date('2024-01-01').toISOString(),
         last_used: new Date('2024-01-01').toISOString(),
+        schedule_enabled: false,
       },
     ];
 
     const result = getRepoReferenceOptions(repos, worktrees);
 
     expect(result).toHaveLength(2);
-    expect(result.some((opt) => opt.worktree === 'orphan-branch')).toBe(false);
-    expect(result.some((opt) => opt.worktree === 'main')).toBe(true);
+    expect(result.some(opt => opt.worktree === 'orphan-branch')).toBe(false);
+    expect(result.some(opt => opt.worktree === 'main')).toBe(true);
   });
 
   it('should handle repos without worktrees', () => {
@@ -245,7 +251,7 @@ describe('getRepoReferenceOptions', () => {
     expect(result).toHaveLength(2);
     expect(result[0].type).toBe('managed');
     expect(result[1].type).toBe('managed');
-    expect(result.every((opt) => opt.type === 'managed')).toBe(true);
+    expect(result.every(opt => opt.type === 'managed')).toBe(true);
   });
 
   it('should use correct ID values for repo and worktree options', () => {
@@ -275,6 +281,7 @@ describe('getRepoReferenceOptions', () => {
         created_at: new Date('2024-01-01').toISOString(),
         updated_at: new Date('2024-01-01').toISOString(),
         last_used: new Date('2024-01-01').toISOString(),
+        schedule_enabled: false,
       },
     ];
 
@@ -311,6 +318,7 @@ describe('getRepoReferenceOptions', () => {
         created_at: new Date('2024-01-01').toISOString(),
         updated_at: new Date('2024-01-01').toISOString(),
         last_used: new Date('2024-01-01').toISOString(),
+        schedule_enabled: false,
       },
     ];
 
@@ -411,6 +419,7 @@ describe('getGroupedRepoReferenceOptions', () => {
         created_at: new Date('2024-01-01').toISOString(),
         updated_at: new Date('2024-01-01').toISOString(),
         last_used: new Date('2024-01-01').toISOString(),
+        schedule_enabled: false,
       },
       {
         worktree_id: 'wt_01933e4c5678a8f39d2e1c4b5a6f7c35' as UUID,
@@ -425,6 +434,7 @@ describe('getGroupedRepoReferenceOptions', () => {
         created_at: new Date('2024-01-01').toISOString(),
         updated_at: new Date('2024-01-01').toISOString(),
         last_used: new Date('2024-01-01').toISOString(),
+        schedule_enabled: false,
       },
     ];
 
@@ -474,6 +484,7 @@ describe('getGroupedRepoReferenceOptions', () => {
         created_at: new Date('2024-01-01').toISOString(),
         updated_at: new Date('2024-01-01').toISOString(),
         last_used: new Date('2024-01-01').toISOString(),
+        schedule_enabled: false,
       },
       {
         worktree_id: 'wt_superset_main' as UUID,
@@ -488,6 +499,7 @@ describe('getGroupedRepoReferenceOptions', () => {
         created_at: new Date('2024-01-01').toISOString(),
         updated_at: new Date('2024-01-01').toISOString(),
         last_used: new Date('2024-01-01').toISOString(),
+        schedule_enabled: false,
       },
     ];
 
@@ -526,6 +538,7 @@ describe('getGroupedRepoReferenceOptions', () => {
         created_at: new Date('2024-01-01').toISOString(),
         updated_at: new Date('2024-01-01').toISOString(),
         last_used: new Date('2024-01-01').toISOString(),
+        schedule_enabled: false,
       },
       {
         worktree_id: 'wt_orphan' as UUID,
@@ -540,6 +553,7 @@ describe('getGroupedRepoReferenceOptions', () => {
         created_at: new Date('2024-01-01').toISOString(),
         updated_at: new Date('2024-01-01').toISOString(),
         last_used: new Date('2024-01-01').toISOString(),
+        schedule_enabled: false,
       },
     ];
 
@@ -547,7 +561,7 @@ describe('getGroupedRepoReferenceOptions', () => {
 
     expect(result['preset-io/agor']).toHaveLength(2);
     expect(Object.keys(result)).toHaveLength(1);
-    expect(result['preset-io/agor'].some((opt) => opt.worktree === 'orphan')).toBe(false);
+    expect(result['preset-io/agor'].some(opt => opt.worktree === 'orphan')).toBe(false);
   });
 
   it('should handle repos without worktrees', () => {
@@ -607,6 +621,7 @@ describe('getGroupedRepoReferenceOptions', () => {
         created_at: new Date('2024-01-01').toISOString(),
         updated_at: new Date('2024-01-01').toISOString(),
         last_used: new Date('2024-01-01').toISOString(),
+        schedule_enabled: false,
       },
     ];
 
@@ -643,6 +658,7 @@ describe('getGroupedRepoReferenceOptions', () => {
         created_at: new Date('2024-01-01').toISOString(),
         updated_at: new Date('2024-01-01').toISOString(),
         last_used: new Date('2024-01-01').toISOString(),
+        schedule_enabled: false,
       },
     ];
 

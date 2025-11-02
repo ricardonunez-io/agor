@@ -47,6 +47,12 @@ export const sessions = sqliteTable(
         onDelete: 'cascade', // Cascade delete sessions when worktree is deleted
       }),
 
+    // Scheduler tracking (materialized for deduplication and retention cleanup)
+    scheduled_run_at: integer('scheduled_run_at'), // Unix timestamp (ms) - authoritative run ID
+    scheduled_from_worktree: integer('scheduled_from_worktree', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+
     // JSON blob for everything else (cross-DB via json() type)
     data: text('data', { mode: 'json' })
       .$type<{
@@ -89,7 +95,18 @@ export const sessions = sqliteTable(
         model_config?: Session['model_config'];
 
         // Custom context for Handlebars templates
-        custom_context?: Record<string, unknown>;
+        custom_context?: Record<string, unknown> & {
+          // Scheduled run metadata (populated by scheduler)
+          scheduled_run?: {
+            rendered_prompt: string; // Template after Handlebars rendering
+            run_index: number; // 1st, 2nd, 3rd run for this schedule
+            schedule_config_snapshot?: {
+              cron: string;
+              timezone: string;
+              retention: number;
+            };
+          };
+        };
       }>()
       .notNull(),
   },
@@ -101,6 +118,10 @@ export const sessions = sqliteTable(
     createdIdx: index('sessions_created_idx').on(table.created_at),
     parentIdx: index('sessions_parent_idx').on(table.parent_session_id),
     forkedIdx: index('sessions_forked_idx').on(table.forked_from_session_id),
+    // Scheduler indexes (note: partial indexes defined in migration, not here)
+    scheduledFromWorktreeIdx: index('sessions_scheduled_flag_idx').on(
+      table.scheduled_from_worktree
+    ),
   })
 );
 
@@ -317,6 +338,12 @@ export const worktrees = sqliteTable(
       onDelete: 'set null', // If board is deleted, worktree remains but loses board association
     }),
 
+    // Scheduler config (materialized for efficient queries)
+    schedule_enabled: integer('schedule_enabled', { mode: 'boolean' }).notNull().default(false),
+    schedule_cron: text('schedule_cron'), // Cron expression (e.g., "0 9 * * 1-5")
+    schedule_last_triggered_at: integer('schedule_last_triggered_at'), // Unix timestamp (ms)
+    schedule_next_run_at: integer('schedule_next_run_at'), // Unix timestamp (ms)
+
     // JSON blob for everything else
     data: text('data', { mode: 'json' })
       .$type<{
@@ -359,6 +386,23 @@ export const worktrees = sqliteTable(
 
         // Custom context for templates (accessible as {{custom.*}})
         custom_context?: Record<string, unknown>;
+
+        // Schedule configuration (full config in JSON blob)
+        schedule?: {
+          timezone: string; // IANA timezone (default: 'UTC')
+          prompt_template: string; // Handlebars template
+          agentic_tool: 'claude-code' | 'cursor' | 'codex' | 'gemini';
+          retention: number; // How many sessions to keep (0 = keep forever)
+          permission_mode?: string; // Permission mode for spawned sessions
+          model_config?: {
+            mode: 'default' | 'custom';
+            model?: string;
+          };
+          mcp_server_ids?: string[]; // MCP servers to attach (default: ['agor'])
+          context_files?: string[]; // Additional context files
+          created_at: number; // When schedule was created
+          created_by: string; // User ID who created
+        };
       }>()
       .notNull(),
   },
@@ -371,6 +415,12 @@ export const worktrees = sqliteTable(
     updatedIdx: index('worktrees_updated_idx').on(table.updated_at),
     // Composite unique constraint (repo + name)
     uniqueRepoName: index('worktrees_repo_name_unique').on(table.repo_id, table.name),
+    // Scheduler indexes (note: partial indexes with WHERE clauses defined in migration)
+    scheduleEnabledIdx: index('worktrees_schedule_enabled_idx').on(table.schedule_enabled),
+    boardScheduleIdx: index('worktrees_board_schedule_idx').on(
+      table.board_id,
+      table.schedule_enabled
+    ),
   })
 );
 
