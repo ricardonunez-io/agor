@@ -99,34 +99,6 @@ export function getReposDir(): string {
 }
 
 /**
- * Convert SSH Git URL to HTTPS
- *
- * Examples:
- * - git@github.com:apache/superset.git -> https://github.com/apache/superset.git
- * - git@github.com:apache/superset -> https://github.com/apache/superset
- *
- * @param url - Git URL (SSH or HTTPS)
- * @returns HTTPS URL
- */
-export function normalizeGitUrl(url: string): string {
-  // Already HTTPS - return as-is
-  if (url.startsWith('https://') || url.startsWith('http://')) {
-    return url;
-  }
-
-  // Convert SSH format to HTTPS
-  // git@github.com:org/repo.git -> https://github.com/org/repo.git
-  const sshMatch = url.match(/^git@([^:]+):(.+)$/);
-  if (sshMatch) {
-    const [, host, path] = sshMatch;
-    return `https://${host}/${path}`;
-  }
-
-  // Unknown format - return as-is (will likely fail, but let git handle the error)
-  return url;
-}
-
-/**
  * Extract repo name from Git URL
  *
  * Examples:
@@ -147,14 +119,12 @@ export function extractRepoName(url: string): string {
  * If the repository already exists and is valid, returns existing repo info.
  * If directory exists but is not a valid repo, throws an error with suggestion to delete.
  *
- * Automatically converts SSH URLs to HTTPS for environments without SSH keys.
- *
  * @param options - Clone options
  * @returns Clone result with path and metadata
  */
 export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
-  // Normalize URL (convert SSH to HTTPS if needed)
-  const normalizedUrl = normalizeGitUrl(options.url);
+  // Use URL as provided by user
+  const normalizedUrl = options.url;
 
   const repoName = extractRepoName(normalizedUrl);
   const reposDir = getReposDir();

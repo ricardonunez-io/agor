@@ -675,7 +675,8 @@ function AppContent() {
         boardId: data.boardId, // Optional: add to board
       })) as import('@agor/core/types').Worktree;
 
-      message.success({ content: 'Worktree created successfully!', key: 'create-worktree' });
+      // Dismiss loading message - worktree will appear on board via WebSocket broadcast
+      message.destroy('create-worktree');
       return worktree;
     } catch (error) {
       message.error({
