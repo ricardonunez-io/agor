@@ -218,10 +218,14 @@ export async function unsetConfigValue(key: string): Promise<void> {
 /**
  * Get daemon URL from config
  *
- * Reads daemon host and port from config (with env var overrides).
- * Automatically detects GitHub Codespaces environment if DAEMON_URL not explicitly set.
+ * Returns internal daemon URL for backend-to-backend communication.
+ * Always returns localhost-based URL since all backend components (daemon, CLI, SDKs)
+ * run in the same environment.
  *
- * @returns Daemon URL (e.g., "http://localhost:3030" or Codespaces URL)
+ * For external access (browser UI), use frontend's getDaemonUrl() which detects
+ * the appropriate public URL via window.location.
+ *
+ * @returns Daemon URL (e.g., "http://localhost:3030")
  */
 export async function getDaemonUrl(): Promise<string> {
   // 1. Check for explicit DAEMON_URL env var (highest priority)
@@ -237,15 +241,7 @@ export async function getDaemonUrl(): Promise<string> {
   const port = envPort || config.daemon?.port || defaults.daemon?.port || 3030;
   const host = config.daemon?.host || defaults.daemon?.host || 'localhost';
 
-  // 3. Auto-detect GitHub Codespaces (fallback for convenience)
-  const codespaceName = process.env.CODESPACE_NAME;
-  const codespacesDomain = process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN;
-
-  if (codespaceName && codespacesDomain) {
-    return `https://${codespaceName}-${port}.${codespacesDomain}`;
-  }
-
-  // 4. Default: construct from host:port
+  // 3. Construct from host:port (always localhost for internal communication)
   return `http://${host}:${port}`;
 }
 

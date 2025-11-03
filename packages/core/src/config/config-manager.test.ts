@@ -608,4 +608,14 @@ describe('getDaemonUrl', () => {
     const url = await getDaemonUrl();
     expect(url).toBe('http://192.168.1.1:3030');
   });
+
+  it('should prioritize DAEMON_URL env var over everything', async () => {
+    const config = createConfigData();
+    await saveConfig(config);
+
+    process.env.DAEMON_URL = 'https://custom-daemon.example.com:8443';
+
+    const url = await getDaemonUrl();
+    expect(url).toBe('https://custom-daemon.example.com:8443');
+  });
 });
