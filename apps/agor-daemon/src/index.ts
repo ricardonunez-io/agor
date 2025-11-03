@@ -58,6 +58,7 @@ import {
   AuthenticationService,
   authenticate,
   errorHandler,
+  Forbidden,
   feathers,
   feathersExpress,
   JWTStrategy,
@@ -822,7 +823,25 @@ async function main() {
           return context;
         },
       ],
-      patch: [requireMinimumRole('admin', 'update users')],
+      patch: [
+        context => {
+          const params = context.params as AuthenticatedParams;
+          const userId = context.id as string;
+
+          // Admins can patch any user
+          if (params.user && params.user.role === 'admin') {
+            return context;
+          }
+
+          // Any authenticated user can update their own profile
+          if (params.user && params.user.user_id === userId) {
+            return context;
+          }
+
+          // Otherwise forbidden
+          throw new Forbidden('You can only update your own profile');
+        },
+      ],
       remove: [requireMinimumRole('admin', 'delete users')],
     },
   });
