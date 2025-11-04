@@ -3,10 +3,10 @@ set -e
 
 echo "🚀 Starting Agor development environment..."
 
-# Check dependencies (prefer frozen lockfile for speed, but allow updates if needed)
-# Fast if lockfile matches: ~1-2s (headless install), First run or lockfile change: ~30-60s
-echo "📦 Checking dependencies..."
-pnpm install --reporter=append-only --prefer-frozen-lockfile
+# Always run pnpm install to ensure correct platform binaries
+# (macOS host has different binaries than Linux container, e.g., @rollup/rollup-linux-arm64-gnu)
+echo "📦 Installing dependencies..."
+yes | pnpm install --reporter=default
 
 # Build @agor/core (required for CLI commands and daemon)
 echo "🔨 Building @agor/core..."
@@ -39,7 +39,7 @@ daemon:
 EOF
 
   # Create admin user via CLI (uses defaults: admin@agor.live / admin)
-  pnpm --filter @agor/cli exec tsx bin/dev.ts user create-admin
+  pnpm --filter @agor/cli exec tsx bin/dev.ts user create-admin --force
 else
   echo "📦 Database already exists"
 fi
