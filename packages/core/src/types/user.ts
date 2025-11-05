@@ -5,7 +5,7 @@ import type {
   CodexNetworkAccess,
   CodexSandboxMode,
 } from './agentic-tool';
-import type { PermissionMode } from './permission';
+import type { PermissionMode } from './session';
 
 /**
  * User role types
