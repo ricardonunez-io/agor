@@ -1,4 +1,4 @@
-import type { AgenticToolName, MCPServer, Worktree } from '@agor/core/types';
+import type { AgenticToolName, MCPServer, User, Worktree } from '@agor/core/types';
 import { getDefaultPermissionMode } from '@agor/core/types';
 import { DownOutlined } from '@ant-design/icons';
 import { Alert, Collapse, Form, Input, Modal, Typography } from 'antd';
@@ -32,6 +32,7 @@ export interface NewSessionModalProps {
   worktreeId: string; // Required - the worktree to create the session in
   worktree?: Worktree; // Optional - worktree details for display
   mcpServers?: MCPServer[];
+  currentUser?: User | null; // Optional - current user for default settings
 }
 
 export const NewSessionModal: React.FC<NewSessionModalProps> = ({
@@ -42,34 +43,45 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   worktreeId,
   worktree,
   mcpServers = [],
+  currentUser,
 }) => {
   const [form] = Form.useForm();
   const [selectedAgent, setSelectedAgent] = useState<string>('claude-code');
   const [isFormValid, setIsFormValid] = useState(false);
 
-  // Reset form when modal opens
+  // Reset form when modal opens, using user defaults if available
   useEffect(() => {
     if (!open) return;
 
     setSelectedAgent('claude-code');
+
+    // Get default config for the selected agent
+    const agentDefaults = currentUser?.default_agentic_config?.['claude-code'];
+
     form.setFieldsValue({
       title: '',
       initialPrompt: '',
-      permissionMode: getDefaultPermissionMode('claude-code'),
-      mcpServerIds: [],
+      permissionMode: agentDefaults?.permissionMode || getDefaultPermissionMode('claude-code'),
+      mcpServerIds: agentDefaults?.mcpServerIds || [],
+      modelConfig: agentDefaults?.modelConfig,
     });
     setIsFormValid(false);
-  }, [open, form]);
+  }, [open, form, currentUser]);
 
-  // Update permission mode when agent changes
+  // Update permission mode and other defaults when agent changes
   useEffect(() => {
     if (selectedAgent) {
-      form.setFieldValue(
-        'permissionMode',
-        getDefaultPermissionMode((selectedAgent as AgenticToolName) || 'claude-code')
-      );
+      const agentDefaults = currentUser?.default_agentic_config?.[selectedAgent as AgenticToolName];
+
+      form.setFieldsValue({
+        permissionMode:
+          agentDefaults?.permissionMode ||
+          getDefaultPermissionMode((selectedAgent as AgenticToolName) || 'claude-code'),
+        mcpServerIds: agentDefaults?.mcpServerIds || [],
+        modelConfig: agentDefaults?.modelConfig,
+      });
     }
-  }, [selectedAgent, form]);
+  }, [selectedAgent, form, currentUser]);
 
   const handleFormChange = () => {
     const hasAgent = !!selectedAgent;

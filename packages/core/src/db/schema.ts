@@ -469,6 +469,42 @@ export const users = sqliteTable(
         };
         // Encrypted environment variables (stored as hex-encoded encrypted strings)
         env_vars?: Record<string, string>; // { "GITHUB_TOKEN": "enc:...", "NPM_TOKEN": "enc:..." }
+        // Default agentic tool configuration (prepopulates session creation forms)
+        default_agentic_config?: {
+          'claude-code'?: {
+            modelConfig?: {
+              mode?: 'alias' | 'exact';
+              model?: string;
+              thinkingMode?: 'auto' | 'manual' | 'off';
+              manualThinkingTokens?: number;
+            };
+            permissionMode?: string;
+            mcpServerIds?: string[];
+          };
+          codex?: {
+            modelConfig?: {
+              mode?: 'alias' | 'exact';
+              model?: string;
+              thinkingMode?: 'auto' | 'manual' | 'off';
+              manualThinkingTokens?: number;
+            };
+            permissionMode?: string;
+            mcpServerIds?: string[];
+            codexSandboxMode?: string;
+            codexApprovalPolicy?: string;
+            codexNetworkAccess?: boolean;
+          };
+          gemini?: {
+            modelConfig?: {
+              mode?: 'alias' | 'exact';
+              model?: string;
+              thinkingMode?: 'auto' | 'manual' | 'off';
+              manualThinkingTokens?: number;
+            };
+            permissionMode?: string;
+            mcpServerIds?: string[];
+          };
+        };
       }>()
       .notNull(),
   },

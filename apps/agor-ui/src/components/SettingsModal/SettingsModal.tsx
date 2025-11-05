@@ -208,6 +208,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             children: (
               <UsersTable
                 users={users}
+                mcpServers={mcpServers}
                 onCreate={onCreateUser}
                 onUpdate={onUpdateUser}
                 onDelete={onDeleteUser}

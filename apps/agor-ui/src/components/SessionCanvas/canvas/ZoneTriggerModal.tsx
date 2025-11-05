@@ -10,6 +10,7 @@ import type {
   MCPServer,
   PermissionMode,
   Session,
+  User,
   Worktree,
   WorktreeID,
   ZoneTrigger,
@@ -21,7 +22,7 @@ import Handlebars from 'handlebars';
 import { useEffect, useMemo, useState } from 'react';
 import type { AgenticToolOption } from '../../../types';
 import { AgenticToolConfigForm } from '../../AgenticToolConfigForm';
-import { AgentSelectionCard } from '../../AgentSelectionCard';
+import { AgentSelectionGrid } from '../../AgentSelectionGrid';
 import type { ModelConfig } from '../../ModelSelector';
 
 interface ZoneTriggerModalProps {
@@ -37,6 +38,7 @@ interface ZoneTriggerModalProps {
   boardCustomContext?: Record<string, unknown>;
   availableAgents: AgenticToolOption[];
   mcpServers: MCPServer[];
+  currentUser?: User | null; // Optional - current user for default settings
   onExecute: (params: {
     sessionId: string | 'new';
     action: 'prompt' | 'fork' | 'spawn';
@@ -62,6 +64,7 @@ export const ZoneTriggerModal = ({
   boardCustomContext,
   availableAgents,
   mcpServers,
+  currentUser,
   onExecute,
 }: ZoneTriggerModalProps) => {
   const [form] = Form.useForm();
@@ -123,6 +126,35 @@ export const ZoneTriggerModal = ({
       form.resetFields();
     }
   }, [open, smartDefaultSession, form]);
+
+  // Pre-populate form when creating new session
+  // Priority: Most recent session > User defaults > System defaults
+  useEffect(() => {
+    if (mode === 'create_new' && selectedAgent) {
+      // Find the most recent session for this worktree (create a copy to avoid mutating the array)
+      const mostRecentSession = worktreeSessions.length > 0
+        ? [...worktreeSessions].sort(
+            (a, b) =>
+              new Date(b.last_updated || b.created_at).getTime() -
+              new Date(a.last_updated || a.created_at).getTime()
+          )[0]
+        : null;
+
+      // Get user defaults for this agent as fallback
+      const agentDefaults = currentUser?.default_agentic_config?.[selectedAgent as AgenticToolName];
+
+      // Prepopulate with most recent session settings if available, otherwise use user defaults
+      form.setFieldsValue({
+        permissionMode:
+          mostRecentSession?.permission_config?.mode ||
+          agentDefaults?.permissionMode,
+        modelConfig:
+          mostRecentSession?.model_config ||
+          agentDefaults?.modelConfig,
+        mcpServerIds: agentDefaults?.mcpServerIds || [],
+      });
+    }
+  }, [mode, selectedAgent, currentUser, worktreeSessions, form]);
 
   // Pre-populate form with selected session's config when reusing
   useEffect(() => {
@@ -298,7 +330,7 @@ export const ZoneTriggerModal = ({
               />
             </div>
 
-            <div>
+            <div style={{ marginTop: 24 }}>
               <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
                 Choose Action
               </Typography.Text>
@@ -324,29 +356,20 @@ export const ZoneTriggerModal = ({
               <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
                 Select Agent
               </Typography.Text>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(2, 1fr)',
-                  gap: 8,
-                  marginTop: 8,
-                }}
-              >
-                {availableAgents.map(agent => (
-                  <AgentSelectionCard
-                    key={agent.id}
-                    agent={agent}
-                    selected={selectedAgent === agent.id}
-                    onClick={() => setSelectedAgent(agent.id)}
-                  />
-                ))}
-              </div>
+              <AgentSelectionGrid
+                agents={availableAgents}
+                selectedAgentId={selectedAgent}
+                onSelect={setSelectedAgent}
+                columns={3}
+                showHelperText={false}
+                showComparisonLink={false}
+              />
             </div>
           )}
 
           <Collapse
             ghost
-            defaultActiveKey={mode === 'create_new' ? ['agentic-tool-config'] : []}
+            defaultActiveKey={[]}
             expandIcon={({ isActive }) => <DownOutlined rotate={isActive ? 180 : 0} />}
             items={[
               {
@@ -354,7 +377,7 @@ export const ZoneTriggerModal = ({
                 label: (
                   <Typography.Text strong>
                     {mode === 'create_new'
-                      ? 'Agentic Tool Configuration'
+                      ? 'Agentic Tool Configuration (optional)'
                       : `Session Configuration (${selectedSession?.agentic_tool || 'unknown'})`}
                   </Typography.Text>
                 ),

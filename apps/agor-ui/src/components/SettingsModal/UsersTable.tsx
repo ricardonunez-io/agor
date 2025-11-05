@@ -1,4 +1,4 @@
-import type { CreateUserInput, UpdateUserInput, User } from '@agor/core/types';
+import type { CreateUserInput, MCPServer, UpdateUserInput, User } from '@agor/core/types';
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import {
   Button,
@@ -18,17 +18,25 @@ import { useEffect, useState } from 'react';
 import { ApiKeyFields, type ApiKeyStatus } from '../ApiKeyFields';
 import { FormEmojiPickerInput } from '../EmojiPickerInput';
 import { EnvVarEditor } from '../EnvVarEditor';
+import { DefaultAgenticSettings } from './DefaultAgenticSettings';
 
 // Using Typography.Text directly to avoid DOM Text interface collision
 
 interface UsersTableProps {
   users: User[];
+  mcpServers: MCPServer[];
   onCreate?: (data: CreateUserInput) => void;
   onUpdate?: (userId: string, updates: UpdateUserInput) => void;
   onDelete?: (userId: string) => void;
 }
 
-export const UsersTable: React.FC<UsersTableProps> = ({ users, onCreate, onUpdate, onDelete }) => {
+export const UsersTable: React.FC<UsersTableProps> = ({
+  users,
+  mcpServers,
+  onCreate,
+  onUpdate,
+  onDelete,
+}) => {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -471,6 +479,30 @@ export const UsersTable: React.FC<UsersTableProps> = ({ users, onCreate, onUpdat
                         loading={savingEnvVars}
                       />
                     </div>
+                  ),
+                },
+              ]}
+            />
+          </Form.Item>
+
+          {/* Default Agentic Settings Section */}
+          <Form.Item label="Default Agentic Settings">
+            <Collapse
+              ghost
+              items={[
+                {
+                  key: 'agentic-settings',
+                  label: 'Configure Default Agentic Tool Settings',
+                  children: (
+                    <DefaultAgenticSettings
+                      defaultConfig={editingUser?.default_agentic_config}
+                      mcpServers={mcpServers}
+                      onSave={async config => {
+                        if (editingUser && onUpdate) {
+                          await onUpdate(editingUser.user_id, { default_agentic_config: config });
+                        }
+                      }}
+                    />
                   ),
                 },
               ]}

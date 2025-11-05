@@ -1,4 +1,11 @@
 import type { UserID } from './id';
+import type {
+  AgenticToolName,
+  CodexApprovalPolicy,
+  CodexNetworkAccess,
+  CodexSandboxMode,
+} from './agentic-tool';
+import type { PermissionMode } from './permission';
 
 /**
  * User role types
@@ -8,6 +15,47 @@ import type { UserID } from './id';
  * - viewer: Read-only access
  */
 export type UserRole = 'owner' | 'admin' | 'member' | 'viewer';
+
+/**
+ * Model configuration for session creation
+ */
+export interface DefaultModelConfig {
+  /** Model selection mode: alias or exact */
+  mode?: 'alias' | 'exact';
+  /** Model identifier (alias or exact ID) */
+  model?: string;
+  /** Thinking mode controls extended thinking token allocation */
+  thinkingMode?: 'auto' | 'manual' | 'off';
+  /** Manual thinking token budget (used when thinkingMode='manual') */
+  manualThinkingTokens?: number;
+}
+
+/**
+ * Default agentic tool configuration per tool
+ */
+export interface DefaultAgenticToolConfig {
+  /** Default model configuration */
+  modelConfig?: DefaultModelConfig;
+  /** Default permission mode (Claude/Gemini unified mode) */
+  permissionMode?: PermissionMode;
+  /** Default MCP server IDs to attach */
+  mcpServerIds?: string[];
+  /** Codex-specific: sandbox mode */
+  codexSandboxMode?: CodexSandboxMode;
+  /** Codex-specific: approval policy */
+  codexApprovalPolicy?: CodexApprovalPolicy;
+  /** Codex-specific: network access */
+  codexNetworkAccess?: CodexNetworkAccess;
+}
+
+/**
+ * Default agentic configuration per tool
+ */
+export interface DefaultAgenticConfig {
+  'claude-code'?: DefaultAgenticToolConfig;
+  codex?: DefaultAgenticToolConfig;
+  gemini?: DefaultAgenticToolConfig;
+}
 
 /**
  * User type - Authentication and authorization
@@ -31,6 +79,8 @@ export interface User {
   };
   // Environment variable status (boolean only, never exposes actual values)
   env_vars?: Record<string, boolean>; // { "GITHUB_TOKEN": true, "NPM_TOKEN": false }
+  // Default agentic tool configuration (prepopulates session creation forms)
+  default_agentic_config?: DefaultAgenticConfig;
 }
 
 /**
@@ -64,4 +114,6 @@ export interface UpdateUserInput {
   };
   // Environment variables for update (accepts plaintext, encrypted before storage)
   env_vars?: Record<string, string | null>; // { "GITHUB_TOKEN": "ghp_...", "NPM_TOKEN": null }
+  // Default agentic tool configuration
+  default_agentic_config?: DefaultAgenticConfig;
 }

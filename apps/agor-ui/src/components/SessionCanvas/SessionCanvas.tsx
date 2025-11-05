@@ -1950,6 +1950,7 @@ const SessionCanvas = ({
           boardCustomContext={board?.custom_context}
           availableAgents={availableAgents}
           mcpServers={mcpServers}
+          currentUser={currentUserId ? users.find(u => u.user_id === currentUserId) : null}
           onExecute={async ({
             sessionId,
             action,

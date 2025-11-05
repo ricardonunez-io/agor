@@ -473,6 +473,7 @@ export const App: React.FC<AppProps> = ({
           worktreeId={newSessionWorktreeId}
           worktree={newSessionWorktree || undefined}
           mcpServers={mcpServers}
+          currentUser={user}
         />
       )}
       <SessionDrawer
