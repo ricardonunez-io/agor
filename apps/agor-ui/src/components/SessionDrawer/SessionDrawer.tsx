@@ -208,8 +208,13 @@ const SessionDrawer = ({
 
     if (tasksWithContext.length > 0) {
       const task = tasksWithContext[0];
+      // Show input_tokens only (fresh input this turn, after cache breakpoints)
+      // Note: The SDK doesn't provide session-level cumulative context tracking.
+      // We only get per-turn metrics. This shows the fresh input for the latest turn.
+      const freshInput = task.usage?.input_tokens || task.context_window || 0;
+
       return {
-        used: task.context_window!,
+        used: freshInput,
         limit: task.context_window_limit!,
         taskMetadata: {
           usage: task.usage,
@@ -284,7 +289,7 @@ const SessionDrawer = ({
       }, 300);
       return () => clearTimeout(timeoutId);
     }
-  }, [open, scrollToBottom, session?.session_id]);
+  }, [open, scrollToBottom, session]);
 
   // Early return if no session (drawer should not be open without a session)
   // IMPORTANT: Must be after all hooks to satisfy Rules of Hooks
@@ -571,9 +576,7 @@ const SessionDrawer = ({
             )}
             {/* Issue and PR Pills */}
             {worktree?.issue_url && <IssuePill issueUrl={worktree.issue_url} />}
-            {worktree?.pull_request_url && (
-              <PullRequestPill prUrl={worktree.pull_request_url} />
-            )}
+            {worktree?.pull_request_url && <PullRequestPill prUrl={worktree.pull_request_url} />}
             {/* MCP Servers */}
             {sessionMcpServerIds
               .map(serverId => mcpServers.find(s => s.mcp_server_id === serverId))

@@ -209,10 +209,14 @@ export const ContextWindowPill: React.FC<ContextWindowPillProps> = ({
   };
 
   const tooltipContent = (
-    <div style={{ maxWidth: 400 }}>
-      <div style={{ fontWeight: 'bold', marginBottom: 8 }}>Context Window Usage</div>
+    <div style={{ maxWidth: 600 }}>
+      <div style={{ fontWeight: 'bold', marginBottom: 8 }}>Context Window Usage (This Turn)</div>
       <div>
-        Input tokens: {used.toLocaleString()} / {limit.toLocaleString()} ({percentage}%)
+        Fresh input: {used.toLocaleString()} / {limit.toLocaleString()} ({percentage}%)
+      </div>
+      <div style={{ fontSize: '0.85em', color: '#888', marginTop: 4 }}>
+        Note: Shows fresh input after cache breakpoints. SDK doesn't provide session-level
+        cumulative tracking.
       </div>
 
       {taskMetadata?.usage && (
@@ -241,7 +245,8 @@ export const ContextWindowPill: React.FC<ContextWindowPillProps> = ({
 
       {taskMetadata?.duration_ms !== undefined && (
         <div style={{ marginTop: 4, fontSize: '0.9em' }}>
-          <span style={{ fontWeight: 500 }}>Duration:</span> {(taskMetadata.duration_ms / 1000).toFixed(2)}s
+          <span style={{ fontWeight: 500 }}>Duration:</span>{' '}
+          {(taskMetadata.duration_ms / 1000).toFixed(2)}s
         </div>
       )}
 
@@ -264,6 +269,35 @@ export const ContextWindowPill: React.FC<ContextWindowPillProps> = ({
               </div>
             </div>
           ))}
+        </>
+      )}
+
+      {taskMetadata && (
+        <>
+          <div
+            style={{
+              marginTop: 16,
+              fontWeight: 'bold',
+              borderTop: '1px solid #333',
+              paddingTop: 8,
+            }}
+          >
+            Raw JSON Payload:
+          </div>
+          <pre
+            style={{
+              fontSize: '0.75em',
+              fontFamily: 'monospace',
+              background: '#1a1a1a',
+              padding: 8,
+              borderRadius: 4,
+              overflowX: 'auto',
+              maxHeight: 300,
+              marginTop: 4,
+            }}
+          >
+            {JSON.stringify(taskMetadata, null, 2)}
+          </pre>
         </>
       )}
     </div>
