@@ -18,6 +18,23 @@ Agor lets you define start/stop/health/app commands at the **repository level**,
 
 ![Worktree card showing environment pill with access, start, stop, view logs, and edit controls](/screenshots/worktree_env_pill.png)
 
+## Agent-Driven Testing with MCP
+
+Agor's environment controls are exposed via [MCP (Model Context Protocol)](https://modelcontextprotocol.io) tools, enabling AI agents to run complete test cycles autonomously.
+
+![Agent using MCP tools to start a worktree environment and view its status](/screenshots/mcp_environment.png)
+
+**Full autonomous workflow:**
+
+1. Agent makes code changes in the worktree
+2. Starts environment: `mcp__agor__agor_environment_start`
+3. Views logs if needed: `mcp__agor__agor_environment_logs` (debug startup issues)
+4. Waits for health check to pass
+5. **Interacts with the running app via Playwright MCP** - clicks buttons, fills forms, validates UI behavior
+6. Stops environment: `mcp__agor__agor_environment_stop`
+
+With Playwright MCP enabled, agents can perform full end-to-end testing without human intervention—making changes, spinning up isolated environments, and validating them in a real browser. This turns Agor into an **autonomous testing platform** where agents can iterate on features across multiple worktrees in parallel.
+
 ## Requirements Checklist
 
 1. **Start command returns quickly.** Use detached/background modes (`docker compose up -d`, `systemctl start`, etc.) so Agor can transition the UI to “starting” without waiting for a long-running process.
