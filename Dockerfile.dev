@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
   sqlite3 \
   git \
   curl \
+  sudo \
   && rm -rf /var/lib/apt/lists/*
 
 # Install GitHub CLI (gh) - download pre-built binary
@@ -18,23 +19,34 @@ RUN curl -fsSL "$(curl -s https://api.github.com/repos/cli/cli/releases/latest |
 # Install pnpm and AI coding agent CLIs (always get latest versions)
 RUN npm install -g pnpm@latest @anthropic-ai/claude-code@latest @google/gemini-cli@latest @openai/codex@latest
 
+# Create non-root 'agor' user for development
+RUN useradd -m -s /bin/bash agor && \
+    # Grant passwordless sudo for fixing volume permissions
+    echo "agor ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/agor && \
+    chmod 0440 /etc/sudoers.d/agor && \
+    # Create .agor directory for database and config (will be mounted as volume)
+    mkdir -p /home/agor/.agor && \
+    chown -R agor:agor /home/agor
+
 # Set working directory
 WORKDIR /app
 
-# Copy entrypoint script (repo will be mounted as volume)
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+# Copy package files for dependency installation (as root, then chown)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/agor-daemon/package.json ./apps/agor-daemon/
+COPY apps/agor-cli/package.json ./apps/agor-cli/
+COPY apps/agor-ui/package.json ./apps/agor-ui/
+COPY packages/core/package.json ./packages/core/
 
-# Create non-root 'agor' user for development
-RUN useradd -m -s /bin/bash agor && \
-    # Grant sudoers access without password (needed for some development tasks)
-    mkdir -p /etc/sudoers.d && \
-    echo "agor ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/agor && \
-    chmod 0440 /etc/sudoers.d/agor && \
-    # Create .agor directory for database and config
-    mkdir -p /home/agor/.agor && \
-    # Ensure agor owns the workspace
-    chown -R agor:agor /app /home/agor/.agor
+# Install dependencies as agor user (cached in Docker layer)
+# This creates node_modules with correct platform binaries for container
+RUN chown -R agor:agor /app && \
+    su agor -c 'yes | pnpm install --frozen-lockfile'
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh && \
+    chown agor:agor /usr/local/bin/docker-entrypoint.sh
 
 # Expose UI port only (daemon is internal)
 EXPOSE ${VITE_PORT:-5173}

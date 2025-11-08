@@ -3,12 +3,16 @@ set -e
 
 echo "🚀 Starting Agor development environment..."
 
-# Always run pnpm install to ensure correct platform binaries
-# (macOS host has different binaries than Linux container, e.g., @rollup/rollup-linux-arm64-gnu)
-echo "📦 Installing dependencies..."
-yes | pnpm install --reporter=default
+# Dependencies are installed during Docker build and node_modules are excluded from volume mount
+# Just verify they exist, don't reinstall unless something is actually missing
+if [ ! -d "/app/node_modules" ]; then
+  echo "📦 Installing dependencies (first run)..."
+  yes | pnpm install --frozen-lockfile --reporter=default
+else
+  echo "📦 Dependencies already installed (from Docker build)"
+fi
 
-# Initialize husky git hooks (required in Docker since --prefer-frozen-lockfile skips post-install hooks)
+# Initialize husky git hooks (required for git commit hooks)
 echo "🎣 Initializing git hooks..."
 pnpm husky install
 
@@ -21,7 +25,10 @@ echo "📦 Initializing Agor environment..."
 pnpm agor init --skip-if-exists
 
 # Always ensure auth is enabled in docker (create/overwrite config for multiplayer mode)
+# Fix volume permissions (volumes may be created with wrong ownership)
+# Only chown .agor directory (not .ssh which is mounted read-only)
 mkdir -p /home/agor/.agor
+sudo chown -R agor:agor /home/agor/.agor
 cat > /home/agor/.agor/config.yaml <<EOF
 daemon:
   port: ${DAEMON_PORT:-3030}
