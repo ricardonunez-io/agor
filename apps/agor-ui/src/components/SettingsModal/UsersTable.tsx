@@ -21,11 +21,12 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AgenticToolConfigForm } from '../AgenticToolConfigForm';
 import { ApiKeyFields, type ApiKeyStatus } from '../ApiKeyFields';
 import { FormEmojiPickerInput } from '../EmojiPickerInput';
 import { EnvVarEditor } from '../EnvVarEditor';
+import { AudioSettingsTab } from './AudioSettingsTab';
 
 // Using Typography.Text directly to avoid DOM Text interface collision
 
@@ -59,6 +60,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({
   const [codexForm] = Form.useForm();
   const [geminiForm] = Form.useForm();
   const [opencodeForm] = Form.useForm();
+  const [audioForm] = Form.useForm();
 
   // API key management state for user edit
   const [userApiKeyStatus, setUserApiKeyStatus] = useState<ApiKeyStatus>({
@@ -80,6 +82,48 @@ export const UsersTable: React.FC<UsersTableProps> = ({
     opencode: false,
   });
 
+  const handleEdit = useCallback(
+    (user: User) => {
+      setEditingUser(user);
+      setActiveTab('general'); // Reset to general tab
+
+      form.setFieldsValue({
+        email: user.email,
+        name: user.name,
+        emoji: user.emoji,
+        role: user.role,
+      });
+
+      // Initialize agentic tool forms with user's defaults
+      const defaults = user.default_agentic_config;
+
+      claudeForm.setFieldsValue({
+        permissionMode:
+          defaults?.['claude-code']?.permissionMode || getDefaultPermissionMode('claude-code'),
+        modelConfig: defaults?.['claude-code']?.modelConfig,
+        mcpServerIds: defaults?.['claude-code']?.mcpServerIds || [],
+      });
+
+      codexForm.setFieldsValue({
+        permissionMode: defaults?.codex?.permissionMode || getDefaultPermissionMode('codex'),
+        modelConfig: defaults?.codex?.modelConfig,
+        mcpServerIds: defaults?.codex?.mcpServerIds || [],
+        codexSandboxMode: defaults?.codex?.codexSandboxMode,
+        codexApprovalPolicy: defaults?.codex?.codexApprovalPolicy,
+        codexNetworkAccess: defaults?.codex?.codexNetworkAccess,
+      });
+
+      geminiForm.setFieldsValue({
+        permissionMode: defaults?.gemini?.permissionMode || getDefaultPermissionMode('gemini'),
+        modelConfig: defaults?.gemini?.modelConfig,
+        mcpServerIds: defaults?.gemini?.mcpServerIds || [],
+      });
+
+      setEditModalOpen(true);
+    },
+    [form, claudeForm, codexForm, geminiForm]
+  );
+
   // Auto-open edit modal if editUserId is provided
   useEffect(() => {
     if (editUserId) {
@@ -89,7 +133,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({
         setEditModalOpen(true);
       }
     }
-  }, [editUserId, users]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [editUserId, users, handleEdit]);
 
   // Load user's API key and env var status when editing
   useEffect(() => {
@@ -130,45 +174,6 @@ export const UsersTable: React.FC<UsersTableProps> = ({
       form.resetFields();
       setCreateModalOpen(false);
     });
-  };
-
-  const handleEdit = (user: User) => {
-    setEditingUser(user);
-    setActiveTab('general'); // Reset to general tab
-
-    form.setFieldsValue({
-      email: user.email,
-      name: user.name,
-      emoji: user.emoji,
-      role: user.role,
-    });
-
-    // Initialize agentic tool forms with user's defaults
-    const defaults = user.default_agentic_config;
-
-    claudeForm.setFieldsValue({
-      permissionMode:
-        defaults?.['claude-code']?.permissionMode || getDefaultPermissionMode('claude-code'),
-      modelConfig: defaults?.['claude-code']?.modelConfig,
-      mcpServerIds: defaults?.['claude-code']?.mcpServerIds || [],
-    });
-
-    codexForm.setFieldsValue({
-      permissionMode: defaults?.codex?.permissionMode || getDefaultPermissionMode('codex'),
-      modelConfig: defaults?.codex?.modelConfig,
-      mcpServerIds: defaults?.codex?.mcpServerIds || [],
-      codexSandboxMode: defaults?.codex?.codexSandboxMode,
-      codexApprovalPolicy: defaults?.codex?.codexApprovalPolicy,
-      codexNetworkAccess: defaults?.codex?.codexNetworkAccess,
-    });
-
-    geminiForm.setFieldsValue({
-      permissionMode: defaults?.gemini?.permissionMode || getDefaultPermissionMode('gemini'),
-      modelConfig: defaults?.gemini?.modelConfig,
-      mcpServerIds: defaults?.gemini?.mcpServerIds || [],
-    });
-
-    setEditModalOpen(true);
   };
 
   const handleUpdate = () => {
@@ -376,11 +381,40 @@ export const UsersTable: React.FC<UsersTableProps> = ({
         setEditModalOpen(false);
         setEditingUser(null);
         break;
+      case 'audio':
+        await handleAudioSave();
+        break;
       case 'claude-code':
       case 'codex':
       case 'gemini':
         await handleAgenticConfigSave(activeTab as AgenticToolName);
         break;
+    }
+  };
+
+  const handleAudioSave = async () => {
+    if (!editingUser || !onUpdate) return;
+
+    try {
+      const values = audioForm.getFieldsValue();
+      const updatedPreferences = {
+        ...editingUser.preferences,
+        audio: {
+          enabled: values.enabled,
+          chime: values.chime,
+          volume: values.volume,
+          minDurationSeconds: values.minDurationSeconds,
+        },
+      };
+
+      onUpdate(editingUser.user_id, {
+        preferences: updatedPreferences,
+      });
+
+      setEditModalOpen(false);
+      setEditingUser(null);
+    } catch (error) {
+      console.error('Failed to save audio settings:', error);
     }
   };
 
@@ -662,6 +696,15 @@ export const UsersTable: React.FC<UsersTableProps> = ({
                     onDelete={handleEnvVarDelete}
                     loading={savingEnvVars}
                   />
+                </div>
+              ),
+            },
+            {
+              key: 'audio',
+              label: 'Audio',
+              children: (
+                <div style={{ paddingTop: 8 }}>
+                  <AudioSettingsTab user={editingUser} form={audioForm} />
                 </div>
               ),
             },
