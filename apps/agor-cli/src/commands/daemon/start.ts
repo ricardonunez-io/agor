@@ -4,6 +4,8 @@
 
 import { isDaemonRunning } from '@agor/core/api';
 import { getDaemonUrl } from '@agor/core/config';
+import { checkMigrationStatus, createLocalDatabase } from '@agor/core/db';
+import { extractDbFilePath } from '@agor/core/utils/path';
 import { Command, Flags } from '@oclif/core';
 import chalk from 'chalk';
 import { getDaemonPath, isAgorInitialized, isInstalledPackage } from '../../lib/context.js';
@@ -71,6 +73,41 @@ export default class DaemonStart extends Command {
       this.log(`  ${chalk.cyan('npm install -g agor-live')}`);
       this.log('');
       this.exit(1);
+    }
+
+    // Check for pending migrations before starting daemon
+    try {
+      const db = createLocalDatabase();
+      const migrationStatus = await checkMigrationStatus(db);
+
+      if (migrationStatus.hasPending) {
+        const dbPath = process.env.AGOR_DB_PATH || 'file:~/.agor/agor.db';
+        const dbFilePath = extractDbFilePath(dbPath);
+
+        this.log(chalk.red('✗ Database migrations required'));
+        this.log('');
+        this.log(`Pending migrations (${migrationStatus.pending.length}):`);
+        for (const migration of migrationStatus.pending) {
+          this.log(`  ${chalk.yellow('•')} ${migration}`);
+        }
+        this.log('');
+        this.log(chalk.bold('⚠️  IMPORTANT: Backup your database before running migrations!'));
+        this.log('');
+        this.log('Backup command:');
+        this.log(chalk.cyan(`  cp ${dbFilePath} ${dbFilePath}.backup-$(date +%s)`));
+        this.log('');
+        this.log('Then run migrations with:');
+        this.log(`  ${chalk.cyan('agor db migrate')}`);
+        this.log('');
+        this.exit(1);
+      }
+    } catch (error) {
+      // Rethrow if this is an exit error (so we don't continue starting daemon)
+      if (error && typeof error === 'object' && 'oclif' in error) {
+        throw error;
+      }
+      // Otherwise log warning and continue (for actual migration check errors)
+      console.warn('Warning: Could not check migration status:', error);
     }
 
     // Check if already running
@@ -145,7 +182,6 @@ export default class DaemonStart extends Command {
         if (!isRunning) {
           this.log(chalk.yellow('⚠ Daemon started but not responding'));
           this.log('');
-          this.log('This may be normal if migrations are running on first startup.');
           this.log('Check logs for errors:');
           this.log(`  ${chalk.cyan('agor daemon logs')}`);
           this.log('');

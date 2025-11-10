@@ -44,7 +44,7 @@ pnpm build
 echo ""
 echo "🎨 Building UI..."
 cd "$REPO_ROOT/apps/agor-ui"
-pnpm build
+NODE_ENV=production pnpm build
 
 # Copy built artifacts to agor-live package
 echo ""
@@ -169,6 +169,11 @@ cat > "$SCRIPT_DIR/dist/core/package.json" << 'PKGJSON'
       "types": "./utils/context-window.d.ts",
       "import": "./utils/context-window.js",
       "require": "./utils/context-window.cjs"
+    },
+    "./utils/path": {
+      "types": "./utils/path.d.ts",
+      "import": "./utils/path.js",
+      "require": "./utils/path.cjs"
     },
     "./seed": {
       "types": "./seed/index.d.ts",
