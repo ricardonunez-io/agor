@@ -150,21 +150,8 @@ const WorktreeCard = ({
     const hasOpenSession = sessions.some(s => s.session_id === selectedSessionId);
     const shouldHighlight = (worktree.needs_attention || hasReadySession) && !hasOpenSession;
 
-    console.log('[WorktreeCard] Checking attention state:', {
-      worktreeName: worktree.name,
-      worktreeNeedsAttention: worktree.needs_attention,
-      sessions: sessions.map(s => ({
-        id: s.session_id.substring(0, 8),
-        ready_for_prompt: s.ready_for_prompt,
-        status: s.status,
-      })),
-      hasReadySession,
-      hasOpenSession,
-      selectedSessionId: selectedSessionId?.substring(0, 8),
-      shouldHighlight,
-    });
     return shouldHighlight;
-  }, [sessions, worktree.name, worktree.needs_attention, selectedSessionId]);
+  }, [sessions, worktree.needs_attention, selectedSessionId]);
 
   // Auto-expand all nodes on mount and when new nodes with children are added
   useEffect(() => {
@@ -421,16 +408,6 @@ const WorktreeCard = ({
       ))}
     </div>
   );
-
-  // Debug: Log when needsAttention changes
-  useEffect(() => {
-    if (needsAttention) {
-      console.log('[WorktreeCard] 🌟 HIGHLIGHTING CARD:', {
-        worktreeName: worktree.name,
-        colorPrimary: token.colorPrimary,
-      });
-    }
-  }, [needsAttention, worktree.name, token.colorPrimary]);
 
   return (
     <Card
