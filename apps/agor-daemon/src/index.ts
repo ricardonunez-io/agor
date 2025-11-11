@@ -83,6 +83,7 @@ import { registerHandlebarsHelpers } from '@agor/core/templates/handlebars-helpe
 import { ClaudeTool, CodexTool, GeminiTool, OpenCodeTool } from '@agor/core/tools';
 import type {
   AuthenticatedParams,
+  Id,
   Message,
   Paginated,
   Params,
@@ -2982,14 +2983,8 @@ async function main() {
   // When daemon restarts (crashes, code changes, etc.), tasks/sessions remain in 'running' state
   console.log('🧹 Cleaning up orphaned tasks and sessions...');
 
-  // Find all running or stopping tasks
-  const orphanedTasksResult = (await tasksService.find({
-    query: {
-      status: { $in: [TaskStatus.RUNNING, TaskStatus.STOPPING, TaskStatus.AWAITING_PERMISSION] },
-      $limit: 1000, // High limit to catch all orphaned tasks
-    },
-  })) as unknown as Paginated<Task>;
-  const orphanedTasks = orphanedTasksResult.data;
+  // Find all orphaned tasks (running, stopping, awaiting_permission)
+  const orphanedTasks = await tasksService.getOrphaned();
 
   if (orphanedTasks.length > 0) {
     console.log(`   Found ${orphanedTasks.length} orphaned task(s)`);
@@ -3024,16 +3019,18 @@ async function main() {
 
   // Also check for sessions that had orphaned tasks (even if session status wasn't RUNNING)
   // This handles cases where task was stuck but session status wasn't updated
-  const sessionIdsWithOrphanedTasks = new Set(orphanedTasks.map(t => t.session_id));
+  const sessionIdsWithOrphanedTasks = new Set(
+    orphanedTasks.map((t: Task) => t.session_id as string)
+  );
   if (sessionIdsWithOrphanedTasks.size > 0) {
     console.log(
       `   Checking ${sessionIdsWithOrphanedTasks.size} session(s) with orphaned tasks...`
     );
     for (const sessionId of sessionIdsWithOrphanedTasks) {
-      const session = await sessionsService.get(sessionId);
+      const session = await sessionsService.get(sessionId as Id);
       // If session is still marked as RUNNING after orphaned task cleanup, set to IDLE
       if (session.status === SessionStatus.RUNNING) {
-        await sessionsService.patch(sessionId, {
+        await sessionsService.patch(sessionId as Id, {
           status: SessionStatus.IDLE,
         });
         console.log(
