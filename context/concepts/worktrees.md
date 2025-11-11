@@ -363,35 +363,65 @@ POST /worktrees/:id/environment/restart
 
 ### Embedded Terminal ✅
 
-**Implementation:** WorktreeModal → Terminal tab
+**Implementation:** WorktreeModal → Terminal tab + TerminalModal
 
 **Tech Stack:**
 
 - xterm.js (frontend terminal emulator)
 - node-pty (backend pseudoterminal)
 - Socket.io (bidirectional communication)
+- tmux (optional, for persistent sessions)
 
-**Service:** `apps/agor-daemon/src/services/terminal.ts`
+**Service:** `apps/agor-daemon/src/services/terminals.ts`
 
 ```typescript
-POST /worktrees/:id/terminal
-→ Spawns pty with cwd = worktree.path
-→ Returns { terminalId: string }
+POST /terminals
+→ Spawns pty with optional worktree context
+→ Returns {
+    terminalId: string,
+    cwd: string,
+    tmuxSession?: string,
+    tmuxReused?: boolean,
+    worktreeName?: string
+  }
 
 Socket events:
-- 'terminal:data' → pty output
-- 'terminal:input' → user input
-- 'terminal:resize' → terminal size change
-- 'terminal:exit' → pty closed
+- 'terminals/data' → pty output
+- 'terminals/input' → user input
+- 'terminals/resize' → terminal size change
+- 'terminals/exit' → pty closed
 ```
 
 **Features:**
 
 - Full shell access (bash/zsh)
-- Working directory = worktree path
+- Working directory = worktree path (when worktreeId provided)
 - Resize support
-- Multiple terminals per worktree
 - Auto-cleanup on disconnect
+- **Tmux integration for persistent sessions**
+
+### Tmux Integration ✅
+
+**Status:** Fully implemented
+
+**How It Works:**
+
+Agor automatically detects tmux and creates a single shared session (`agor`) with one window per worktree:
+
+- **First terminal open:** Creates window in `agor` session (or creates session if needed)
+- **Reopen same worktree:** Reconnects to existing window
+- **Multiple worktrees:** Each gets its own window in the shared session
+- **After modal closes:** Windows persist with full history and running processes
+- **Switch worktrees:** Use `Ctrl+B w` to navigate between windows
+
+**Multiplayer Bonus:** Multiple users opening the same worktree terminal see each other's keystrokes in real-time (shared tmux window + WebSocket broadcasting).
+
+**Benefits:**
+
+- Persistent terminal sessions that survive browser disconnects
+- All worktrees in one tmux session for easy navigation
+- Long-running processes continue after closing modal
+- Real-time collaboration when multiple users work in same worktree
 
 ### Future: Terminal Shortcut
 
