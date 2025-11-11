@@ -41,6 +41,18 @@ export default class Init extends Command {
         'Skip initialization if .agor/ directory already exists (idempotent, safe for Docker)',
       default: false,
     }),
+    'daemon-port': Flags.integer({
+      description: 'Daemon port (reads from DAEMON_PORT env var if not specified)',
+      required: false,
+    }),
+    'daemon-host': Flags.string({
+      description: 'Daemon host (default: localhost)',
+      required: false,
+    }),
+    'set-config': Flags.boolean({
+      description: 'Set daemon config values even if .agor already exists (for Docker/deployment)',
+      default: false,
+    }),
   };
 
   private async pathExists(path: string): Promise<boolean> {
@@ -146,9 +158,16 @@ export default class Init extends Command {
     // Determine base directory early
     const baseDir = flags.local ? join(process.cwd(), '.agor') : join(homedir(), '.agor');
 
-    // If --skip-if-exists and directory already exists, exit gracefully
+    // If --skip-if-exists and directory already exists, handle config and exit
     if (flags['skip-if-exists'] && (await this.pathExists(baseDir))) {
       this.log(chalk.green('✓ Agor already initialized at: ') + chalk.cyan(baseDir));
+
+      // If --set-config is enabled, update daemon config values (for Docker/deployment)
+      if (flags['set-config']) {
+        await this.setDaemonConfig(flags);
+        this.log(chalk.green('✓ Daemon configuration updated'));
+      }
+
       this.log(chalk.dim('Skipping initialization (use --force to re-initialize)\n'));
       return;
     }
@@ -635,5 +654,35 @@ export default class Init extends Command {
     this.log(
       chalk.gray('Note: API keys are stored in ~/.agor/config.yaml (keep this file secure!)')
     );
+  }
+
+  /**
+   * Set daemon configuration from flags or environment variables
+   */
+  private async setDaemonConfig(flags: {
+    'daemon-port'?: number;
+    'daemon-host'?: string;
+  }): Promise<void> {
+    // Get daemon port from flag or environment variable
+    const daemonPort = flags['daemon-port'] || process.env.DAEMON_PORT;
+    if (daemonPort) {
+      await setConfigValue('daemon.port', Number(daemonPort));
+      this.log(`${chalk.green('   ✓')} Set daemon.port = ${daemonPort}`);
+    }
+
+    // Get daemon host from flag or default
+    const daemonHost = flags['daemon-host'] || 'localhost';
+    await setConfigValue('daemon.host', daemonHost);
+    this.log(`${chalk.green('   ✓')} Set daemon.host = ${daemonHost}`);
+
+    // Enable authentication for Docker/deployment environments
+    await setConfigValue('daemon.requireAuth', true);
+    await setConfigValue('daemon.allowAnonymous', false);
+    this.log(`${chalk.green('   ✓')} Enabled authentication`);
+
+    // Set OpenCode server URL (Docker-specific)
+    await setConfigValue('opencode.enabled', true);
+    await setConfigValue('opencode.serverUrl', 'http://host.docker.internal:4096');
+    this.log(`${chalk.green('   ✓')} Configured OpenCode server`);
   }
 }

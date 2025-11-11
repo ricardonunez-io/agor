@@ -20,25 +20,15 @@ pnpm husky install
 echo "🔨 Building @agor/core..."
 pnpm --filter @agor/core build
 
-# Initialize database (idempotent: skip if already exists)
-echo "📦 Initializing Agor environment..."
-pnpm agor init --skip-if-exists
-
-# Always ensure auth is enabled in docker (create/overwrite config for multiplayer mode)
 # Fix volume permissions (volumes may be created with wrong ownership)
 # Only chown .agor directory (not .ssh which is mounted read-only)
 mkdir -p /home/agor/.agor
 sudo chown -R agor:agor /home/agor/.agor
-cat > /home/agor/.agor/config.yaml <<EOF
-daemon:
-  port: ${DAEMON_PORT:-3030}
-  host: localhost
-  allowAnonymous: false
-  requireAuth: true
-opencode:
-  enabled: true
-  serverUrl: http://host.docker.internal:4096
-EOF
+
+# Initialize database and configure daemon settings for Docker
+# (idempotent: creates database on first run, preserves JWT secrets on subsequent runs)
+echo "📦 Initializing Agor environment..."
+pnpm agor init --skip-if-exists --set-config --daemon-port "${DAEMON_PORT:-3030}" --daemon-host localhost
 
 # Always create/update admin user (safe: only upserts)
 echo "👤 Ensuring default admin user exists..."
