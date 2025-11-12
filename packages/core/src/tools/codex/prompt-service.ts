@@ -229,9 +229,10 @@ export class CodexPromptService {
       managedServerNames.add(serverName);
       console.log(`   📝 [Codex MCP] Configuring server: ${server.name} -> ${serverName}`);
 
-      const serverConfig: Record<string, unknown> = {
-        transport: server.transport,
-      };
+      // Build server config (NOTE: don't include 'transport' field - it's not valid in Codex config)
+      // Codex uses STDIO by default when 'command' is specified, HTTP when 'url' is specified
+      const serverConfig: Record<string, unknown> = {};
+
       if (server.command) {
         serverConfig.command = server.command;
         console.log(`      command: ${server.command}`);
