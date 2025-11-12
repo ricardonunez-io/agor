@@ -13,6 +13,7 @@ import {
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import { Badge, Button, Card, Collapse, Space, Spin, Tag, Tree, Typography, theme } from 'antd';
+import { AggregationColor } from 'antd/es/color-picker/color';
 import { useEffect, useMemo, useState } from 'react';
 import { useConnectionDisabled } from '../../contexts/ConnectionContext';
 import { ArchiveDeleteWorktreeModal } from '../ArchiveDeleteWorktreeModal';
@@ -423,11 +424,29 @@ const WorktreeCard = ({
     </div>
   );
 
+  // Use colorTextBase for glow - hex color that adapts to light/dark mode
+  // Fallback to detecting dark mode if colorTextBase is not available
+  const isDarkMode =
+    token.colorBgLayout?.startsWith?.('#0') || token.colorBgLayout?.startsWith?.('rgb(0');
+  const rawGlowColor = token.colorTextBase || (isDarkMode ? '#ffffff' : '#000000');
+
+  // Use Ant Design's Color class to normalize and convert to full hex format
+  // This handles shorthand hex (#fff -> #ffffff) and ensures we can append alpha values
+  let glowColor: string;
+  try {
+    const color = new AggregationColor(rawGlowColor);
+    // toHexString() always returns full 6 or 8 digit hex
+    glowColor = color.toHexString();
+  } catch {
+    // Fallback if color parsing fails
+    glowColor = isDarkMode ? '#ffffff' : '#000000';
+  }
+
   const attentionGlowShadow = `
-    0 0 0 3px ${token.colorPrimary},
-    0 0 20px 4px ${token.colorPrimary}dd,
-    0 0 40px 8px ${token.colorPrimary}88,
-    0 0 60px 12px ${token.colorPrimary}44
+    0 0 0 3px ${glowColor},
+    0 0 20px 4px ${glowColor}dd,
+    0 0 40px 8px ${glowColor}88,
+    0 0 60px 12px ${glowColor}44
   `;
 
   return (
@@ -436,13 +455,13 @@ const WorktreeCard = ({
         width: 500,
         cursor: 'default', // Override React Flow's drag cursor - only drag handles should show grab cursor
         transition: 'box-shadow 1s ease-in-out, border 1s ease-in-out',
-        boxShadow: needsAttention ? attentionGlowShadow : undefined,
         ...(isPinned && zoneColor ? { borderColor: zoneColor, borderWidth: 1 } : {}),
         ...(needsAttention
           ? {
               // Intense multi-layer glow for dark mode visibility
               animation: 'worktree-card-pulse 2s ease-in-out infinite',
-              border: `2px solid ${token.colorPrimary}`,
+              boxShadow: attentionGlowShadow,
+              border: 'none',
             }
           : {}),
       }}
