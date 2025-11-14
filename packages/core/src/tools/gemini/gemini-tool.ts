@@ -32,7 +32,6 @@ import type { MessagesService, TasksService } from '../claude/claude-tool';
 import type { TokenUsage } from '../../utils/pricing';
 import { calculateTokenCost } from '../../utils/pricing';
 import type {
-  CalculatedTokenUsage,
   GeminiSdkResponse,
   NormalizedSdkResponse,
   RawSdkResponse,
@@ -143,8 +142,6 @@ export class GeminiTool implements ITool {
     let resolvedModel: string | undefined;
     let currentMessageId: MessageID | null = null;
     let tokenUsage: TokenUsage | undefined;
-    let contextWindow: number | undefined;
-    let contextWindowLimit: number | undefined;
     let streamStartTime = Date.now();
     let firstTokenTime: number | null = null;
 
@@ -166,10 +163,6 @@ export class GeminiTool implements ITool {
       // Capture token usage from complete event
       if (event.type === 'complete' && event.usage) {
         tokenUsage = event.usage;
-        contextWindow = event.contextWindow; // SDK provides this directly!
-        if (!contextWindowLimit) {
-          contextWindowLimit = event.contextWindowLimit || getGeminiContextWindowLimit(resolvedModel || DEFAULT_GEMINI_MODEL);
-        }
       }
 
       // Handle partial streaming events (token-level chunks)
@@ -236,8 +229,9 @@ export class GeminiTool implements ITool {
       userMessageId: userMessage.message_id,
       assistantMessageIds,
       tokenUsage,
-      contextWindow,
-      contextWindowLimit,
+      // Gemini SDK doesn't provide contextWindow/contextWindowLimit
+      contextWindow: undefined,
+      contextWindowLimit: undefined,
       model: resolvedModel,
     };
   }
@@ -380,10 +374,6 @@ export class GeminiTool implements ITool {
       // Capture token usage from complete event
       if (event.type === 'complete' && event.usage) {
         tokenUsage = event.usage;
-        contextWindow = event.contextWindow; // SDK provides this directly!
-        if (!contextWindowLimit) {
-          contextWindowLimit = event.contextWindowLimit || getGeminiContextWindowLimit(resolvedModel || DEFAULT_GEMINI_MODEL);
-        }
       }
 
       // Skip partial and tool events in non-streaming mode
@@ -416,8 +406,9 @@ export class GeminiTool implements ITool {
       userMessageId: userMessage.message_id,
       assistantMessageIds,
       tokenUsage,
-      contextWindow,
-      contextWindowLimit,
+      // Gemini SDK doesn't provide contextWindow/contextWindowLimit
+      contextWindow: undefined,
+      contextWindowLimit: undefined,
       model: resolvedModel,
     };
   }

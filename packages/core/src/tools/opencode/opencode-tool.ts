@@ -16,7 +16,6 @@ import { generateId } from '../../lib/ids';
 import type { Message, Session, SessionID, TaskID } from '../../types';
 import { MessageRole } from '../../types';
 import type {
-  CalculatedTokenUsage,
   NormalizedSdkResponse,
   OpenCodeSdkResponse,
   RawSdkResponse,

@@ -33,7 +33,6 @@ import { calculateModelContextWindowUsage } from '../../utils/context-window';
 import type { TokenUsage } from '../../utils/pricing';
 import { calculateTokenCost } from '../../utils/pricing';
 import type {
-  CalculatedTokenUsage,
   ClaudeCodeSdkResponse,
   NormalizedSdkResponse,
   RawSdkResponse,

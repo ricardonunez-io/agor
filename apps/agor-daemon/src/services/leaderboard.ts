@@ -137,7 +137,7 @@ export class LeaderboardService {
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     // Build dynamic SELECT clause
-    // Aggregate token usage from tasks (stored in usage.input_tokens/output_tokens)
+    // Aggregate token usage from raw_sdk_response.tokenUsage
     // IMPORTANT: Normalize tokens based on agentic_tool since different tools report differently:
     // - Codex: input_tokens INCLUDES cached tokens (cache_read_tokens is a subset)
     // - Claude/Gemini: input_tokens EXCLUDES cached tokens
@@ -146,16 +146,16 @@ export class LeaderboardService {
       totalTokens: sql<number>`COALESCE(SUM(
         CASE
           WHEN json_extract(${sessions.data}, '$.agentic_tool') = 'codex' THEN
-            (CAST(json_extract(${tasks.data}, '$.usage.input_tokens') AS INTEGER) -
-             COALESCE(CAST(json_extract(${tasks.data}, '$.usage.cache_read_tokens') AS INTEGER), 0)) +
-            CAST(json_extract(${tasks.data}, '$.usage.output_tokens') AS INTEGER)
+            (CAST(json_extract(${tasks.data}, '$.raw_sdk_response.tokenUsage.input_tokens') AS INTEGER) -
+             COALESCE(CAST(json_extract(${tasks.data}, '$.raw_sdk_response.tokenUsage.cache_read_tokens') AS INTEGER), 0)) +
+            CAST(json_extract(${tasks.data}, '$.raw_sdk_response.tokenUsage.output_tokens') AS INTEGER)
           ELSE
-            CAST(json_extract(${tasks.data}, '$.usage.input_tokens') AS INTEGER) +
-            CAST(json_extract(${tasks.data}, '$.usage.output_tokens') AS INTEGER)
+            CAST(json_extract(${tasks.data}, '$.raw_sdk_response.tokenUsage.input_tokens') AS INTEGER) +
+            CAST(json_extract(${tasks.data}, '$.raw_sdk_response.tokenUsage.output_tokens') AS INTEGER)
         END
       ), 0)`.as('total_tokens'),
       totalCost: sql<number>`COALESCE(SUM(
-        CAST(json_extract(${tasks.data}, '$.usage.estimated_cost_usd') AS REAL)
+        CAST(json_extract(${tasks.data}, '$.raw_sdk_response.tokenUsage.estimated_cost_usd') AS REAL)
       ), 0.0)`.as('total_cost'),
       taskCount: sql<number>`COUNT(DISTINCT ${tasks.task_id})`.as('task_count'),
     };

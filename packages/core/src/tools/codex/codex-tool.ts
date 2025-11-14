@@ -26,7 +26,6 @@ import {
 import type { TokenUsage } from '../../utils/pricing';
 import { calculateTokenCost } from '../../utils/pricing';
 import type {
-  CalculatedTokenUsage,
   CodexSdkResponse,
   NormalizedSdkResponse,
   RawSdkResponse,
@@ -145,8 +144,6 @@ export class CodexTool implements ITool {
     let resolvedModel: string | undefined;
     let currentMessageId: MessageID | null = null;
     let tokenUsage: TokenUsage | undefined;
-    let contextWindow: number | undefined;
-    let contextWindowLimit: number | undefined;
     let _streamStartTime = Date.now();
     let _firstTokenTime: number | null = null;
 
@@ -167,10 +164,6 @@ export class CodexTool implements ITool {
 
       if (event.type === 'complete' && event.usage) {
         tokenUsage = event.usage;
-        contextWindow = event.contextWindow; // SDK provides this directly!
-        if (!contextWindowLimit) {
-          contextWindowLimit = event.contextWindowLimit || getCodexContextWindowLimit(resolvedModel || DEFAULT_CODEX_MODEL);
-        }
       }
 
       // Capture Codex thread ID
@@ -295,17 +288,13 @@ export class CodexTool implements ITool {
       }
     }
 
-    // Context window comes from SDK response directly
-    if (!contextWindowLimit) {
-      contextWindowLimit = getCodexContextWindowLimit(resolvedModel || DEFAULT_CODEX_MODEL);
-    }
-
     return {
       userMessageId: userMessage.message_id,
       assistantMessageIds,
       tokenUsage,
-      contextWindow,
-      contextWindowLimit,
+      // Codex SDK doesn't provide contextWindow/contextWindowLimit
+      contextWindow: undefined,
+      contextWindowLimit: undefined,
       model: resolvedModel || DEFAULT_CODEX_MODEL,
     };
   }
@@ -461,10 +450,6 @@ export class CodexTool implements ITool {
 
       if (event.type === 'complete' && event.usage) {
         tokenUsage = event.usage;
-        contextWindow = event.contextWindow; // SDK provides this directly!
-        if (!contextWindowLimit) {
-          contextWindowLimit = event.contextWindowLimit || getCodexContextWindowLimit(resolvedModel || DEFAULT_CODEX_MODEL);
-        }
       }
 
       // Capture Codex thread ID
@@ -500,17 +485,13 @@ export class CodexTool implements ITool {
       }
     }
 
-    // Context window comes from SDK response directly
-    if (!contextWindowLimit) {
-      contextWindowLimit = getCodexContextWindowLimit(resolvedModel || DEFAULT_CODEX_MODEL);
-    }
-
     return {
       userMessageId: userMessage.message_id,
       assistantMessageIds,
       tokenUsage,
-      contextWindow,
-      contextWindowLimit,
+      // Codex SDK doesn't provide contextWindow/contextWindowLimit
+      contextWindow: undefined,
+      contextWindowLimit: undefined,
       model: resolvedModel || DEFAULT_CODEX_MODEL,
     };
   }

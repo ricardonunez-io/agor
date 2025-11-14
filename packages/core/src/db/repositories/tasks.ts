@@ -74,11 +74,9 @@ export class TaskRepository implements BaseRepository<Task, Partial<Task>> {
         git_state,
         model: task.model ?? 'claude-sonnet-4-5',
         tool_use_count: task.tool_use_count ?? 0,
-        usage: task.usage, // Token usage and cost tracking
         duration_ms: task.duration_ms, // Task execution duration
         agent_session_id: task.agent_session_id, // SDK session ID
-        context_window: task.context_window, // Context window usage
-        context_window_limit: task.context_window_limit, // Max context window
+        raw_sdk_response: task.raw_sdk_response, // Raw SDK response - single source of truth for token accounting
         report: task.report,
         permission_request: task.permission_request, // Permission state for UI approval flow
       },

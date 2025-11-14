@@ -138,22 +138,23 @@ export function calculateModelContextWindowUsage(modelUsage: ModelUsage): number
  * Get session-level context window usage
  *
  * Algorithm (from https://codelynx.dev/posts/calculate-claude-code-context):
- * 1. Find the most recent task with valid usage data
- * 2. Extract: input_tokens + cache_read_tokens + cache_creation_tokens
- * 3. That's the session's current context (cumulative)
+ * 1. Find the most recent task with valid contextWindow from raw_sdk_response
+ * 2. That's the session's current context (cumulative from SDK)
  *
- * We do NOT sum across tasks because each task already contains cumulative totals
- * from the Anthropic API.
+ * We do NOT sum across tasks because the SDK already provides cumulative totals.
  *
  * @param tasks - All tasks in the session (should be ordered by creation time)
- * @returns Current context window usage, or undefined if no tasks have usage data
+ * @returns Current context window usage, or undefined if no tasks have context window data
  */
-export function getSessionContextUsage(tasks: Array<{ usage?: TokenUsage }>): number | undefined {
-  // Find the most recent task with usage data
+export function getSessionContextUsage(
+  tasks: Array<{ raw_sdk_response?: { contextWindow?: number } }>
+): number | undefined {
+  // Find the most recent task with contextWindow from SDK
   for (let i = tasks.length - 1; i >= 0; i--) {
     const task = tasks[i];
-    if (task.usage) {
-      return calculateContextWindowUsage(task.usage);
+    const contextWindow = task.raw_sdk_response?.contextWindow;
+    if (contextWindow !== undefined) {
+      return contextWindow;
     }
   }
   return undefined;
@@ -162,16 +163,16 @@ export function getSessionContextUsage(tasks: Array<{ usage?: TokenUsage }>): nu
 /**
  * Get context window limit from tasks
  *
- * Searches tasks in reverse order to find the most recent context_window_limit value.
+ * Searches tasks in reverse order to find the most recent contextWindowLimit from raw_sdk_response.
  *
  * @param tasks - All tasks in the session
  * @returns Context window limit (e.g., 200000 for Sonnet), or undefined if not found
  */
 export function getContextWindowLimit(
-  tasks: Array<{ context_window_limit?: number }>
+  tasks: Array<{ raw_sdk_response?: { contextWindowLimit?: number } }>
 ): number | undefined {
   for (let i = tasks.length - 1; i >= 0; i--) {
-    const limit = tasks[i].context_window_limit;
+    const limit = tasks[i].raw_sdk_response?.contextWindowLimit;
     if (limit) {
       return limit;
     }

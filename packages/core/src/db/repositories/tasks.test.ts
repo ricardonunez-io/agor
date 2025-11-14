@@ -170,18 +170,8 @@ describe('TaskRepository.create', () => {
         start_timestamp: new Date('2024-01-01T00:00:00Z').toISOString(),
         end_timestamp: new Date('2024-01-01T01:00:00Z').toISOString(),
       },
-      usage: {
-        input_tokens: 1000,
-        output_tokens: 500,
-        total_tokens: 1500,
-        cache_read_tokens: 200,
-        cache_creation_tokens: 100,
-        estimated_cost_usd: 0.025,
-      },
       duration_ms: 45000,
       agent_session_id: 'agent-session-123',
-      context_window: 8000,
-      context_window_limit: 200000,
       report: {
         path: 'session-123/task-456.md',
         template: 'standard',
@@ -206,7 +196,6 @@ describe('TaskRepository.create', () => {
     expect(created.git_state.ref_at_start).toBe('feature-branch');
     expect(created.git_state.sha_at_end).toBe('def456ghi');
     expect(created.message_range.end_index).toBe(10);
-    expect(created.usage?.total_tokens).toBe(1500);
     expect(created.duration_ms).toBe(45000);
     expect(created.agent_session_id).toBe('agent-session-123');
     expect(created.report?.path).toBe('session-123/task-456.md');
@@ -667,12 +656,6 @@ describe('TaskRepository.update', () => {
         sha_at_end: 'def456',
         commit_message: 'feat: new feature',
       },
-      usage: {
-        input_tokens: 2000,
-        output_tokens: 1000,
-        total_tokens: 3000,
-        estimated_cost_usd: 0.05,
-      },
       message_range: {
         start_index: 0,
         end_index: 5,
@@ -686,7 +669,6 @@ describe('TaskRepository.update', () => {
     expect(updated.tool_use_count).toBe(10);
     expect(updated.duration_ms).toBe(45000);
     expect(updated.git_state.sha_at_end).toBe('def456');
-    expect(updated.usage?.total_tokens).toBe(3000);
     expect(updated.message_range.end_index).toBe(5);
     // Unchanged fields
     expect(updated.full_prompt).toBe(created.full_prompt);
@@ -788,13 +770,11 @@ describe('TaskRepository edge cases', () => {
     const taskRepo = new TaskRepository(db);
     const sessionId = await createSessionWithDeps(db);
     const data = createTaskData({ session_id: sessionId });
-    delete (data as any).usage;
     delete (data as any).duration_ms;
     delete (data as any).report;
 
     const created = await taskRepo.create(data);
 
-    expect(created.usage).toBeUndefined();
     expect(created.duration_ms).toBeUndefined();
     expect(created.report).toBeUndefined();
   });
