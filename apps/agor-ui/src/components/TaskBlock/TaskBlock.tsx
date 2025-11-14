@@ -386,8 +386,14 @@ export const TaskBlock = React.memo<TaskBlockProps>(
         : messages.reduce((sum, msg) => sum + (msg.tool_uses?.length || 0), 0);
 
     // Get context window directly from raw SDK response
-    const contextWindowUsed = task.raw_sdk_response?.contextWindow ?? 0;
-    const contextWindowLimit = task.raw_sdk_response?.contextWindowLimit ?? 200000;
+    // Only Claude, Codex, and Gemini provide contextWindow (OpenCode doesn't)
+    const sdkResponse = task.raw_sdk_response;
+    const contextWindowUsed =
+      sdkResponse && 'contextWindow' in sdkResponse ? sdkResponse.contextWindow ?? 0 : 0;
+    const contextWindowLimit =
+      sdkResponse && 'contextWindowLimit' in sdkResponse
+        ? sdkResponse.contextWindowLimit ?? 200000
+        : 200000;
     const taskHeaderGradient = getContextWindowGradient(contextWindowUsed, contextWindowLimit);
 
     // Task header shows when collapsed
@@ -454,13 +460,17 @@ export const TaskBlock = React.memo<TaskBlockProps>(
                 cacheCreationTokens={task.raw_sdk_response.tokenUsage.cache_creation_tokens}
               />
             )}
-            {task.raw_sdk_response?.contextWindow !== undefined && task.raw_sdk_response.contextWindowLimit && (
-              <ContextWindowPill
-                used={task.raw_sdk_response.contextWindow}
-                limit={task.raw_sdk_response.contextWindowLimit}
-                taskMetadata={{
-                  model: task.model,
-                  duration_ms: task.duration_ms,
+            {sdkResponse &&
+              'contextWindow' in sdkResponse &&
+              sdkResponse.contextWindow !== undefined &&
+              'contextWindowLimit' in sdkResponse &&
+              sdkResponse.contextWindowLimit && (
+                <ContextWindowPill
+                  used={sdkResponse.contextWindow}
+                  limit={sdkResponse.contextWindowLimit}
+                  taskMetadata={{
+                    model: task.model,
+                    duration_ms: task.duration_ms,
                   raw_sdk_response: task.raw_sdk_response,
                 }}
               />

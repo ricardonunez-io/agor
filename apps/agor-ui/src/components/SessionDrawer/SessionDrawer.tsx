@@ -290,10 +290,18 @@ const SessionDrawer = ({
     // Find most recent task with raw SDK response
     for (let i = tasks.length - 1; i >= 0; i--) {
       const task = tasks[i];
-      if (task.raw_sdk_response?.contextWindow !== undefined && task.raw_sdk_response.contextWindowLimit) {
+      const sdkResponse = task.raw_sdk_response;
+      // Only Claude, Codex, and Gemini provide contextWindow (OpenCode doesn't)
+      if (
+        sdkResponse &&
+        'contextWindow' in sdkResponse &&
+        sdkResponse.contextWindow !== undefined &&
+        'contextWindowLimit' in sdkResponse &&
+        sdkResponse.contextWindowLimit
+      ) {
         return {
-          used: task.raw_sdk_response.contextWindow,
-          limit: task.raw_sdk_response.contextWindowLimit,
+          used: sdkResponse.contextWindow,
+          limit: sdkResponse.contextWindowLimit,
           taskMetadata: {
             model: task.model,
             duration_ms: task.duration_ms,
