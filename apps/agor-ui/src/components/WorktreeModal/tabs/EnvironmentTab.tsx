@@ -14,6 +14,7 @@ import {
   CloseCircleOutlined,
   CodeOutlined,
   CopyOutlined,
+  DownloadOutlined,
   EditOutlined,
   FileTextOutlined,
   LoadingOutlined,
@@ -21,6 +22,7 @@ import {
   PoweroffOutlined,
   ReloadOutlined,
   SaveOutlined,
+  UploadOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
 import {
@@ -28,12 +30,12 @@ import {
   Button,
   Card,
   Descriptions,
-  Divider,
   Input,
   message,
   Space,
   Spin,
   Tag,
+  Tooltip,
   Typography,
   theme,
 } from 'antd';
@@ -372,6 +374,44 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
     setIsEditingContext(false);
   };
 
+  // Import from .agor.yml
+  const handleImport = async () => {
+    if (!client || !onUpdateRepo) return;
+
+    try {
+      const updated = (await client
+        .service(`repos/${repo.repo_id}/import-agor-yml`)
+        .create({})) as Repo;
+      message.success('Imported environment configuration from .agor.yml');
+
+      // Update local state
+      if (updated.environment_config) {
+        setUpCommand(updated.environment_config.up_command || '');
+        setDownCommand(updated.environment_config.down_command || '');
+        setHealthCheckUrlTemplate(updated.environment_config.health_check?.url_template || '');
+        setAppUrlTemplate(updated.environment_config.app_url_template || '');
+        setLogsCommand(updated.environment_config.logs_command || '');
+      }
+
+      // Notify parent
+      onUpdateRepo(repo.repo_id, { environment_config: updated.environment_config });
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to import .agor.yml');
+    }
+  };
+
+  // Export to .agor.yml
+  const handleExport = async () => {
+    if (!client) return;
+
+    try {
+      await client.service(`repos/${repo.repo_id}/export-agor-yml`).create({});
+      message.success('Exported environment configuration to .agor.yml in repository root');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to export .agor.yml');
+    }
+  };
+
   // Auto-enable editing if no config exists
   if (!hasEnvironmentConfig && !isEditingTemplate) {
     // Automatically show the form in edit mode
@@ -466,6 +506,23 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
   return (
     <div style={{ width: '100%', maxHeight: '70vh', overflowY: 'auto' }}>
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        <Alert
+          message={
+            <span>
+              Environment templates can be version-controlled using <code>.agor.yml</code>.{' '}
+              <a
+                href="https://agor.live/guide/environment-configuration"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                View documentation
+              </a>
+            </span>
+          }
+          type="info"
+          showIcon
+        />
+
         {/* ========== ENVIRONMENT CONTROLS (Top) ========== */}
         {hasEnvironmentConfig && (
           <Card size="small">
@@ -551,8 +608,6 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
           </Card>
         )}
 
-        <Divider style={{ margin: '8px 0' }} />
-
         {/* ========== REPOSITORY TEMPLATE (Top Level) ========== */}
         <Card
           title={
@@ -567,14 +622,43 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
           size="small"
           extra={
             !isEditingTemplate && (
-              <Button
-                type="text"
-                size="small"
-                icon={<EditOutlined />}
-                onClick={() => setIsEditingTemplate(true)}
-              >
-                Edit
-              </Button>
+              <Space size="small">
+                <Tooltip title="Import environment configuration from .agor.yml in repository root">
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<DownloadOutlined />}
+                    onClick={handleImport}
+                  >
+                    Import
+                  </Button>
+                </Tooltip>
+                <Tooltip
+                  title={
+                    hasEnvironmentConfig
+                      ? 'Export current environment configuration to .agor.yml in repository root'
+                      : 'No configuration to export'
+                  }
+                >
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<UploadOutlined />}
+                    onClick={handleExport}
+                    disabled={!hasEnvironmentConfig}
+                  >
+                    Export
+                  </Button>
+                </Tooltip>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => setIsEditingTemplate(true)}
+                >
+                  Edit
+                </Button>
+              </Space>
             )
           }
         >
@@ -755,8 +839,6 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
             )}
           </Space>
         </Card>
-
-        <Divider style={{ margin: '8px 0' }} />
 
         {/* ========== WORKTREE INSTANCE (Bottom Level) ========== */}
         <Card
