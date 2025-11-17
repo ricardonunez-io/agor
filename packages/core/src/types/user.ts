@@ -80,10 +80,19 @@ export interface AudioPreferences {
 }
 
 /**
+ * Event stream preferences for debugging WebSocket events
+ */
+export interface EventStreamPreferences {
+  /** Enable/disable event stream feature visibility in navbar */
+  enabled: boolean;
+}
+
+/**
  * User preferences structure
  */
 export interface UserPreferences {
   audio?: AudioPreferences;
+  eventStream?: EventStreamPreferences;
   // Future preferences can be added here
   [key: string]: unknown;
 }

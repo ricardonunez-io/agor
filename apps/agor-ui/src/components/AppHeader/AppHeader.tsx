@@ -1,5 +1,6 @@
 import type { ActiveUser, User } from '@agor/core/types';
 import {
+  ApiOutlined,
   CommentOutlined,
   LogoutOutlined,
   MenuOutlined,
@@ -24,6 +25,7 @@ export interface AppHeaderProps {
   connecting?: boolean;
   onMenuClick?: () => void;
   onCommentsClick?: () => void;
+  onEventStreamClick?: () => void;
   onSettingsClick?: () => void;
   onUserSettingsClick?: () => void;
   onThemeEditorClick?: () => void;
@@ -32,6 +34,7 @@ export interface AppHeaderProps {
   currentBoardName?: string;
   currentBoardIcon?: string;
   unreadCommentsCount?: number;
+  eventStreamEnabled?: boolean;
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
@@ -42,6 +45,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   connecting = false,
   onMenuClick,
   onCommentsClick,
+  onEventStreamClick,
   onSettingsClick,
   onUserSettingsClick,
   onThemeEditorClick,
@@ -50,6 +54,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   currentBoardName,
   currentBoardIcon,
   unreadCommentsCount = 0,
+  eventStreamEnabled = false,
 }) => {
   const { token } = theme.useToken();
   const userEmoji = user?.emoji || '👤';
@@ -173,6 +178,15 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             />
             <Divider type="vertical" style={{ height: 32, margin: '0 8px' }} />
           </>
+        )}
+        {eventStreamEnabled && (
+          <Tooltip title="Live Event Stream" placement="bottom">
+            <Button
+              type="text"
+              icon={<ApiOutlined style={{ fontSize: token.fontSizeLG }} />}
+              onClick={onEventStreamClick}
+            />
+          </Tooltip>
         )}
         <Tooltip title="Documentation" placement="bottom">
           <Button

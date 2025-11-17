@@ -18,6 +18,7 @@ import type {
 import { PermissionScope } from '@agor/core/types';
 import { Layout } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
+import { useEventStream } from '../../hooks/useEventStream';
 import { useFaviconStatus } from '../../hooks/useFaviconStatus';
 import { usePresence } from '../../hooks/usePresence';
 import type { AgenticToolOption } from '../../types';
@@ -25,6 +26,7 @@ import { useThemedMessage } from '../../utils/message';
 import { AppHeader } from '../AppHeader';
 import { CommentsPanel } from '../CommentsPanel';
 import { EnvironmentLogsModal } from '../EnvironmentLogsModal';
+import { EventStreamPanel } from '../EventStreamPanel';
 import { NewSessionButton } from '../NewSessionButton';
 import { type NewSessionConfig, NewSessionModal } from '../NewSessionModal';
 import { type NewWorktreeConfig, NewWorktreeModal } from '../NewWorktreeModal';
@@ -200,6 +202,12 @@ export const App: React.FC<AppProps> = ({
   const [logsModalWorktreeId, setLogsModalWorktreeId] = useState<string | null>(null);
   const [themeEditorOpen, setThemeEditorOpen] = useState(false);
 
+  // Initialize event stream panel state from localStorage (collapsed by default)
+  const [eventStreamPanelCollapsed, setEventStreamPanelCollapsed] = useState(() => {
+    const stored = localStorage.getItem('agor:eventStreamPanelCollapsed');
+    return stored ? stored === 'true' : true; // Default to collapsed (hidden)
+  });
+
   // Initialize current board from localStorage or fallback to first board or initialBoardId
   const [currentBoardId, setCurrentBoardId] = useState(() => {
     const stored = localStorage.getItem('agor:currentBoardId');
@@ -221,6 +229,11 @@ export const App: React.FC<AppProps> = ({
     localStorage.setItem('agor:commentsPanelCollapsed', String(commentsPanelCollapsed));
   }, [commentsPanelCollapsed]);
 
+  // Persist event stream panel collapsed state to localStorage
+  useEffect(() => {
+    localStorage.setItem('agor:eventStreamPanelCollapsed', String(eventStreamPanelCollapsed));
+  }, [eventStreamPanelCollapsed]);
+
   // If the stored board no longer exists (e.g., deleted), fallback to first board
   useEffect(() => {
     if (currentBoardId && !boards.some((b) => b.board_id === currentBoardId)) {
@@ -231,6 +244,15 @@ export const App: React.FC<AppProps> = ({
 
   // Update favicon based on session activity on current board
   useFaviconStatus(currentBoardId, sessions, boardObjects);
+
+  // Check if event stream is enabled in user preferences
+  const eventStreamEnabled = user?.preferences?.eventStream?.enabled ?? false;
+
+  // Event stream hook - only captures events when panel is open
+  const { events, clearEvents } = useEventStream({
+    client,
+    enabled: !eventStreamPanelCollapsed,
+  });
 
   const handleOpenTerminal = (commands: string[] = [], worktreeId?: string) => {
     setTerminalCommands(commands);
@@ -427,6 +449,7 @@ export const App: React.FC<AppProps> = ({
         connecting={connecting}
         onMenuClick={() => setListDrawerOpen(true)}
         onCommentsClick={() => setCommentsPanelCollapsed(!commentsPanelCollapsed)}
+        onEventStreamClick={() => setEventStreamPanelCollapsed(!eventStreamPanelCollapsed)}
         onSettingsClick={() => setSettingsOpen(true)}
         onUserSettingsClick={() => {
           setSettingsActiveTab('users');
@@ -443,6 +466,7 @@ export const App: React.FC<AppProps> = ({
             (c) => c.board_id === currentBoardId && !c.resolved && !c.parent_comment_id
           ).length
         }
+        eventStreamEnabled={eventStreamEnabled}
       />
       <Content style={{ position: 'relative', overflow: 'hidden', display: 'flex' }}>
         <CommentsPanel
@@ -517,6 +541,12 @@ export const App: React.FC<AppProps> = ({
             hasRepos={repos.length > 0}
           />
         </div>
+        <EventStreamPanel
+          collapsed={eventStreamPanelCollapsed}
+          onToggleCollapse={() => setEventStreamPanelCollapsed(!eventStreamPanelCollapsed)}
+          events={events}
+          onClear={clearEvents}
+        />
       </Content>
       {newSessionWorktreeId && (
         <NewSessionModal

@@ -16,6 +16,7 @@ import {
   Popconfirm,
   Select,
   Space,
+  Switch,
   Table,
   Tabs,
   Tag,
@@ -92,6 +93,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({
         name: user.name,
         emoji: user.emoji,
         role: user.role,
+        eventStreamEnabled: user.preferences?.eventStream?.enabled ?? false,
       });
 
       // Initialize agentic tool forms with user's defaults
@@ -189,6 +191,12 @@ export const UsersTable: React.FC<UsersTableProps> = ({
           name: values.name,
           emoji: values.emoji,
           role: values.role,
+          preferences: {
+            ...editingUser.preferences,
+            eventStream: {
+              enabled: values.eventStreamEnabled ?? false,
+            },
+          },
         };
         // Only include password if it was provided
         if (values.password?.trim()) {
@@ -646,6 +654,22 @@ export const UsersTable: React.FC<UsersTableProps> = ({
                     help="Leave blank to keep current password"
                   >
                     <Input.Password placeholder="••••••••" />
+                  </Form.Item>
+
+                  <Form.Item
+                    label={
+                      <Space size={4}>
+                        Enable Live Event Stream
+                        <Tag color="blue" style={{ fontSize: 10, marginLeft: 4 }}>
+                          BETA
+                        </Tag>
+                      </Space>
+                    }
+                    name="eventStreamEnabled"
+                    valuePropName="checked"
+                    tooltip="Show/hide the event stream icon in the navbar. When enabled, you can view live WebSocket events for debugging."
+                  >
+                    <Switch />
                   </Form.Item>
 
                   <Form.Item
