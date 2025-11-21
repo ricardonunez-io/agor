@@ -5,8 +5,9 @@
  */
 
 import type { Board, BoardObject, UUID } from '@agor/core/types';
-import { eq, like } from 'drizzle-orm';
+import { and, eq, like, ne } from 'drizzle-orm';
 import { formatShortId, generateId } from '../../lib/ids';
+import { generateSlug } from '../../lib/slugs';
 import type { Database } from '../client';
 import { deleteFrom, insert, select, update } from '../database-wrapper';
 import { type BoardInsert, type BoardRow, boards } from '../schema';
@@ -105,10 +106,60 @@ export class BoardRepository implements BaseRepository<Board, Partial<Board>> {
   }
 
   /**
+   * Generate a unique slug for a board.
+   * Returns empty string if the name contains no alphanumeric characters.
+   *
+   * @param name - Board name to slugify
+   * @param excludeId - Optional board ID to exclude from uniqueness check
+   * @returns Unique slug, or empty string if name has no alphanumeric chars
+   */
+  private async generateUniqueSlug(name: string, excludeId?: string): Promise<string> {
+    const baseSlug = generateSlug(name);
+    if (!baseSlug) {
+      // Name contains no alphanumeric chars (e.g., emoji-only)
+      // Return empty string - caller will store null
+      return '';
+    }
+
+    // Check if base slug is available
+    const existingQuery = excludeId
+      ? select(this.db)
+          .from(boards)
+          .where(and(eq(boards.slug, baseSlug), ne(boards.board_id, excludeId)))
+      : select(this.db).from(boards).where(eq(boards.slug, baseSlug));
+
+    const existing = await existingQuery.one();
+    if (!existing) return baseSlug;
+
+    // Find next available suffix
+    let counter = 1;
+    while (true) {
+      const candidateSlug = `${baseSlug}-${counter}`;
+      const checkQuery = excludeId
+        ? select(this.db)
+            .from(boards)
+            .where(and(eq(boards.slug, candidateSlug), ne(boards.board_id, excludeId)))
+        : select(this.db).from(boards).where(eq(boards.slug, candidateSlug));
+
+      const found = await checkQuery.one();
+      if (!found) return candidateSlug;
+      counter++;
+    }
+  }
+
+  /**
    * Create a new board
    */
   async create(data: Partial<Board>): Promise<Board> {
     try {
+      // Auto-generate slug if not provided
+      if (!data.slug && data.name) {
+        const generatedSlug = await this.generateUniqueSlug(data.name);
+        // Only set slug if we got a non-empty result
+        // Empty string means name has no alphanumeric chars - store as null
+        data.slug = generatedSlug || undefined;
+      }
+
       const insertData = this.boardToInsert(data);
       await insert(this.db, boards).values(insertData).run();
 
@@ -164,6 +215,23 @@ export class BoardRepository implements BaseRepository<Board, Partial<Board>> {
         error
       );
     }
+  }
+
+  /**
+   * Find board by slug or ID (for URL routing)
+   *
+   * Always tries slug lookup first, then falls back to ID lookup.
+   * This enables beautiful URLs like /b/my-board while still supporting /b/550e8400
+   * and handles edge cases like hex-looking slugs (e.g., board named "deadbeef")
+   */
+  async findBySlugOrId(param: string): Promise<Board | null> {
+    // Always try slug lookup first, regardless of what the param looks like
+    // This handles edge cases where a board name looks like a hex ID (e.g., "deadbeef")
+    const bySlug = await this.findBySlug(param);
+    if (bySlug) return bySlug;
+
+    // Fall back to ID lookup (short or full UUID)
+    return this.findById(param);
   }
 
   /**
