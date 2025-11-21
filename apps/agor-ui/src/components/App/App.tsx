@@ -36,6 +36,7 @@ import { SessionSettingsModal } from '../SessionSettingsModal';
 import { SettingsModal } from '../SettingsModal';
 import { TerminalModal } from '../TerminalModal';
 import { ThemeEditorModal } from '../ThemeEditorModal';
+import { UserSettingsModal } from '../UserSettingsModal';
 import { WorktreeListDrawer } from '../WorktreeListDrawer';
 import { WorktreeModal } from '../WorktreeModal';
 import type { WorktreeUpdate } from '../WorktreeModal/tabs/GeneralTab';
@@ -178,10 +179,14 @@ export const App: React.FC<AppProps> = ({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsActiveTab, setSettingsActiveTab] = useState<string>('boards');
   const [settingsEditUserId, setSettingsEditUserId] = useState<string | undefined>(undefined);
+  const [userSettingsOpen, setUserSettingsOpen] = useState(false);
 
   // Handle external settings tab control (e.g., from welcome modal)
   const effectiveSettingsOpen = settingsOpen || !!openSettingsTab;
-  const effectiveSettingsTab = openSettingsTab || settingsActiveTab;
+  // If user manually opened settings, use their tab selection; otherwise use external override
+  const effectiveSettingsTab = settingsOpen
+    ? settingsActiveTab
+    : openSettingsTab || settingsActiveTab;
 
   // Handle external new worktree modal control (e.g., from welcome modal)
   const effectiveNewWorktreeModalOpen = newWorktreeModalOpen || !!openNewWorktreeModal;
@@ -462,9 +467,7 @@ export const App: React.FC<AppProps> = ({
         onEventStreamClick={() => setEventStreamPanelCollapsed(!eventStreamPanelCollapsed)}
         onSettingsClick={() => setSettingsOpen(true)}
         onUserSettingsClick={() => {
-          setSettingsActiveTab('users');
-          setSettingsEditUserId(user?.user_id);
-          setSettingsOpen(true);
+          setUserSettingsOpen(true);
         }}
         onThemeEditorClick={() => setThemeEditorOpen(true)}
         onLogout={onLogout}
@@ -655,11 +658,8 @@ export const App: React.FC<AppProps> = ({
         onTabChange={(newTab) => {
           setSettingsActiveTab(newTab);
           setSettingsEditUserId(undefined); // Clear editUserId when switching tabs
-          // Clear openSettingsTab when user manually changes tabs
-          // This allows normal tab switching after opening from onboarding
-          if (openSettingsTab) {
-            onSettingsClose?.();
-          }
+          // Note: We don't call onSettingsClose here anymore because settingsOpen=true
+          // takes precedence over openSettingsTab in effectiveSettingsTab logic
         }}
         onCreateBoard={onCreateBoard}
         onUpdateBoard={onUpdateBoard}
@@ -747,6 +747,13 @@ export const App: React.FC<AppProps> = ({
         />
       )}
       <ThemeEditorModal open={themeEditorOpen} onClose={() => setThemeEditorOpen(false)} />
+      <UserSettingsModal
+        open={userSettingsOpen}
+        onClose={() => setUserSettingsOpen(false)}
+        user={user || null}
+        mcpServerById={mcpServerById}
+        onUpdate={onUpdateUser}
+      />
     </Layout>
   );
 };
