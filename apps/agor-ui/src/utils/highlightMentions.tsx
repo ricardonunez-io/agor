@@ -52,7 +52,7 @@ export function highlightMentionsInText(text: string): React.ReactNode {
     parts.push(text.substring(lastIndex));
   }
 
-  return parts.length > 0 ? <>{parts}</> : text;
+  return parts.length > 0 ? parts : text;
 }
 
 /**

@@ -260,48 +260,49 @@ export const useEmojiAutocomplete = () => {
    * @returns Filtered emoji options
    */
   const searchEmojis = useMemo(
-    () => (query: string): EmojiOption[] => {
-      if (!query) {
-        // Return popular emojis when no query
-        return EMOJI_DATA.slice(0, 20);
-      }
-
-      const lowerQuery = query.toLowerCase();
-
-      // Filter by shortcode or keywords
-      const matches = EMOJI_DATA.filter((option) => {
-        // Match shortcode
-        if (option.shortcode.toLowerCase().includes(lowerQuery)) {
-          return true;
+    () =>
+      (query: string): EmojiOption[] => {
+        if (!query) {
+          // Return popular emojis when no query
+          return EMOJI_DATA.slice(0, 20);
         }
-        // Match keywords
-        if (option.keywords?.some((kw) => kw.toLowerCase().includes(lowerQuery))) {
-          return true;
-        }
-        return false;
-      });
 
-      // Sort by relevance (exact match first, then starts-with, then contains)
-      return matches
-        .sort((a, b) => {
-          const aShortcode = a.shortcode.toLowerCase();
-          const bShortcode = b.shortcode.toLowerCase();
+        const lowerQuery = query.toLowerCase();
 
-          // Exact match
-          if (aShortcode === lowerQuery) return -1;
-          if (bShortcode === lowerQuery) return 1;
+        // Filter by shortcode or keywords
+        const matches = EMOJI_DATA.filter((option) => {
+          // Match shortcode
+          if (option.shortcode.toLowerCase().includes(lowerQuery)) {
+            return true;
+          }
+          // Match keywords
+          if (option.keywords?.some((kw) => kw.toLowerCase().includes(lowerQuery))) {
+            return true;
+          }
+          return false;
+        });
 
-          // Starts with
-          const aStarts = aShortcode.startsWith(lowerQuery);
-          const bStarts = bShortcode.startsWith(lowerQuery);
-          if (aStarts && !bStarts) return -1;
-          if (!aStarts && bStarts) return 1;
+        // Sort by relevance (exact match first, then starts-with, then contains)
+        return matches
+          .sort((a, b) => {
+            const aShortcode = a.shortcode.toLowerCase();
+            const bShortcode = b.shortcode.toLowerCase();
 
-          // Alphabetical
-          return aShortcode.localeCompare(bShortcode);
-        })
-        .slice(0, 20); // Limit results
-    },
+            // Exact match
+            if (aShortcode === lowerQuery) return -1;
+            if (bShortcode === lowerQuery) return 1;
+
+            // Starts with
+            const aStarts = aShortcode.startsWith(lowerQuery);
+            const bStarts = bShortcode.startsWith(lowerQuery);
+            if (aStarts && !bStarts) return -1;
+            if (!aStarts && bStarts) return 1;
+
+            // Alphabetical
+            return aShortcode.localeCompare(bShortcode);
+          })
+          .slice(0, 20); // Limit results
+      },
     []
   );
 

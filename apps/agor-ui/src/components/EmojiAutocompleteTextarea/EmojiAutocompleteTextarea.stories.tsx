@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { Card, ConfigProvider, Space, Typography, theme } from 'antd';
 import { useState } from 'react';
-import { ConfigProvider, theme, Space, Typography, Card } from 'antd';
 import { EmojiAutocompleteTextarea } from './EmojiAutocompleteTextarea';
 
 const { Text, Paragraph } = Typography;

@@ -17,15 +17,15 @@
 
 /* Focus state */
 .emoji-autocomplete-textarea:focus {
-  border-color: var(--ant-color-primary) !important;
-  box-shadow: 0 0 0 2px var(--ant-color-primary-bg) !important;
+  border-color: var(--ant-color-primary);
+  box-shadow: 0 0 0 2px var(--ant-color-primary-bg);
 }
 
 /* Disabled state */
 .emoji-autocomplete-textarea:disabled {
   cursor: not-allowed;
   opacity: 0.6;
-  background-color: var(--ant-color-bg-container-disabled) !important;
+  background-color: var(--ant-color-bg-container-disabled);
 }
 
 /* Autocomplete dropdown container */
@@ -79,7 +79,7 @@
 
 /* Selected/focused item (keyboard navigation) */
 .emoji-autocomplete-wrapper .rta__item--selected {
-  background-color: var(--ant-color-primary-bg-hover) !important;
+  background-color: var(--ant-color-primary-bg-hover);
 }
 
 /* Loading state */
@@ -92,7 +92,7 @@
 
 /* Empty state when no results */
 .emoji-autocomplete-wrapper .rta__list:empty::after {
-  content: 'No emojis found';
+  content: "No emojis found";
   display: block;
   padding: var(--ant-padding-sm);
   text-align: center;

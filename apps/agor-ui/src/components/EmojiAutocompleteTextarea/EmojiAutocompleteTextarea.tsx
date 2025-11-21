@@ -1,7 +1,6 @@
-import { theme } from 'antd';
 import ReactTextareaAutocomplete from '@webscopeio/react-textarea-autocomplete';
-import type { TextareaProps } from '@webscopeio/react-textarea-autocomplete';
-import { useEmojiAutocomplete, type EmojiOption } from '../../hooks/useEmojiAutocomplete';
+import { theme } from 'antd';
+import { type EmojiOption, useEmojiAutocomplete } from '../../hooks/useEmojiAutocomplete';
 import './EmojiAutocompleteTextarea.css';
 
 interface EmojiAutocompleteTextareaProps {
