@@ -6,6 +6,7 @@
 
 import type {
   CreateMCPServerInput,
+  MCPAuthConfig,
   MCPScope,
   MCPServer,
   MCPServerFilters,
@@ -60,6 +61,9 @@ export class MCPServerRepository
       url: row.data.url,
       env: row.data.env,
 
+      // Authentication config (convert from DB format to type)
+      auth: row.data.auth as MCPAuthConfig | undefined,
+
       // Scope foreign keys (nullable UUID strings - DB stores null, types expect undefined)
       owner_user_id: (row.owner_user_id as UserID | null) ?? undefined,
       team_id: (row.team_id as TeamID | null) ?? undefined,
@@ -110,6 +114,7 @@ export class MCPServerRepository
         args: data.args,
         url: data.url,
         env: data.env,
+        auth: data.auth,
         tools: 'tools' in data ? data.tools : undefined,
         resources: 'resources' in data ? data.resources : undefined,
         prompts: 'prompts' in data ? data.prompts : undefined,

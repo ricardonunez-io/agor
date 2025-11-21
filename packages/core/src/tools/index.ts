@@ -8,4 +8,5 @@ export * from './base';
 export * from './claude';
 export * from './codex';
 export * from './gemini';
+export * from './mcp';
 export * from './opencode';

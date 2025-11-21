@@ -34,6 +34,44 @@ export type MCPScope = 'global' | 'team' | 'repo' | 'session';
 export type MCPSource = 'user' | 'imported' | 'agor';
 
 /**
+ * MCP authentication types
+ */
+export type MCPAuthType = 'none' | 'bearer' | 'jwt';
+
+/**
+ * JWT authentication configuration
+ * Used for MCP servers that require dynamic JWT token fetching
+ */
+export interface MCPJWTAuthConfig {
+  type: 'jwt';
+  api_url: string; // JWT API endpoint (e.g., "https://api.app.preset.io/v1/auth/")
+  api_token: string; // API token/name for authentication
+  api_secret: string; // API secret for authentication
+  insecure?: boolean; // Disable SSL verification (for self-signed certs)
+}
+
+/**
+ * Bearer token authentication configuration
+ */
+export interface MCPBearerAuthConfig {
+  type: 'bearer';
+  token: string;
+}
+
+/**
+ * No authentication configuration
+ */
+export interface MCPNoAuthConfig {
+  type: 'none';
+}
+
+/**
+ * MCP authentication configuration
+ * Supports: none, bearer token, and JWT (dynamic token fetching)
+ */
+export type MCPAuthConfig = MCPNoAuthConfig | MCPBearerAuthConfig | MCPJWTAuthConfig;
+
+/**
  * JSON Schema type for tool input schemas
  */
 export type JSONSchema = Record<string, unknown>;
@@ -105,6 +143,9 @@ export interface MCPServer {
   // HTTP/SSE config
   url?: string; // e.g., "https://mcp.sentry.dev/mcp"
 
+  // Authentication configuration (for HTTP/SSE transports)
+  auth?: MCPAuthConfig;
+
   // Environment variables
   env?: Record<string, string>; // e.g., { "ALLOWED_PATHS": "/Users/me/projects" }
 
@@ -163,6 +204,7 @@ export interface CreateMCPServerInput {
   command?: string;
   args?: string[];
   url?: string;
+  auth?: MCPAuthConfig;
   env?: Record<string, string>;
   scope: MCPScope;
   owner_user_id?: UserID;
@@ -183,6 +225,7 @@ export interface UpdateMCPServerInput {
   command?: string;
   args?: string[];
   url?: string;
+  auth?: MCPAuthConfig;
   env?: Record<string, string>;
   scope?: MCPScope;
   enabled?: boolean;

@@ -7,9 +7,13 @@
 
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk/sdk';
 import { getDaemonUrl, resolveApiKey, resolveUserEnvironment } from '../../config';
+import type { MCPAuthConfig, MCPJWTAuthConfig } from '../../types/mcp';
+import { resolveMCPAuthToken, MCPAuthError } from '../mcp';
 import type { Database } from '../../db/client';
 import type { MCPServerRepository } from '../../db/repositories/mcp-servers';
 import type { MessagesRepository } from '../../db/repositories/messages';
@@ -494,17 +498,94 @@ export async function setupQuery(
 
           // Build server config (convert 'transport' field to 'type' for Claude Code)
           const serverConfig: Record<string, unknown> = {
-            type: server.transport,
             env: server.env,
           };
 
           // Add transport-specific fields
           if (server.transport === 'stdio') {
+            serverConfig.type = 'stdio';
             serverConfig.command = server.command;
             serverConfig.args = server.args || [];
           } else {
-            // http and sse both use url
-            serverConfig.url = server.url;
+            // http and sse - check for authentication
+            const auth = server.auth as MCPAuthConfig | undefined;
+
+            if (auth && auth.type === 'jwt') {
+              // JWT auth: use mcp-remote wrapper with Bearer token
+              // Fetch JWT token first
+              try {
+                console.log(`   🔐 Fetching JWT token for ${server.name}...`);
+                const jwtToken = await resolveMCPAuthToken(auth);
+
+                if (jwtToken) {
+                  // Convert to stdio transport using mcp-remote
+                  // Check for user's wrapper script first, fall back to npx
+                  const wrapperPath = path.join(os.homedir(), '.local', 'bin', 'preset-mcp-wrapper');
+                  let useWrapper = false;
+
+                  try {
+                    await fs.access(wrapperPath, fs.constants.X_OK);
+                    useWrapper = true;
+                    console.log(`   📦 Using preset-mcp-wrapper at ${wrapperPath}`);
+                  } catch {
+                    // Wrapper not found, use npx directly
+                    console.log(`   📦 Using npx mcp-remote (no wrapper found)`);
+                  }
+
+                  serverConfig.type = 'stdio';
+                  if (useWrapper) {
+                    serverConfig.command = wrapperPath;
+                    serverConfig.args = [
+                      '-y',
+                      'mcp-remote@latest',
+                      server.url,
+                      '--header',
+                      `Authorization: Bearer ${jwtToken}`,
+                    ];
+                  } else {
+                    serverConfig.command = 'npx';
+                    serverConfig.args = [
+                      '-y',
+                      'mcp-remote@latest',
+                      server.url,
+                      '--header',
+                      `Authorization: Bearer ${jwtToken}`,
+                    ];
+                  }
+                  serverConfig.env = { ...server.env, NODE_OPTIONS: '--no-warnings' };
+                  console.log(`   ✅ JWT auth configured for ${server.name}`);
+                } else {
+                  // No token returned, use direct HTTP
+                  serverConfig.type = server.transport;
+                  serverConfig.url = server.url;
+                  console.log(`   ⚠️ JWT auth returned no token, using direct HTTP for ${server.name}`);
+                }
+              } catch (authError) {
+                console.error(`   ❌ JWT auth failed for ${server.name}:`, authError);
+                // Fall back to direct HTTP (will likely fail, but let's try)
+                serverConfig.type = server.transport;
+                serverConfig.url = server.url;
+              }
+            } else if (auth && auth.type === 'bearer') {
+              // Bearer auth: use mcp-remote wrapper with static token
+              const bearerToken = auth.token;
+              console.log(`   🔐 Using Bearer token auth for ${server.name}`);
+
+              serverConfig.type = 'stdio';
+              serverConfig.command = 'npx';
+              serverConfig.args = [
+                '-y',
+                'mcp-remote@latest',
+                server.url,
+                '--header',
+                `Authorization: Bearer ${bearerToken}`,
+              ];
+              serverConfig.env = { ...server.env, NODE_OPTIONS: '--no-warnings' };
+            } else {
+              // No auth or 'none' - use direct HTTP/SSE
+              serverConfig.type = server.transport;
+              serverConfig.url = server.url;
+            }
           }
 
           mcpConfig[server.name] = serverConfig;
