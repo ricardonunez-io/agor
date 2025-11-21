@@ -279,19 +279,12 @@ export const AutocompleteTextarea = React.forwardRef<
     const autocompleteOptions = useMemo(() => {
       const options: AutocompleteResult[] = [];
 
-<<<<<<< HEAD
-      if (fileResults.length > 0) {
-        options.push({ heading: 'FILES & FOLDERS' });
-        options.push(...fileResults);
-      }
-=======
       if (triggerType === '@') {
         // @ trigger: show files and users
         if (fileResults.length > 0) {
-          options.push({ heading: 'FILES' });
+          options.push({ heading: 'FILES & FOLDERS' });
           options.push(...fileResults);
         }
->>>>>>> 32cb8e6 (feat(ui): add emoji autocomplete to all textareas)
 
         const userResults = filterUsers(query);
         if (userResults.length > 0) {
@@ -622,26 +615,23 @@ export const AutocompleteTextarea = React.forwardRef<
               );
             }
 
-<<<<<<< HEAD
-            const isFile = 'path' in item;
-            const label = isFile ? item.path : `${item.name} (${item.email})`;
-            const isFolder = isFile && item.type === 'folder';
-=======
             // Determine label based on item type
             let label = '';
             let itemKey = '';
+            let isFolder = false;
+
             if ('emoji' in item) {
               label = `${item.emoji} :${item.shortcode}:`;
               itemKey = `emoji-${item.shortcode}`;
             } else if ('path' in item) {
               label = item.path;
               itemKey = `file-${item.path}`;
+              isFolder = item.type === 'folder';
             } else {
               label = `${item.name} (${item.email})`;
               itemKey = `user-${item.name}`;
             }
 
->>>>>>> 32cb8e6 (feat(ui): add emoji autocomplete to all textareas)
             const isHighlighted = highlightedIndex === idx;
 
             return (
@@ -658,11 +648,7 @@ export const AutocompleteTextarea = React.forwardRef<
                   color: isHighlighted ? token.colorPrimary : token.colorText,
                   display: 'flex',
                   alignItems: 'center',
-<<<<<<< HEAD
                   gap: token.paddingXS,
-=======
-                  gap: token.marginXS,
->>>>>>> 32cb8e6 (feat(ui): add emoji autocomplete to all textareas)
                 }}
                 onMouseEnter={(e) => {
                   setHighlightedIndex(idx);
@@ -673,18 +659,15 @@ export const AutocompleteTextarea = React.forwardRef<
                   e.currentTarget.style.backgroundColor = 'transparent';
                 }}
               >
-<<<<<<< HEAD
-                {isFolder && <span style={{ opacity: 0.6 }}>📁</span>}
-                <Text ellipsis>{label}</Text>
-=======
                 {/* Show emoji larger if it's an emoji result */}
                 {'emoji' in item && (
                   <span style={{ fontSize: 20, lineHeight: 1 }}>{item.emoji}</span>
                 )}
+                {/* Show folder icon for folders */}
+                {isFolder && <span style={{ opacity: 0.6 }}>📁</span>}
                 <Text ellipsis style={{ flex: 1 }}>
                   {'emoji' in item ? `:${item.shortcode}:` : label}
                 </Text>
->>>>>>> 32cb8e6 (feat(ui): add emoji autocomplete to all textareas)
               </div>
             );
           })}
