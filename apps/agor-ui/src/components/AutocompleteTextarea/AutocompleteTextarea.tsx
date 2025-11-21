@@ -1,7 +1,9 @@
 /**
  * AutocompleteTextarea
  *
- * Textarea with @ mentions autocomplete for files, folders, and users.
+ * Textarea with autocomplete for:
+ * - @ mentions for files, folders, and users
+ * - : emoji shortcodes
  * Uses Ant Design Popover for dropdown and native textarea for input.
  * Highlights @ mentions with a background overlay.
  */
@@ -10,6 +12,7 @@ import type { AgorClient } from '@agor/core/api';
 import type { SessionID, User } from '@agor/core/types';
 import { Input, Popover, Spin, Typography, theme } from 'antd';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { useEmojiAutocomplete } from '@/hooks/useEmojiAutocomplete';
 import { mapToArray } from '@/utils/mapHelpers';
 import './AutocompleteTextarea.css';
 
@@ -19,6 +22,7 @@ const { Text } = Typography;
 // Constants
 const _MAX_FILE_RESULTS = 10;
 const MAX_USER_RESULTS = 5;
+const MAX_EMOJI_RESULTS = 15;
 const DEBOUNCE_MS = 300;
 
 interface FileResult {
@@ -32,7 +36,13 @@ interface UserResult {
   type: 'user';
 }
 
-type AutocompleteResult = FileResult | UserResult | { heading: string };
+interface EmojiResult {
+  emoji: string;
+  shortcode: string;
+  type: 'emoji';
+}
+
+type AutocompleteResult = FileResult | UserResult | EmojiResult | { heading: string };
 
 interface AutocompleteTextareaProps {
   value: string;
@@ -49,32 +59,37 @@ interface AutocompleteTextareaProps {
 }
 
 /**
- * Extract text at cursor position before the @ trigger
+ * Extract text at cursor position before a trigger character (@ or :)
  */
-const getAtTokenQuery = (text: string, position: number): string | null => {
+const getTriggerQuery = (
+  text: string,
+  position: number,
+  trigger: '@' | ':'
+): { query: string; triggerIndex: number } | null => {
   const textBeforeCursor = text.substring(0, position);
-  const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+  const lastTriggerIndex = textBeforeCursor.lastIndexOf(trigger);
 
-  if (lastAtIndex === -1) {
+  if (lastTriggerIndex === -1) {
     return null;
   }
 
-  // Check if @ is at start or after whitespace
-  const charBeforeAt = lastAtIndex > 0 ? textBeforeCursor[lastAtIndex - 1] : ' ';
-  const isValidTrigger = charBeforeAt === ' ' || charBeforeAt === '\n' || lastAtIndex === 0;
+  // Check if trigger is at start or after whitespace
+  const charBeforeTrigger = lastTriggerIndex > 0 ? textBeforeCursor[lastTriggerIndex - 1] : ' ';
+  const isValidTrigger =
+    charBeforeTrigger === ' ' || charBeforeTrigger === '\n' || lastTriggerIndex === 0;
 
   if (!isValidTrigger) {
     return null;
   }
 
-  const query = textBeforeCursor.substring(lastAtIndex + 1);
+  const query = textBeforeCursor.substring(lastTriggerIndex + 1);
 
   // Don't trigger if query contains whitespace
   if (query.includes(' ') || query.includes('\n')) {
     return null;
   }
 
-  return query;
+  return { query, triggerIndex: lastTriggerIndex };
 };
 
 /**
@@ -139,7 +154,7 @@ export const AutocompleteTextarea = React.forwardRef<
       value,
       onChange,
       onKeyPress,
-      placeholder = 'Send a prompt, fork, or create a subsession... (type @ for autocomplete)',
+      placeholder = 'Send a prompt, fork, or create a subsession... (type @ for files/users, : for emojis)',
       client,
       sessionId,
       userById,
@@ -151,13 +166,16 @@ export const AutocompleteTextarea = React.forwardRef<
     const textareaRef = useRef<{ current: HTMLTextAreaElement | null }>({ current: null });
     const popoverContentRef = useRef<HTMLDivElement>(null);
     const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const { searchEmojis } = useEmojiAutocomplete();
 
     // Autocomplete state
     const [showPopover, setShowPopover] = useState(false);
-    const [atIndex, setAtIndex] = useState(-1);
+    const [triggerType, setTriggerType] = useState<'@' | ':' | null>(null);
+    const [triggerIndex, setTriggerIndex] = useState(-1);
     const [query, setQuery] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [fileResults, setFileResults] = useState<FileResult[]>([]);
+    const [emojiResults, setEmojiResults] = useState<EmojiResult[]>([]);
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
     // Scroll synchronization state
@@ -266,19 +284,50 @@ export const AutocompleteTextarea = React.forwardRef<
     const autocompleteOptions = useMemo(() => {
       const options: AutocompleteResult[] = [];
 
+<<<<<<< HEAD
       if (fileResults.length > 0) {
         options.push({ heading: 'FILES & FOLDERS' });
         options.push(...fileResults);
       }
+=======
+      if (triggerType === '@') {
+        // @ trigger: show files and users
+        if (fileResults.length > 0) {
+          options.push({ heading: 'FILES' });
+          options.push(...fileResults);
+        }
+>>>>>>> 32cb8e6 (feat(ui): add emoji autocomplete to all textareas)
 
-      const userResults = filterUsers(query);
-      if (userResults.length > 0) {
-        options.push({ heading: 'USERS' });
-        options.push(...userResults);
+        const userResults = filterUsers(query);
+        if (userResults.length > 0) {
+          options.push({ heading: 'USERS' });
+          options.push(...userResults);
+        }
+      } else if (triggerType === ':') {
+        // : trigger: show emojis
+        if (emojiResults.length > 0) {
+          options.push({ heading: 'EMOJIS' });
+          options.push(...emojiResults);
+        }
       }
 
       return options;
-    }, [fileResults, query, filterUsers]);
+    }, [triggerType, fileResults, emojiResults, query, filterUsers]);
+
+    /**
+     * Auto-highlight first selectable item when options change
+     */
+    React.useEffect(() => {
+      if (autocompleteOptions.length > 0 && showPopover) {
+        // Find first non-heading item and highlight it
+        const firstItemIndex = autocompleteOptions.findIndex((item) => !('heading' in item));
+        if (firstItemIndex >= 0) {
+          setHighlightedIndex(firstItemIndex);
+        }
+      } else {
+        setHighlightedIndex(-1);
+      }
+    }, [autocompleteOptions, showPopover]);
 
     /**
      * Clamp highlighted index when options list changes to prevent out of bounds access
@@ -306,67 +355,103 @@ export const AutocompleteTextarea = React.forwardRef<
         onChange(newValue);
 
         const cursorPos = e.target.selectionStart || 0;
-        const atQuery = getAtTokenQuery(newValue, cursorPos);
 
-        if (atQuery !== null) {
-          setQuery(atQuery);
-          setAtIndex(newValue.lastIndexOf('@'));
+        // Check for @ trigger first
+        const atTrigger = getTriggerQuery(newValue, cursorPos, '@');
+        if (atTrigger) {
+          setTriggerType('@');
+          setQuery(atTrigger.query);
+          setTriggerIndex(atTrigger.triggerIndex);
+          setEmojiResults([]);
 
-          // Debounced search
+          // Debounced search for files
           if (debounceTimerRef.current) {
             clearTimeout(debounceTimerRef.current);
           }
           debounceTimerRef.current = setTimeout(() => {
-            searchFiles(atQuery);
+            searchFiles(atTrigger.query);
           }, DEBOUNCE_MS);
 
           setShowPopover(true);
-        } else {
-          setShowPopover(false);
-          setFileResults([]);
-          setHighlightedIndex(-1);
+          return;
         }
+
+        // Check for : trigger (emoji)
+        const colonTrigger = getTriggerQuery(newValue, cursorPos, ':');
+        if (colonTrigger) {
+          setTriggerType(':');
+          setQuery(colonTrigger.query);
+          setTriggerIndex(colonTrigger.triggerIndex);
+          setFileResults([]);
+
+          // Instant emoji search (no debounce needed)
+          const emojis = searchEmojis(colonTrigger.query);
+          setEmojiResults(
+            emojis.slice(0, MAX_EMOJI_RESULTS).map((e) => ({
+              emoji: e.emoji,
+              shortcode: e.shortcode,
+              type: 'emoji' as const,
+            }))
+          );
+
+          setShowPopover(true);
+          return;
+        }
+
+        // No trigger detected
+        setShowPopover(false);
+        setTriggerType(null);
+        setFileResults([]);
+        setEmojiResults([]);
+        setHighlightedIndex(-1);
       },
-      [onChange, searchFiles]
+      [onChange, searchFiles, searchEmojis]
     );
 
     /**
      * Handle item selection
      */
     const handleSelect = useCallback(
-      (item: FileResult | UserResult) => {
-        if (atIndex === -1) return;
+      (item: FileResult | UserResult | EmojiResult) => {
+        if (triggerIndex === -1) return;
 
         const cursorPos = textareaRef.current.current?.selectionStart || 0;
         const textBeforeCursor = value.substring(0, cursorPos);
-        const atQueryLength = textBeforeCursor.substring(atIndex + 1).length;
+        const queryLength = textBeforeCursor.substring(triggerIndex + 1).length;
 
         let insertText = '';
-        if ('path' in item) {
+        if ('emoji' in item) {
+          // Emoji selection - just insert the emoji character
+          insertText = item.emoji;
+        } else if ('path' in item) {
+          // File selection
           insertText = `@${quoteIfNeeded(item.path)}`;
         } else {
+          // User selection
           insertText = `@${item.name}`;
         }
 
         const newValue =
-          value.substring(0, atIndex) +
+          value.substring(0, triggerIndex) +
           insertText +
           ' ' +
-          value.substring(atIndex + 1 + atQueryLength);
+          value.substring(triggerIndex + 1 + queryLength);
 
         onChange(newValue);
         setShowPopover(false);
+        setTriggerType(null);
         setFileResults([]);
+        setEmojiResults([]);
         setHighlightedIndex(-1);
 
         // Move cursor after inserted value
         setTimeout(() => {
-          const newCursorPos = atIndex + insertText.length + 1;
+          const newCursorPos = triggerIndex + insertText.length + 1;
           textareaRef.current.current?.setSelectionRange(newCursorPos, newCursorPos);
           textareaRef.current.current?.focus();
         }, 0);
       },
-      [atIndex, value, onChange]
+      [triggerIndex, value, onChange]
     );
 
     /**
@@ -435,12 +520,22 @@ export const AutocompleteTextarea = React.forwardRef<
             break;
 
           case 'Enter':
-            if (isPopoverOpen && highlightedIndex >= 0) {
+            if (isPopoverOpen) {
               e.preventDefault();
               e.stopPropagation();
-              const item = autocompleteOptions[highlightedIndex];
-              if (!('heading' in item)) {
-                handleSelect(item as FileResult | UserResult);
+
+              // If something is highlighted, select it
+              if (highlightedIndex >= 0) {
+                const item = autocompleteOptions[highlightedIndex];
+                if (!('heading' in item)) {
+                  handleSelect(item as FileResult | UserResult | EmojiResult);
+                }
+              } else {
+                // Nothing highlighted - select first non-heading item (like Slack)
+                const firstItem = autocompleteOptions.find((item) => !('heading' in item));
+                if (firstItem) {
+                  handleSelect(firstItem as FileResult | UserResult | EmojiResult);
+                }
               }
             } else if (!isPopoverOpen && onKeyPress) {
               // Popover closed, let parent handle Enter to send prompt
@@ -528,14 +623,31 @@ export const AutocompleteTextarea = React.forwardRef<
               );
             }
 
+<<<<<<< HEAD
             const isFile = 'path' in item;
             const label = isFile ? item.path : `${item.name} (${item.email})`;
             const isFolder = isFile && item.type === 'folder';
+=======
+            // Determine label based on item type
+            let label = '';
+            let itemKey = '';
+            if ('emoji' in item) {
+              label = `${item.emoji} :${item.shortcode}:`;
+              itemKey = `emoji-${item.shortcode}`;
+            } else if ('path' in item) {
+              label = item.path;
+              itemKey = `file-${item.path}`;
+            } else {
+              label = `${item.name} (${item.email})`;
+              itemKey = `user-${item.name}`;
+            }
+
+>>>>>>> 32cb8e6 (feat(ui): add emoji autocomplete to all textareas)
             const isHighlighted = highlightedIndex === idx;
 
             return (
               <div
-                key={label}
+                key={itemKey}
                 onClick={() => handleSelect(item)}
                 style={{
                   padding: `${token.paddingXS}px ${token.paddingSM}px`,
@@ -547,7 +659,11 @@ export const AutocompleteTextarea = React.forwardRef<
                   color: isHighlighted ? token.colorPrimary : token.colorText,
                   display: 'flex',
                   alignItems: 'center',
+<<<<<<< HEAD
                   gap: token.paddingXS,
+=======
+                  gap: token.marginXS,
+>>>>>>> 32cb8e6 (feat(ui): add emoji autocomplete to all textareas)
                 }}
                 onMouseEnter={(e) => {
                   setHighlightedIndex(idx);
@@ -558,8 +674,18 @@ export const AutocompleteTextarea = React.forwardRef<
                   e.currentTarget.style.backgroundColor = 'transparent';
                 }}
               >
+<<<<<<< HEAD
                 {isFolder && <span style={{ opacity: 0.6 }}>📁</span>}
                 <Text ellipsis>{label}</Text>
+=======
+                {/* Show emoji larger if it's an emoji result */}
+                {'emoji' in item && (
+                  <span style={{ fontSize: 20, lineHeight: 1 }}>{item.emoji}</span>
+                )}
+                <Text ellipsis style={{ flex: 1 }}>
+                  {'emoji' in item ? `:${item.shortcode}:` : label}
+                </Text>
+>>>>>>> 32cb8e6 (feat(ui): add emoji autocomplete to all textareas)
               </div>
             );
           })}

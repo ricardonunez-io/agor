@@ -1,0 +1,1 @@
+export { EmojiAutocompleteTextarea } from './EmojiAutocompleteTextarea';

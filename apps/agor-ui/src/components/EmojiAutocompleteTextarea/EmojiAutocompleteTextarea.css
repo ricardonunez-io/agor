@@ -1,0 +1,117 @@
+/**
+ * Styling for EmojiAutocompleteTextarea component
+ * Uses Ant Design CSS variables for consistent theming
+ */
+
+.emoji-autocomplete-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+/* Textarea base styles */
+.emoji-autocomplete-textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Focus state */
+.emoji-autocomplete-textarea:focus {
+  border-color: var(--ant-color-primary) !important;
+  box-shadow: 0 0 0 2px var(--ant-color-primary-bg) !important;
+}
+
+/* Disabled state */
+.emoji-autocomplete-textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  background-color: var(--ant-color-bg-container-disabled) !important;
+}
+
+/* Autocomplete dropdown container */
+.emoji-autocomplete-wrapper .rta__autocomplete {
+  position: absolute;
+  z-index: 1000;
+  background: var(--ant-color-bg-elevated);
+  border: 1px solid var(--ant-color-border);
+  border-radius: var(--ant-border-radius);
+  box-shadow: var(--ant-box-shadow-secondary);
+  overflow: hidden;
+}
+
+/* Dropdown list */
+.emoji-autocomplete-wrapper .rta__list {
+  max-height: 250px;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--ant-padding-xxs) 0;
+  list-style: none;
+}
+
+/* Custom scrollbar for dropdown (WebKit browsers) */
+.emoji-autocomplete-wrapper .rta__list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.emoji-autocomplete-wrapper .rta__list::-webkit-scrollbar-track {
+  background: var(--ant-color-bg-container);
+}
+
+.emoji-autocomplete-wrapper .rta__list::-webkit-scrollbar-thumb {
+  background: var(--ant-color-border-secondary);
+  border-radius: 4px;
+}
+
+.emoji-autocomplete-wrapper .rta__list::-webkit-scrollbar-thumb:hover {
+  background: var(--ant-color-border);
+}
+
+/* Individual dropdown items */
+.emoji-autocomplete-wrapper .rta__item {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+/* Hover state for items */
+.emoji-autocomplete-wrapper .rta__item:hover {
+  background-color: var(--ant-color-fill-quaternary);
+}
+
+/* Selected/focused item (keyboard navigation) */
+.emoji-autocomplete-wrapper .rta__item--selected {
+  background-color: var(--ant-color-primary-bg-hover) !important;
+}
+
+/* Loading state */
+.emoji-autocomplete-wrapper .rta__loader {
+  padding: var(--ant-padding-sm);
+  text-align: center;
+  color: var(--ant-color-text-secondary);
+  font-size: var(--ant-font-size-sm);
+}
+
+/* Empty state when no results */
+.emoji-autocomplete-wrapper .rta__list:empty::after {
+  content: 'No emojis found';
+  display: block;
+  padding: var(--ant-padding-sm);
+  text-align: center;
+  color: var(--ant-color-text-tertiary);
+  font-size: var(--ant-font-size-sm);
+}
+
+/* Animation for dropdown appearance */
+.emoji-autocomplete-wrapper .rta__autocomplete {
+  animation: slideIn 0.15s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
