@@ -1,1 +1,0 @@
-export { EmojiAutocompleteTextarea } from './EmojiAutocompleteTextarea';
