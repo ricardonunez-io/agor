@@ -137,6 +137,50 @@ You maintain full observability on a system that's quickly becoming critical to 
 
 Agor becomes the heart of your development process. You need visibility into it just like you need visibility into production.
 
+### Your Cloud or Our Cloud - You Pick
+
+Agor Cloud gives you deployment flexibility to match your security and compliance requirements.
+
+**Option 1: Preset-Managed Cloud**
+
+We provision and manage everything in our infrastructure. You get a dedicated Agor instance, fully isolated, with all the managed service benefits. This is the fastest path to getting started—no infrastructure decisions, no cloud account setup.
+
+**Option 2: Your AWS Account**
+
+Prefer to keep everything within your own AWS perimeter? We can deploy Agor Cloud into an AWS account you control.
+
+This is increasingly common for teams that need:
+
+- **VPC isolation** - Agor runs within your existing virtual network
+- **Private connectivity** - Access to internal services, databases, or APIs behind your firewall
+- **Compliance boundaries** - Data residency, audit trails, or regulatory requirements that mandate specific cloud boundaries
+- **VPN integration** - Connect Agor to on-prem resources through your existing VPN tunnels
+
+Preset retains management access to operate the service—deployments, updates, monitoring, backups—but the infrastructure lives in your account. You control the network boundaries, IAM policies, and resource tagging.
+
+**Talk to our team about supported topologies.** We've deployed in a variety of configurations—VPC peering, AWS PrivateLink, site-to-site VPN, bastion hosts. As long as Preset has the necessary access to manage the Agor infrastructure, everything is possible.
+
+### VPN-First Security
+
+Given what Agor handles—AI provider API keys, your source code, session context, development secrets—it's sensitive infrastructure.
+
+**We strongly recommend running Agor behind a VPN.**
+
+Most teams already have VPN infrastructure (Tailscale, WireGuard, AWS Client VPN, etc.). If you do, we can integrate Agor into your existing setup.
+
+**Don't have VPN infrastructure? Agor Cloud can set it up for you.**
+
+We'll provision and configure VPN access as part of your Agor Cloud deployment:
+
+- **Tailscale integration** - Seamless mesh VPN, works everywhere
+- **WireGuard setup** - Lightweight, high-performance, simple configuration
+- **AWS Client VPN** - Native AWS integration for teams already on AWS
+- **Custom solutions** - OpenVPN, ZeroTier, or your preferred stack
+
+Your developers connect through VPN before accessing Agor. No public exposure, no broad network access. Clean security boundary.
+
+We handle the VPN setup, credential distribution, and ongoing management. You get a secure-by-default deployment without the operational burden.
+
 ## Who Agor Cloud Is For
 
 - **Teams that want shared dev environments** without the ops burden
@@ -166,6 +210,8 @@ We're not trying to sell you something you don't need. We're looking for teams w
 ## What You Get
 
 - **Dedicated Agor instance** with your team's repos and worktrees
+- **Flexible deployment** - our cloud or yours (AWS account you control)
+- **VPN setup and management** - secure-by-default or integrate with your existing VPN
 - **Unix-level user isolation** for secure multi-tenant development
 - **Preset Cloud workspace** with pre-built analytics dashboards
 - **Policy controls** for token quotas, rate limits, and spending caps
