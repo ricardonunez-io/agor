@@ -594,8 +594,10 @@ export class CodexPromptService {
     let mcpServersAddedAfterCreation = false;
     if (this.sessionMCPServerRepo && session.sdk_session_id) {
       try {
-        const sessionMCPServers =
-          await this.sessionMCPServerRepo.listServersWithMetadata(sessionId, true);
+        const sessionMCPServers = await this.sessionMCPServerRepo.listServersWithMetadata(
+          sessionId,
+          true
+        );
         const sessionCreatedAt = new Date(session.created_at).getTime();
         const sessionLastUpdated = session.last_updated
           ? new Date(session.last_updated).getTime()
