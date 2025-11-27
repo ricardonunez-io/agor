@@ -150,100 +150,124 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       onCancel={onClose}
       footer={null}
       width={1200}
-      style={{ minHeight: 600 }}
-      styles={{ body: { minHeight: 500 } }}
+      styles={{
+        body: {
+          height: '75vh',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: 0,
+        },
+      }}
     >
       <Tabs
         activeKey={activeTab}
         onChange={onTabChange}
+        style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+        tabBarStyle={{ paddingLeft: 24, paddingRight: 24, marginBottom: 0, flex: '0 0 auto' }}
         items={[
           {
             key: 'boards',
             label: 'Boards',
             children: (
-              <BoardsTable
-                client={client}
-                boardById={boardById}
-                sessionsByWorktree={sessionsByWorktree}
-                worktreeById={worktreeById}
-                onCreate={onCreateBoard}
-                onUpdate={onUpdateBoard}
-                onDelete={onDeleteBoard}
-              />
+              <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
+                <BoardsTable
+                  client={client}
+                  boardById={boardById}
+                  sessionsByWorktree={sessionsByWorktree}
+                  worktreeById={worktreeById}
+                  onCreate={onCreateBoard}
+                  onUpdate={onUpdateBoard}
+                  onDelete={onDeleteBoard}
+                />
+              </div>
             ),
           },
           {
             key: 'repos',
             label: 'Repositories',
             children: (
-              <ReposTable
-                repoById={repoById}
-                onCreate={onCreateRepo}
-                onCreateLocal={onCreateLocalRepo}
-                onUpdate={onUpdateRepo}
-                onDelete={onDeleteRepo}
-              />
+              <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
+                <ReposTable
+                  repoById={repoById}
+                  onCreate={onCreateRepo}
+                  onCreateLocal={onCreateLocalRepo}
+                  onUpdate={onUpdateRepo}
+                  onDelete={onDeleteRepo}
+                />
+              </div>
             ),
           },
           {
             key: 'worktrees',
             label: 'Worktrees & Environments',
             children: (
-              <WorktreesTable
-                worktreeById={worktreeById}
-                repoById={repoById}
-                boardById={boardById}
-                sessionsByWorktree={sessionsByWorktree}
-                onArchiveOrDelete={onArchiveOrDeleteWorktree}
-                onUnarchive={onUnarchiveWorktree}
-                onCreate={onCreateWorktree}
-                onRowClick={handleWorktreeRowClick}
-                onStartEnvironment={onStartEnvironment}
-                onStopEnvironment={onStopEnvironment}
-              />
+              <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
+                <WorktreesTable
+                  worktreeById={worktreeById}
+                  repoById={repoById}
+                  boardById={boardById}
+                  sessionsByWorktree={sessionsByWorktree}
+                  onArchiveOrDelete={onArchiveOrDeleteWorktree}
+                  onUnarchive={onUnarchiveWorktree}
+                  onCreate={onCreateWorktree}
+                  onRowClick={handleWorktreeRowClick}
+                  onStartEnvironment={onStartEnvironment}
+                  onStopEnvironment={onStopEnvironment}
+                />
+              </div>
             ),
           },
           {
             key: 'mcp',
             label: 'MCP Servers',
             children: (
-              <MCPServersTable
-                mcpServerById={mcpServerById}
-                onCreate={onCreateMCPServer}
-                onUpdate={onUpdateMCPServer}
-                onDelete={onDeleteMCPServer}
-              />
+              <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
+                <MCPServersTable
+                  mcpServerById={mcpServerById}
+                  onCreate={onCreateMCPServer}
+                  onUpdate={onUpdateMCPServer}
+                  onDelete={onDeleteMCPServer}
+                />
+              </div>
             ),
           },
           {
             key: 'agentic-tools',
             label: 'Agentic Tools',
-            children: <AgenticToolsSection client={client} />,
+            children: (
+              <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
+                <AgenticToolsSection client={client} />
+              </div>
+            ),
           },
           {
             key: 'users',
             label: 'Users',
             children: (
-              <UsersTable
-                userById={userById}
-                mcpServerById={mcpServerById}
-                currentUser={currentUser}
-                onCreate={onCreateUser}
-                onUpdate={onUpdateUser}
-                onDelete={onDeleteUser}
-              />
+              <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
+                <UsersTable
+                  userById={userById}
+                  mcpServerById={mcpServerById}
+                  currentUser={currentUser}
+                  onCreate={onCreateUser}
+                  onUpdate={onUpdateUser}
+                  onDelete={onDeleteUser}
+                />
+              </div>
             ),
           },
           {
             key: 'about',
             label: 'About',
             children: (
-              <AboutTab
-                client={client}
-                connected={client?.io?.connected ?? false}
-                connectionError={undefined}
-                isAdmin={currentUser?.role === 'admin'}
-              />
+              <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
+                <AboutTab
+                  client={client}
+                  connected={client?.io?.connected ?? false}
+                  connectionError={undefined}
+                  isAdmin={currentUser?.role === 'admin'}
+                />
+              </div>
             ),
           },
         ]}
