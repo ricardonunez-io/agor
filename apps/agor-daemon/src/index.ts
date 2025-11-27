@@ -990,7 +990,6 @@ async function main() {
       },
     },
     // biome-ignore lint/suspicious/noExplicitAny: feathers-swagger docs option not typed in FeathersJS
-    // biome-ignore lint/suspicious/noExplicitAny: Feathers context extension
   } as any);
 
   app.use('/boards', createBoardsService(db), {
@@ -1194,7 +1193,6 @@ async function main() {
     before: {
       all: [
         // biome-ignore lint/suspicious/noExplicitAny: FeathersJS hook type compatibility
-        // biome-ignore lint/suspicious/noExplicitAny: Feathers context extension
         (validateQuery as any)(boardObjectQueryValidator),
         ...getReadAuthHooks(),
         ...(allowAnonymous ? [] : [requireMinimumRole('member', 'manage board objects')]),

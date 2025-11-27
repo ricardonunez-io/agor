@@ -14,7 +14,6 @@ import type {
   User,
   Worktree,
 } from '@agor/core/types';
-import { PermissionScope } from '@agor/core/types';
 import { Layout } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { mapToArray } from '@/utils/mapHelpers';
@@ -32,7 +31,7 @@ import { NewSessionButton } from '../NewSessionButton';
 import { type NewSessionConfig, NewSessionModal } from '../NewSessionModal';
 import { type NewWorktreeConfig, NewWorktreeModal } from '../NewWorktreeModal';
 import { SessionCanvas } from '../SessionCanvas';
-import SessionDrawer from '../SessionDrawer';
+import { SessionPanel } from '../SessionPanel';
 import { SessionSettingsModal } from '../SessionSettingsModal';
 import { SettingsModal, UserSettingsModal } from '../SettingsModal';
 import { TerminalModal } from '../TerminalModal';
@@ -78,7 +77,7 @@ export interface AppProps {
   onCreateRepo?: (data: { url: string; slug: string; default_branch: string }) => void;
   onCreateLocalRepo?: (data: { path: string; slug?: string }) => void;
   onUpdateRepo?: (repoId: string, updates: Partial<Repo>) => void;
-  onDeleteRepo?: (repoId: string) => void;
+  onDeleteRepo?: (repoId: string, cleanup: boolean) => void;
   onArchiveOrDeleteWorktree?: (
     worktreeId: string,
     options: {
@@ -342,72 +341,6 @@ export const App: React.FC<AppProps> = ({
     }
   };
 
-  const handleSendPrompt = async (prompt: string, permissionMode?: PermissionMode) => {
-    if (selectedSessionId) {
-      const session = sessionById.get(selectedSessionId);
-      const agentName = session?.agentic_tool || 'agentic_tool';
-
-      // Show loading state
-      console.log(`Sending prompt to ${agentName}...`, {
-        sessionId: selectedSessionId,
-        prompt,
-        permissionMode,
-      });
-
-      // Call the prompt endpoint
-      // Note: onSendPrompt should be implemented in the parent to call the daemon
-      onSendPrompt?.(selectedSessionId, prompt, permissionMode);
-    }
-  };
-
-  const handleFork = (prompt: string) => {
-    if (selectedSessionId) {
-      onForkSession?.(selectedSessionId, prompt);
-    }
-  };
-
-  const handleSubsession = (config: string | Partial<SpawnConfig>) => {
-    if (selectedSessionId) {
-      // Handle both legacy string prompt and new SpawnConfig
-      const spawnConfig = typeof config === 'string' ? { prompt: config } : config;
-      onSpawnSession?.(selectedSessionId, spawnConfig);
-    }
-  };
-
-  const handlePermissionDecision = useCallback(
-    async (
-      sessionId: string,
-      requestId: string,
-      taskId: string,
-      allow: boolean,
-      scope: PermissionScope
-    ) => {
-      if (!client) return;
-
-      try {
-        console.log(
-          `📋 Permission decision: ${allow ? 'ALLOW' : 'DENY'} (${scope}) for task ${taskId}`
-        );
-
-        // Call the permission decision endpoint
-        await client.service(`sessions/${sessionId}/permission-decision`).create({
-          requestId,
-          taskId,
-          allow,
-          reason: allow ? 'Approved by user' : 'Denied by user',
-          remember: scope !== PermissionScope.ONCE, // Only remember if not 'once'
-          scope,
-          decidedBy: user?.user_id || 'anonymous',
-        });
-
-        console.log(`✅ Permission decision sent successfully`);
-      } catch (error) {
-        console.error('❌ Failed to send permission decision:', error);
-      }
-    },
-    [client, user?.user_id]
-  );
-
   const selectedSession = selectedSessionId ? sessionById.get(selectedSessionId) || null : null;
   const selectedSessionWorktree = selectedSession
     ? worktreeById.get(selectedSession.worktree_id)
@@ -628,11 +561,6 @@ export const App: React.FC<AppProps> = ({
           onToggleCollapse={() => setEventStreamPanelCollapsed(!eventStreamPanelCollapsed)}
           events={events}
           onClear={clearEvents}
-          worktreeById={worktreeById}
-          sessionById={sessionById}
-          sessionsByWorktree={sessionsByWorktree}
-          repos={mapToArray(repoById)}
-          userById={userById}
           currentUserId={user?.user_id}
           selectedSessionId={selectedSessionId}
           currentBoard={currentBoard}
@@ -664,14 +592,11 @@ export const App: React.FC<AppProps> = ({
           userById={userById}
         />
       )}
-      <SessionDrawer
+      <SessionPanel
         client={client}
         session={selectedSession}
         worktree={selectedSessionWorktree}
-        userById={userById}
         currentUserId={user?.user_id}
-        repoById={repoById}
-        mcpServerById={mcpServerById}
         sessionMcpServerIds={
           selectedSessionId ? sessionMcpServerIds.get(selectedSessionId) || [] : []
         }
@@ -680,22 +605,6 @@ export const App: React.FC<AppProps> = ({
           setSelectedSessionId(null);
           // Note: highlight flags already cleared in handleSessionClick when drawer opened
         }}
-        onSendPrompt={handleSendPrompt}
-        onFork={handleFork}
-        onSubsession={handleSubsession}
-        onPermissionDecision={handlePermissionDecision}
-        onOpenSettings={(sessionId) => {
-          setSessionSettingsId(sessionId);
-        }}
-        onOpenWorktree={(worktreeId) => {
-          setWorktreeModalWorktreeId(worktreeId);
-        }}
-        onOpenTerminal={handleOpenTerminal}
-        onUpdateSession={onUpdateSession}
-        onDelete={onDeleteSession}
-        onStartEnvironment={onStartEnvironment}
-        onStopEnvironment={onStopEnvironment}
-        onViewLogs={setLogsModalWorktreeId}
       />
       <SettingsModal
         open={settingsOpen}
