@@ -14,6 +14,7 @@ import type {
   User,
   Worktree,
 } from '@agor/core/types';
+import { PermissionScope } from '@agor/core/types';
 import { Layout } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -31,6 +32,7 @@ import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { usePresence } from '../../hooks/usePresence';
 import { useUrlState } from '../../hooks/useUrlState';
 import type { AgenticToolOption } from '../../types';
+import { initializeAudioOnInteraction } from '../../utils/audio';
 import { useThemedMessage } from '../../utils/message';
 import { AppHeader } from '../AppHeader';
 import { CommentsPanel } from '../CommentsPanel';
@@ -285,6 +287,11 @@ export const App: React.FC<AppProps> = ({
     setCurrentBoardIdInternal(boardId);
   }, []);
 
+  // Initialize audio on first user interaction
+  useEffect(() => {
+    initializeAudioOnInteraction();
+  }, []);
+
   // Programmatically collapse/expand the comments panel when toggle state changes
   useEffect(() => {
     if (commentsPanelRef.current) {
@@ -337,6 +344,40 @@ export const App: React.FC<AppProps> = ({
     setTerminalCommands([]);
     setTerminalWorktreeId(undefined);
   };
+
+  const handlePermissionDecision = useCallback(
+    async (
+      sessionId: string,
+      requestId: string,
+      taskId: string,
+      allow: boolean,
+      scope: PermissionScope
+    ) => {
+      if (!client) return;
+
+      try {
+        console.log(
+          `📋 Permission decision: ${allow ? 'ALLOW' : 'DENY'} (${scope}) for task ${taskId}`
+        );
+
+        // Call the permission decision endpoint
+        await client.service(`sessions/${sessionId}/permission-decision`).create({
+          requestId,
+          taskId,
+          allow,
+          reason: allow ? 'Approved by user' : 'Denied by user',
+          remember: scope !== PermissionScope.ONCE, // Only remember if not 'once'
+          scope,
+          decidedBy: user?.user_id || 'anonymous',
+        });
+
+        console.log(`✅ Permission decision sent successfully`);
+      } catch (error) {
+        console.error('❌ Failed to send permission decision:', error);
+      }
+    },
+    [client, user]
+  );
 
   const handleCreateSession = async (config: NewSessionConfig) => {
     console.log('Creating session with config:', config, 'for board:', currentBoardId);
@@ -491,6 +532,7 @@ export const App: React.FC<AppProps> = ({
       onSubsession: onSpawnSession,
       onUpdateSession,
       onDeleteSession,
+      onPermissionDecision: handlePermissionDecision,
       onStartEnvironment,
       onStopEnvironment,
       onNukeEnvironment,
@@ -505,6 +547,7 @@ export const App: React.FC<AppProps> = ({
       onSpawnSession,
       onUpdateSession,
       onDeleteSession,
+      handlePermissionDecision,
       onStartEnvironment,
       onStopEnvironment,
       onNukeEnvironment,
