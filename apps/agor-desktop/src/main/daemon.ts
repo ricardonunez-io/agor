@@ -8,10 +8,10 @@
  * - Provides status updates to the main process
  */
 
-import { spawn, ChildProcess } from 'child_process';
-import path from 'path';
+import { type ChildProcess, spawn } from 'node:child_process';
+import * as http from 'node:http';
+import path from 'node:path';
 import { app } from 'electron';
-import * as http from 'http';
 
 export interface DaemonStatus {
   running: boolean;
@@ -54,6 +54,20 @@ export class DaemonManager {
   async start(): Promise<void> {
     if (this.process) {
       console.log('[DaemonManager] Daemon already running');
+      return;
+    }
+
+    // First, check if a daemon is already running on the port
+    const alreadyRunning = await this.checkHealth();
+    if (alreadyRunning) {
+      console.log('[DaemonManager] Daemon already running on port', this.port);
+      console.log('[DaemonManager] Connecting to existing daemon instead of spawning new one');
+      this.startHealthCheck();
+      this.notifyStatus({
+        running: true,
+        port: this.port,
+        pid: undefined, // We don't own this process
+      });
       return;
     }
 

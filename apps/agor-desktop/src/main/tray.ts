@@ -7,14 +7,15 @@
  * - App settings and quit
  */
 
-import { Tray, Menu, shell, app, nativeImage } from 'electron';
-import path from 'path';
-import { DaemonManager, DaemonStatus } from './daemon';
+import path from 'node:path';
+import { app, Menu, nativeImage, shell, Tray } from 'electron';
+import type { DaemonManager, DaemonStatus } from './daemon';
 
 export class TrayManager {
   private tray?: Tray;
   private daemon: DaemonManager;
   private iconPath: string;
+  private onChangeUrlCallback?: () => void;
 
   constructor(daemon: DaemonManager) {
     this.daemon = daemon;
@@ -29,20 +30,24 @@ export class TrayManager {
   }
 
   /**
+   * Register callback for URL change requests
+   */
+  onChangeUrl(callback: () => void): void {
+    this.onChangeUrlCallback = callback;
+  }
+
+  /**
    * Create and show the tray icon
    */
   create(): void {
     try {
       // Create tray icon (will use template image on Mac for proper dark mode support)
-      let icon: any;
+      const icon = nativeImage.createFromPath(this.iconPath);
 
       if (process.platform === 'darwin') {
         // On macOS, use template image for automatic dark mode support
         // Icon should be 16x16 or 32x32 with @2x retina version
-        icon = nativeImage.createFromPath(this.iconPath);
         icon.setTemplateImage(true);
-      } else {
-        icon = nativeImage.createFromPath(this.iconPath);
       }
 
       this.tray = new Tray(icon);
@@ -67,9 +72,7 @@ export class TrayManager {
     }
 
     // Update tooltip
-    const tooltip = status.running
-      ? `Agor (Running on port ${status.port})`
-      : 'Agor (Stopped)';
+    const tooltip = status.running ? `Agor (Running on port ${status.port})` : 'Agor (Stopped)';
     this.tray.setToolTip(tooltip);
 
     // Build context menu
@@ -135,6 +138,14 @@ export class TrayManager {
         ],
       },
       { type: 'separator' },
+      {
+        label: 'Change UI URL...',
+        click: () => {
+          if (this.onChangeUrlCallback) {
+            this.onChangeUrlCallback();
+          }
+        },
+      },
       {
         label: 'Settings',
         click: () => {

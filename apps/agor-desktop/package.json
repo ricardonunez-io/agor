@@ -1,5 +1,6 @@
 {
-  "name": "@agor/desktop",
+  "name": "agor",
+  "productName": "Agor",
   "version": "0.1.0",
   "description": "Agor - AI Agent Orchestration Platform (Mac Desktop App)",
   "main": "dist/main.js",
