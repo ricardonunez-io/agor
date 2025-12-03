@@ -1,0 +1,89 @@
+# /etc/sudoers.d/agor
+# Agor Daemon Sudoers Configuration
+#
+# SECURITY NOTES:
+# - Only allows specific commands with constrained arguments
+# - Uses NOPASSWD for automation (daemon runs non-interactively)
+# - Group names restricted to agor_wt_[0-9a-f]{8} pattern
+# - No shell escapes possible (no wildcards in dangerous positions)
+#
+# Installation:
+#   sudo cp scripts/sudoers.d-agor /etc/sudoers.d/agor
+#   sudo chmod 440 /etc/sudoers.d/agor
+#   sudo chown root:root /etc/sudoers.d/agor
+#
+# Verify syntax before deploying:
+#   sudo visudo -cf scripts/sudoers.d-agor
+#
+# Test after installation:
+#   sudo -l -U agorpg
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+Defaults:agorpg !requiretty
+Defaults:agorpg env_reset
+Defaults:agorpg secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# =============================================================================
+# COMMAND ALIASES
+# =============================================================================
+
+# --- Group Management ---
+# Only allow agor_wt_<8-hex-chars> group names
+Cmnd_Alias AGOR_GROUP_CREATE = \
+    /usr/sbin/groupadd agor_wt_[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]
+
+Cmnd_Alias AGOR_GROUP_DELETE = \
+    /usr/sbin/groupdel agor_wt_[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]
+
+Cmnd_Alias AGOR_GROUP_ADD_USER = \
+    /usr/sbin/usermod -aG agor_wt_[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f] *
+
+Cmnd_Alias AGOR_GROUP_REMOVE_USER = \
+    /usr/bin/gpasswd -d * agor_wt_[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]
+
+# --- Filesystem Permissions ---
+# IMPORTANT: Adjust these paths to match your worktree locations
+Cmnd_Alias AGOR_CHGRP = \
+    /bin/chgrp -R agor_wt_[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f] /home/*/worktrees/*, \
+    /bin/chgrp -R agor_wt_[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f] /var/lib/agor/worktrees/*
+
+# Only allow safe permission modes (setgid variants)
+Cmnd_Alias AGOR_CHMOD = \
+    /bin/chmod -R 2750 /home/*/worktrees/*, \
+    /bin/chmod -R 2755 /home/*/worktrees/*, \
+    /bin/chmod -R 2775 /home/*/worktrees/*, \
+    /bin/chmod -R 2777 /home/*/worktrees/*, \
+    /bin/chmod -R 2750 /var/lib/agor/worktrees/*, \
+    /bin/chmod -R 2755 /var/lib/agor/worktrees/*, \
+    /bin/chmod -R 2775 /var/lib/agor/worktrees/*, \
+    /bin/chmod -R 2777 /var/lib/agor/worktrees/*
+
+# --- Process Impersonation ---
+Cmnd_Alias AGOR_EXECUTOR = /usr/bin/node
+Cmnd_Alias AGOR_TERMINAL = /usr/local/bin/zellij, /usr/bin/zellij
+
+# =============================================================================
+# PERMISSIONS
+# =============================================================================
+
+# Group management (as root)
+agorpg ALL=(root) NOPASSWD: AGOR_GROUP_CREATE, AGOR_GROUP_DELETE
+agorpg ALL=(root) NOPASSWD: AGOR_GROUP_ADD_USER, AGOR_GROUP_REMOVE_USER
+agorpg ALL=(root) NOPASSWD: AGOR_CHGRP, AGOR_CHMOD
+
+# Impersonation: run commands as any agor_* user
+agorpg ALL=(agor_*) NOPASSWD: AGOR_EXECUTOR, AGOR_TERMINAL
+
+# =============================================================================
+# SECURITY HARDENING
+# =============================================================================
+
+# Prevent environment variable attacks
+Defaults:agorpg !env_editor
+Defaults:agorpg env_delete += "LD_PRELOAD LD_LIBRARY_PATH"
+
+# Audit logging
+Defaults:agorpg logfile=/var/log/agor-sudo.log
