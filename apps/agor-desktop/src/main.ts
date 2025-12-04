@@ -33,20 +33,21 @@ let isQuitting = false;
 const configPath = path.join(app.getPath('userData'), 'ui-url.txt');
 
 /**
- * Check if there's a custom URL configured (not localhost:3030)
+ * Check if URL points to a remote server (not localhost)
  */
-function hasCustomUrl(): boolean {
+function isRemoteUrl(url: string): boolean {
   try {
-    if (fs.existsSync(configPath)) {
-      const savedUrl = fs.readFileSync(configPath, 'utf-8').trim();
-      if (savedUrl) {
-        return true;
-      }
-    }
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    return (
+      host !== 'localhost' &&
+      host !== '127.0.0.1' &&
+      !host.startsWith('192.168.') &&
+      !host.startsWith('10.')
+    );
   } catch {
-    // Ignore
+    return false;
   }
-  return !!process.env.AGOR_UI_URL;
 }
 
 /**
@@ -398,17 +399,21 @@ async function initialize(): Promise<void> {
       promptChangeUrl();
     });
 
-    // Only start local daemon if no custom URL is configured
-    // If user has a custom URL, they're connecting to a remote Agor instance
-    if (hasCustomUrl()) {
-      console.log('[Main] Custom URL configured - skipping local daemon startup');
-      console.log('[Main] Will connect to:', getUIUrl());
+    // Check if we're connecting to a remote URL or local
+    const uiUrl = getUIUrl();
+    const isRemote = isRemoteUrl(uiUrl);
+
+    if (isRemote) {
+      // Remote URL - skip local daemon startup
+      console.log('[Main] Remote URL configured - skipping local daemon startup');
+      console.log('[Main] Will connect to:', uiUrl);
     } else {
-      // Start daemon
-      console.log('[Main] Starting daemon...');
+      // Local URL - try to start daemon (it will detect if one is already running)
+      console.log('[Main] Local URL configured - ensuring daemon is running...');
+      console.log('[Main] Will connect to:', uiUrl);
       try {
         await daemon.start();
-        console.log('[Main] Daemon started successfully');
+        console.log('[Main] Daemon started/connected successfully');
       } catch (daemonError) {
         console.error('[Main] Failed to start daemon:', daemonError);
         // In packaged mode without bundled daemon, show a helpful message
