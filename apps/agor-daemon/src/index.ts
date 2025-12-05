@@ -30,6 +30,7 @@ const DAEMON_VERSION = await loadDaemonVersion(import.meta.url);
 import {
   and,
   eq,
+  getDatabaseUrl,
   MCPServerRepository,
   MessagesRepository,
   RepoRepository,
@@ -165,17 +166,13 @@ interface RouteParams extends Params {
 }
 
 // Expand ~ to home directory in database path
-import { expandPath } from '@agor/core/utils/path';
+import { extractDbFilePath } from '@agor/core/utils/path';
 
-// Determine database URL based on dialect preference
+// Determine database URL using centralized logic from @agor/core/db
 // Priority:
 // 1. If AGOR_DB_DIALECT=postgresql, use DATABASE_URL (required for Postgres)
 // 2. Otherwise, use AGOR_DB_PATH or default SQLite path
-// This prevents using DATABASE_URL when Postgres profile isn't active
-const DB_PATH =
-  process.env.AGOR_DB_DIALECT === 'postgresql'
-    ? process.env.DATABASE_URL || 'postgresql://localhost:5432/agor'
-    : expandPath(process.env.AGOR_DB_PATH || 'file:~/.agor/agor.db');
+const DB_PATH = getDatabaseUrl();
 
 // Main async function
 async function main() {
