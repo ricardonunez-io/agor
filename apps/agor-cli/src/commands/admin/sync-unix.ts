@@ -1,15 +1,24 @@
 /**
- * `agor user sync-unix` - Sync Unix users and groups with database
+ * Admin Command: Sync Unix Users and Groups
+ *
+ * PRIVILEGED OPERATION - Must be called via sudo:
+ *   sudo agor admin sync-unix
  *
  * Verifies that all users with unix_username in the database have corresponding
  * Unix system users, and that they belong to the correct worktree groups.
  *
- * Operations:
+ * Operations (additive by default):
  * - Creates missing Unix users
+ * - Ensures agor_users group exists and contains all managed users
  * - Adds users to worktree groups they own
  * - Reports discrepancies
  *
- * Requires sudo access for user/group management.
+ * Cleanup operations (with --cleanup flags):
+ * - --cleanup-groups: Deletes stale agor_wt_* groups not in database
+ * - --cleanup-users: Deletes stale agor_* users not in database (keeps home dirs)
+ * - --cleanup: Enables both cleanup operations
+ *
+ * @see context/guides/rbac-and-unix-isolation.md
  */
 
 import { execSync } from 'node:child_process';
@@ -52,14 +61,17 @@ interface SyncResult {
   errors: string[];
 }
 
-export default class UserSyncUnix extends Command {
+export default class SyncUnix extends Command {
   static override description =
-    'Sync Unix users and groups with database. Creates missing users and fixes group memberships.';
+    'Sync Unix users and groups with database (admin only). Creates missing users and fixes group memberships.';
 
   static override examples = [
-    '<%= config.bin %> <%= command.id %>',
-    '<%= config.bin %> <%= command.id %> --dry-run',
-    '<%= config.bin %> <%= command.id %> --verbose',
+    'sudo <%= config.bin %> <%= command.id %>',
+    'sudo <%= config.bin %> <%= command.id %> --dry-run',
+    'sudo <%= config.bin %> <%= command.id %> --verbose',
+    'sudo <%= config.bin %> <%= command.id %> --create-groups',
+    'sudo <%= config.bin %> <%= command.id %> --cleanup --dry-run',
+    'sudo <%= config.bin %> <%= command.id %> --cleanup-groups',
   ];
 
   static override flags = {
@@ -74,17 +86,30 @@ export default class UserSyncUnix extends Command {
       default: false,
     }),
     'create-users': Flags.boolean({
-      description: 'Create missing Unix users (requires sudo)',
+      description: 'Create missing Unix users',
       default: true,
       allowNo: true,
     }),
     'sync-groups': Flags.boolean({
-      description: 'Sync group memberships (requires sudo)',
+      description: 'Sync group memberships',
       default: true,
       allowNo: true,
     }),
     'create-groups': Flags.boolean({
-      description: 'Create missing worktree groups (requires sudo)',
+      description: 'Create missing worktree groups',
+      default: false,
+    }),
+    // Cleanup flags
+    cleanup: Flags.boolean({
+      description: 'Enable all cleanup operations (stale users and groups)',
+      default: false,
+    }),
+    'cleanup-groups': Flags.boolean({
+      description: 'Delete stale agor_wt_* groups not in database',
+      default: false,
+    }),
+    'cleanup-users': Flags.boolean({
+      description: 'Delete stale agor_* users not in database (keeps home directories)',
       default: false,
     }),
   };
@@ -129,10 +154,10 @@ export default class UserSyncUnix extends Command {
   }
 
   /**
-   * Create a Unix user (requires sudo)
+   * Create a Unix user (assumes running as root via sudo)
    */
   private createUser(username: string, dryRun: boolean): boolean {
-    const cmd = `sudo ${UnixUserCommands.createUser(username)}`;
+    const cmd = UnixUserCommands.createUser(username);
     if (dryRun) {
       this.log(chalk.gray(`  [dry-run] Would run: ${cmd}`));
       return true;
@@ -146,10 +171,10 @@ export default class UserSyncUnix extends Command {
   }
 
   /**
-   * Add user to a group (requires sudo)
+   * Add user to a group (assumes running as root via sudo)
    */
   private addUserToGroup(username: string, groupName: string, dryRun: boolean): boolean {
-    const cmd = `sudo ${UnixGroupCommands.addUserToGroup(username, groupName)}`;
+    const cmd = UnixGroupCommands.addUserToGroup(username, groupName);
     if (dryRun) {
       this.log(chalk.gray(`  [dry-run] Would run: ${cmd}`));
       return true;
@@ -163,10 +188,10 @@ export default class UserSyncUnix extends Command {
   }
 
   /**
-   * Create a Unix group (requires sudo)
+   * Create a Unix group (assumes running as root via sudo)
    */
   private createGroup(groupName: string, dryRun: boolean): boolean {
-    const cmd = `sudo ${UnixGroupCommands.createGroup(groupName)}`;
+    const cmd = UnixGroupCommands.createGroup(groupName);
     if (dryRun) {
       this.log(chalk.gray(`  [dry-run] Would run: ${cmd}`));
       return true;
@@ -176,23 +201,102 @@ export default class UserSyncUnix extends Command {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * Delete a Unix user (keeps home directory)
+   */
+  private deleteUser(username: string, dryRun: boolean): boolean {
+    const cmd = UnixUserCommands.deleteUser(username);
+    if (dryRun) {
+      this.log(chalk.gray(`  [dry-run] Would run: ${cmd}`));
+      return true;
+    }
+    try {
+      execSync(cmd, { stdio: 'inherit' });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Delete a Unix group
+   */
+  private deleteGroup(groupName: string, dryRun: boolean): boolean {
+    const cmd = UnixGroupCommands.deleteGroup(groupName);
+    if (dryRun) {
+      this.log(chalk.gray(`  [dry-run] Would run: ${cmd}`));
+      return true;
+    }
+    try {
+      execSync(cmd, { stdio: 'inherit' });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * List all agor_* users on the system (auto-generated format: agor_<8-hex>)
+   */
+  private listAgorUsers(): string[] {
+    try {
+      // Get all users from /etc/passwd matching agor_* pattern
+      const output = execSync("getent passwd | grep '^agor_' | cut -d: -f1", {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'ignore'],
+      });
+      return output
+        .trim()
+        .split('\n')
+        .filter((u) => u && /^agor_[0-9a-f]{8}$/.test(u));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * List all agor_wt_* groups on the system
+   */
+  private listWorktreeGroups(): string[] {
+    try {
+      // Get all groups from /etc/group matching agor_wt_* pattern
+      const output = execSync("getent group | grep '^agor_wt_' | cut -d: -f1", {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'ignore'],
+      });
+      return output
+        .trim()
+        .split('\n')
+        .filter((g) => g && /^agor_wt_[0-9a-f]{8}$/.test(g));
+    } catch {
+      return [];
     }
   }
 
   async run(): Promise<void> {
-    const { flags } = await this.parse(UserSyncUnix);
+    const { flags } = await this.parse(SyncUnix);
     const dryRun = flags['dry-run'];
     const verbose = flags.verbose;
     const createUsers = flags['create-users'];
     const syncGroups = flags['sync-groups'];
     const createGroups = flags['create-groups'];
 
+    // Cleanup flags - --cleanup enables both
+    const cleanupGroups = flags.cleanup || flags['cleanup-groups'];
+    const cleanupUsers = flags.cleanup || flags['cleanup-users'];
+
     if (dryRun) {
       this.log(chalk.yellow('🔍 Dry run mode - no changes will be made\n'));
     }
 
-    // Track groups created
+    // Track stats
     let groupsCreated = 0;
+    let groupsDeleted = 0;
+    let usersDeleted = 0;
+    let cleanupErrors = 0;
 
     try {
       // Connect to database
@@ -382,34 +486,152 @@ export default class UserSyncUnix extends Command {
         this.log('');
       }
 
+      // ========================================
+      // Cleanup Phase
+      // ========================================
+
+      if (cleanupGroups || cleanupUsers) {
+        this.log(chalk.cyan.bold('━━━ Cleanup ━━━\n'));
+      }
+
+      // Cleanup stale worktree groups
+      if (cleanupGroups) {
+        this.log(chalk.cyan('Checking for stale worktree groups...\n'));
+
+        // Get all worktree groups that should exist (from DB)
+        const allWorktrees = await select(db).from(worktrees).all();
+        const expectedGroups = new Set(
+          allWorktrees.map(
+            (wt: { worktree_id: string; unix_group: string | null }) =>
+              wt.unix_group || generateWorktreeGroupName(wt.worktree_id as WorktreeID)
+          )
+        );
+
+        // Get all agor_wt_* groups on the system
+        const systemGroups = this.listWorktreeGroups();
+
+        if (verbose) {
+          this.log(chalk.gray(`   Found ${systemGroups.length} agor_wt_* group(s) on system`));
+          this.log(chalk.gray(`   Expected ${expectedGroups.size} group(s) from database`));
+        }
+
+        // Find stale groups (on system but not in DB)
+        const staleGroups = systemGroups.filter((g) => !expectedGroups.has(g));
+
+        if (staleGroups.length === 0) {
+          this.log(chalk.green('   ✓ No stale worktree groups found\n'));
+        } else {
+          this.log(chalk.yellow(`   Found ${staleGroups.length} stale group(s) to remove:\n`));
+
+          for (const groupName of staleGroups) {
+            this.log(chalk.yellow(`   → Deleting group ${groupName}...`));
+            if (this.deleteGroup(groupName, dryRun)) {
+              groupsDeleted++;
+              this.log(chalk.green(`   ✓ Deleted ${groupName}`));
+            } else {
+              cleanupErrors++;
+              this.log(chalk.red(`   ✗ Failed to delete ${groupName}`));
+            }
+          }
+          this.log('');
+        }
+      }
+
+      // Cleanup stale users
+      if (cleanupUsers) {
+        this.log(chalk.cyan('Checking for stale Agor users...\n'));
+
+        // Get all unix_usernames that should exist (from DB)
+        // Only auto-generated ones (agor_<8-hex>) are candidates for cleanup
+        const expectedUsers = new Set(
+          validUsers.map((u) => u.unix_username).filter((u) => /^agor_[0-9a-f]{8}$/.test(u))
+        );
+
+        // Get all agor_* users on the system (only auto-generated format)
+        const systemUsers = this.listAgorUsers();
+
+        if (verbose) {
+          this.log(chalk.gray(`   Found ${systemUsers.length} agor_* user(s) on system`));
+          this.log(chalk.gray(`   Expected ${expectedUsers.size} user(s) from database`));
+        }
+
+        // Find stale users (on system but not in DB)
+        const staleUsers = systemUsers.filter((u) => !expectedUsers.has(u));
+
+        if (staleUsers.length === 0) {
+          this.log(chalk.green('   ✓ No stale Agor users found\n'));
+        } else {
+          this.log(chalk.yellow(`   Found ${staleUsers.length} stale user(s) to remove:\n`));
+          this.log(chalk.gray('   Note: Home directories will be kept\n'));
+
+          for (const username of staleUsers) {
+            this.log(chalk.yellow(`   → Deleting user ${username}...`));
+            if (this.deleteUser(username, dryRun)) {
+              usersDeleted++;
+              this.log(chalk.green(`   ✓ Deleted ${username}`));
+            } else {
+              cleanupErrors++;
+              this.log(chalk.red(`   ✗ Failed to delete ${username}`));
+            }
+          }
+          this.log('');
+        }
+      }
+
       // Summary
       this.log(chalk.bold('━━━ Summary ━━━\n'));
 
       const usersCreated = results.filter((r) => r.unixUserCreated).length;
       const groupsAdded = results.reduce((acc, r) => acc + r.groups.added.length, 0);
       const groupsMissing = results.reduce((acc, r) => acc + r.groups.missing.length, 0);
-      const errors = results.reduce((acc, r) => acc + r.errors.length, 0);
+      const syncErrors = results.reduce((acc, r) => acc + r.errors.length, 0);
+      const totalErrors = syncErrors + cleanupErrors;
 
-      this.log(`Users checked:     ${validUsers.length}`);
-      this.log(`Users created:     ${usersCreated}${dryRun ? ' (dry-run)' : ''}`);
-      this.log(`Groups created:    ${groupsCreated}${dryRun ? ' (dry-run)' : ''}`);
-      this.log(`Memberships added: ${groupsAdded}${dryRun ? ' (dry-run)' : ''}`);
+      const dryRunSuffix = dryRun ? ' (dry-run)' : '';
+
+      // Sync stats
+      this.log(chalk.bold('Sync:'));
+      this.log(`  Users checked:     ${validUsers.length}`);
+      this.log(`  Users created:     ${usersCreated}${dryRunSuffix}`);
+      this.log(`  Groups created:    ${groupsCreated}${dryRunSuffix}`);
+      this.log(`  Memberships added: ${groupsAdded}${dryRunSuffix}`);
 
       if (groupsMissing > 0) {
         this.log(
-          chalk.yellow(`Groups missing:    ${groupsMissing} (use --create-groups to create)`)
+          chalk.yellow(`  Groups missing:    ${groupsMissing} (use --create-groups to create)`)
         );
       }
 
-      if (errors > 0) {
-        this.log(chalk.red(`Errors:            ${errors}`));
+      // Cleanup stats (only if cleanup was requested)
+      if (cleanupGroups || cleanupUsers) {
+        this.log('');
+        this.log(chalk.bold('Cleanup:'));
+        if (cleanupUsers) {
+          this.log(`  Users deleted:     ${usersDeleted}${dryRunSuffix}`);
+        }
+        if (cleanupGroups) {
+          this.log(`  Groups deleted:    ${groupsDeleted}${dryRunSuffix}`);
+        }
       }
 
-      if (dryRun && (usersCreated > 0 || groupsAdded > 0 || groupsCreated > 0)) {
+      // Errors
+      if (totalErrors > 0) {
+        this.log('');
+        this.log(chalk.red(`Errors:              ${totalErrors}`));
+      }
+
+      // Dry-run hint
+      const hasChanges =
+        usersCreated > 0 ||
+        groupsAdded > 0 ||
+        groupsCreated > 0 ||
+        usersDeleted > 0 ||
+        groupsDeleted > 0;
+      if (dryRun && hasChanges) {
         this.log(chalk.yellow('\nRun without --dry-run to apply changes'));
       }
 
-      process.exit(errors > 0 ? 1 : 0);
+      process.exit(totalErrors > 0 ? 1 : 0);
     } catch (error) {
       this.log(chalk.red('\n✗ Sync failed'));
       if (error instanceof Error) {
