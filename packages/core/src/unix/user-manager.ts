@@ -156,6 +156,40 @@ export const UnixUserCommands = {
   deleteUser: (username: string) => `userdel "${username}"`,
 
   /**
+   * Get command array for setting Unix user password via chpasswd
+   *
+   * SECURITY: This returns a command array to be used with execWithInput().
+   * The password MUST be passed via stdin (not command-line arguments) to avoid:
+   * 1. Command injection vulnerabilities (shell metacharacters in password)
+   * 2. Password exposure in process listings (ps aux)
+   * 3. Password exposure in shell history
+   *
+   * Format for stdin: "username:password\n"
+   *
+   * @returns Command array for execWithInput: ['chpasswd']
+   *
+   * @example
+   * ```ts
+   * const cmd = UnixUserCommands.setPasswordCommand();
+   * await executor.execWithInput(cmd, { input: `${username}:${password}\n` });
+   * ```
+   */
+  setPasswordCommand: (): string[] => {
+    return ['chpasswd'];
+  },
+
+  /**
+   * Format stdin input for chpasswd command
+   *
+   * @param username - Unix username
+   * @param password - Plaintext password to set
+   * @returns Formatted stdin input: "username:password\n"
+   */
+  formatPasswordInput: (username: string, password: string): string => {
+    return `${username}:${password}\n`;
+  },
+
+  /**
    * Delete a Unix user and their home directory
    *
    * @param username - Unix username to delete
