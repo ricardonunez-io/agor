@@ -142,25 +142,19 @@ export class LeaderboardService {
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     // Build dynamic SELECT clause
-    // Aggregate token usage from raw_sdk_response.tokenUsage
-    // IMPORTANT: Normalize tokens based on agentic_tool since different tools report differently:
-    // - Codex: input_tokens INCLUDES cached tokens (cache_read_tokens is a subset)
-    // - Claude/Gemini: input_tokens EXCLUDES cached tokens
+    // Aggregate token usage from normalized_sdk_response.tokenUsage
+    // The normalizer already handles per-tool differences, providing consistent:
+    // - inputTokens: actual input tokens (excludes cache tokens for all tools)
+    // - outputTokens: output tokens
+    // - costUsd: estimated cost
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic SQL fields require any
     const selectFields: Record<string, any> = {
       totalTokens: sql<number>`COALESCE(SUM(
-        CASE
-          WHEN ${jsonExtract(this.db, sessions.data, 'agentic_tool')} = 'codex' THEN
-            (CAST(${jsonExtract(this.db, tasks.data, 'raw_sdk_response.tokenUsage.input_tokens')} AS INTEGER) -
-             COALESCE(CAST(${jsonExtract(this.db, tasks.data, 'raw_sdk_response.tokenUsage.cache_read_tokens')} AS INTEGER), 0)) +
-            CAST(${jsonExtract(this.db, tasks.data, 'raw_sdk_response.tokenUsage.output_tokens')} AS INTEGER)
-          ELSE
-            CAST(${jsonExtract(this.db, tasks.data, 'raw_sdk_response.tokenUsage.input_tokens')} AS INTEGER) +
-            CAST(${jsonExtract(this.db, tasks.data, 'raw_sdk_response.tokenUsage.output_tokens')} AS INTEGER)
-        END
+        CAST(${jsonExtract(this.db, tasks.data, 'normalized_sdk_response.tokenUsage.inputTokens')} AS INTEGER) +
+        CAST(${jsonExtract(this.db, tasks.data, 'normalized_sdk_response.tokenUsage.outputTokens')} AS INTEGER)
       ), 0)`.as('total_tokens'),
       totalCost: sql<number>`COALESCE(SUM(
-        CAST(${jsonExtract(this.db, tasks.data, 'raw_sdk_response.tokenUsage.estimated_cost_usd')} AS REAL)
+        CAST(${jsonExtract(this.db, tasks.data, 'normalized_sdk_response.costUsd')} AS REAL)
       ), 0.0)`.as('total_cost'),
       taskCount: sql<number>`COUNT(DISTINCT ${tasks.task_id})`.as('task_count'),
     };
