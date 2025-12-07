@@ -1,0 +1,19 @@
+apiVersion: v2
+name: agor
+description: Multiplayer canvas for orchestrating AI coding agents
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - agor
+  - ai
+  - coding
+  - agents
+  - claude
+  - multiplayer
+home: https://agor.live
+sources:
+  - https://github.com/preset-io/agor
+maintainers:
+  - name: Agor Team
+    url: https://agor.live

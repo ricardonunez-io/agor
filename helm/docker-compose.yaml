@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  daemon:
+    image: agor/daemon:dev
+    ports:
+      - "3030:3030"
+    volumes:
+      # Mount host ~/.agor to container's /home/agor/.agor
+      - ~/.agor:/home/agor/.agor
+    environment:
+      - NODE_ENV=production
+      - PORT=3030
+      - DATABASE_URL=file:/home/agor/.agor/agor.db
+
+  # UI (build first: docker build -t agor/ui:dev -f helm/docker/Dockerfile.ui .)
+  ui:
+    image: agor/ui:dev
+    ports:
+      - "5173:8080"
+    depends_on:
+      - daemon

@@ -1,0 +1,123 @@
+# Development values for Agor
+# Usage: helm install agor ./helm/agor -f helm/values-dev.yaml
+
+# Database: PostgreSQL
+database:
+  type: postgresql
+  existingSecret: agor-db-credentials
+
+# Use local images (built with docker build)
+daemon:
+  # Symlink for path compatibility with local dev (e.g., /home/agorpg -> /home/agor)
+  homeSymlink: agorpg
+
+  image:
+    repository: agor/daemon
+    tag: dev
+    pullPolicy: Never  # Use local image
+
+  # Smaller resources for dev
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Dev configuration
+  config:
+    daemon:
+      port: 3030
+      requireAuth: true
+      allowAnonymous: false
+    execution:
+      worktree_rbac: false
+      unix_user_mode: opportunistic
+
+  # Skip admin bootstrap - using external PostgreSQL
+  skipAdminBootstrap: true
+
+  # Extra environment variables
+  extraEnv:
+    - name: GITHUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: agor-github-token
+          key: token
+
+  # Disable persistence for quick iteration (use emptyDir)
+  persistence:
+    enabled: false
+
+ui:
+  image:
+    repository: agor/ui
+    tag: dev
+    pullPolicy: Never  # Use local image
+
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
+# Enable ingress for local development with nginx
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    # WebSocket support
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$request_uri"
+  hosts:
+    - host: agor.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: ui
+        - path: /health
+          pathType: Prefix
+          service: daemon
+        - path: /socket.io
+          pathType: Prefix
+          service: daemon
+        # All API service routes
+        - path: /users
+          pathType: Prefix
+          service: daemon
+        - path: /sessions
+          pathType: Prefix
+          service: daemon
+        - path: /tasks
+          pathType: Prefix
+          service: daemon
+        - path: /messages
+          pathType: Prefix
+          service: daemon
+        - path: /worktrees
+          pathType: Prefix
+          service: daemon
+        - path: /repos
+          pathType: Prefix
+          service: daemon
+        - path: /boards
+          pathType: Prefix
+          service: daemon
+        - path: /board-objects
+          pathType: Prefix
+          service: daemon
+        - path: /terminals
+          pathType: Prefix
+          service: daemon
+        - path: /auth
+          pathType: Prefix
+          service: daemon
+
+# Disable security context for local dev (simpler)
+podSecurityContext: {}
+securityContext: {}

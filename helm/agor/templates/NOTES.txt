@@ -1,0 +1,32 @@
+
+Agor has been deployed!
+
+{{- if .Values.ingress.enabled }}
+Access Agor at:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else }}
+
+To access Agor, run:
+
+  # UI
+  kubectl port-forward svc/{{ include "agor.ui.fullname" . }} 5173:{{ .Values.ui.service.port }}
+
+  # Daemon API
+  kubectl port-forward svc/{{ include "agor.daemon.fullname" . }} 3030:{{ .Values.daemon.service.port }}
+
+Then open http://localhost:5173 in your browser.
+{{- end }}
+
+{{- if not .Values.daemon.persistence.enabled }}
+
+WARNING: Persistence is disabled! Data will be lost when pods restart.
+Enable persistence in production:
+
+  daemon:
+    persistence:
+      enabled: true
+{{- end }}
+
+For more information, visit https://agor.live

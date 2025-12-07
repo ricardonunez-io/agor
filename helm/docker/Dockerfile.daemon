@@ -1,0 +1,123 @@
+# Agor Daemon Dockerfile
+# Multi-stage build for smaller production image
+
+# ============================================
+# Stage 1: Build
+# ============================================
+FROM node:22-bookworm-slim AS builder
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy package files
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY packages/core/package.json ./packages/core/
+COPY packages/executor/package.json ./packages/executor/
+COPY apps/agor-daemon/package.json ./apps/agor-daemon/
+COPY apps/agor-cli/package.json ./apps/agor-cli/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy source
+COPY packages/core ./packages/core
+COPY packages/executor ./packages/executor
+COPY apps/agor-daemon ./apps/agor-daemon
+COPY apps/agor-cli ./apps/agor-cli
+COPY turbo.json ./
+
+# Build all packages
+RUN pnpm --filter @agor/core build
+RUN pnpm --filter @agor/executor build
+RUN pnpm --filter @agor/cli build
+RUN pnpm --filter @agor/daemon build
+
+# Use pnpm deploy to create a standalone production bundle
+# This properly handles workspace dependencies
+RUN pnpm --filter @agor/daemon deploy --prod /prod/daemon
+
+# Also deploy CLI
+RUN pnpm --filter @agor/cli deploy --prod /prod/cli
+
+# Deploy executor
+RUN pnpm --filter @agor/executor deploy --prod /prod/executor
+
+# ============================================
+# Stage 2: Production
+# ============================================
+FROM node:22-bookworm-slim AS production
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    sudo \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Zellij from GitHub releases
+ARG TARGETARCH
+RUN ARCH=$(case "${TARGETARCH}" in \
+        "amd64") echo "x86_64" ;; \
+        "arm64") echo "aarch64" ;; \
+        *) echo "x86_64" ;; \
+    esac) && \
+    curl -fsSL "https://github.com/zellij-org/zellij/releases/latest/download/zellij-${ARCH}-unknown-linux-musl.tar.gz" \
+    | tar -xz -C /usr/local/bin && \
+    chmod +x /usr/local/bin/zellij
+
+# Create agor user with uid 1000 (replacing node user from base image)
+# Add passwordless sudo for Unix user management and impersonation
+RUN userdel -r node 2>/dev/null || true && \
+    groupadd -g 1000 agor && \
+    useradd -u 1000 -g 1000 -m agor && \
+    echo "agor ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/agor && \
+    chmod 0440 /etc/sudoers.d/agor
+
+WORKDIR /app
+
+# Copy the deployed production bundle (includes all dependencies)
+COPY --from=builder --chown=agor:agor /prod/daemon ./
+
+# Copy CLI and create symlink
+COPY --from=builder --chown=agor:agor /prod/cli /opt/agor-cli
+RUN chmod +x /opt/agor-cli/bin/run.js && \
+    ln -s /opt/agor-cli/bin/run.js /usr/local/bin/agor && \
+    # Verify CLI is accessible (will fail build if broken)
+    node /opt/agor-cli/bin/run.js --version
+
+# Copy executor to expected location
+# Daemon expects cli.js at /app/executor/cli.js
+COPY --from=builder --chown=agor:agor /prod/executor /app/executor
+RUN chmod +x /app/executor/bin/agor-executor 2>/dev/null || true && \
+    # Create symlink so daemon can find cli.js at expected path
+    ln -sf /app/executor/dist/cli.js /app/executor/cli.js
+
+# Create agor home directory (where config and db will be mounted)
+RUN mkdir -p /home/agor/.agor && chown agor:agor /home/agor/.agor
+
+# Set environment
+ENV NODE_ENV=production
+ENV PORT=3030
+
+# Switch to non-root user
+USER agor
+
+EXPOSE 3030
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3030/health || exit 1
+
+# Start daemon
+CMD ["node", "dist/index.js"]

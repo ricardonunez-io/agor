@@ -1,0 +1,106 @@
+# PostgreSQL configuration for Agor
+# Usage: helm install agor ./helm/agor -f helm/values-postgres.yaml
+
+# Database: PostgreSQL
+database:
+  type: postgresql
+  postgresql:
+    host: postgres.default.svc.cluster.local
+    port: 5432
+    database: agor
+    username: agor
+    password: changeme  # Use existingSecret in production!
+    sslMode: disable    # Use 'require' in production
+
+  # For production, use a secret instead:
+  # existingSecret: agor-db-credentials
+  # Secret should contain: DATABASE_URL
+
+# Daemon configuration
+daemon:
+  image:
+    repository: agor/daemon
+    tag: dev
+    pullPolicy: Never
+
+  config:
+    daemon:
+      port: 3030
+      requireAuth: true
+      allowAnonymous: false
+    execution:
+      worktree_rbac: false
+
+  # Skip admin bootstrap - manage users externally for shared DB
+  skipAdminBootstrap: true
+
+  # Disable data persistence (using external DB)
+  # Still need worktrees persistence for git repos
+  persistence:
+    enabled: true
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# UI configuration
+ui:
+  image:
+    repository: agor/ui
+    tag: dev
+    pullPolicy: Never
+
+# Ingress
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: agor.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: ui
+        - path: /health
+          pathType: Prefix
+          service: daemon
+        - path: /socket.io
+          pathType: Prefix
+          service: daemon
+        - path: /users
+          pathType: Prefix
+          service: daemon
+        - path: /sessions
+          pathType: Prefix
+          service: daemon
+        - path: /tasks
+          pathType: Prefix
+          service: daemon
+        - path: /messages
+          pathType: Prefix
+          service: daemon
+        - path: /worktrees
+          pathType: Prefix
+          service: daemon
+        - path: /repos
+          pathType: Prefix
+          service: daemon
+        - path: /boards
+          pathType: Prefix
+          service: daemon
+        - path: /board-objects
+          pathType: Prefix
+          service: daemon
+        - path: /terminals
+          pathType: Prefix
+          service: daemon
+        - path: /auth
+          pathType: Prefix
+          service: daemon
+
+# Disable security context for simpler setup
+podSecurityContext: {}
+securityContext: {}

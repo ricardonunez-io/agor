@@ -1,0 +1,218 @@
+# Agor Helm Chart - Default Values
+# Override these in your own values file (e.g., values-production.yaml)
+
+# Global settings
+global:
+  # Image pull secrets for private registries
+  imagePullSecrets: []
+  # Storage class for persistent volumes (empty = default)
+  storageClass: ""
+
+# Database configuration
+# Supports: sqlite (local file), turso (libSQL cloud), postgresql
+database:
+  # Database type: sqlite, turso, postgresql
+  type: sqlite
+
+  # For sqlite: uses local file at /home/agor/.agor/agor.db (default)
+  # No additional configuration needed
+
+  # For turso (libSQL cloud):
+  # turso:
+  #   url: "libsql://your-db-name.turso.io"
+  #   authToken: ""  # Or use existingSecret
+
+  # For postgresql:
+  # postgresql:
+  #   host: postgres.default.svc.cluster.local
+  #   port: 5432
+  #   database: agor
+  #   username: agor
+  #   password: ""  # Or use existingSecret
+  #   sslMode: require  # disable, require, verify-ca, verify-full
+
+  # Use existing secret for credentials (recommended for production)
+  # Secret should contain keys based on database type:
+  #   - turso: TURSO_AUTH_TOKEN
+  #   - postgresql: DATABASE_URL or (PGUSER, PGPASSWORD, PGHOST, etc.)
+  existingSecret: ""
+
+# Daemon (Backend API)
+daemon:
+  enabled: true
+
+  image:
+    repository: agor/daemon
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 3030
+
+  # Environment variables
+  env:
+    NODE_ENV: production
+    PORT: "3030"
+
+  # Extra environment variables (for secrets, etc.)
+  extraEnv: []
+  # - name: ANTHROPIC_API_KEY
+  #   valueFrom:
+  #     secretKeyRef:
+  #       name: agor-secrets
+  #       key: anthropic-api-key
+
+  # Agor configuration (rendered to config.yaml)
+  config:
+    daemon:
+      port: 3030
+      allowAnonymous: false
+    execution:
+      worktree_rbac: false
+      unix_user_mode: simple
+
+  # Skip auto-creating admin user on startup
+  # Set to true when using external database with pre-seeded users
+  skipAdminBootstrap: false
+
+  # Persistence for SQLite database and worktrees
+  persistence:
+    enabled: true
+    # Database storage
+    data:
+      size: 1Gi
+      accessMode: ReadWriteOnce
+    # Git worktrees storage
+    worktrees:
+      size: 10Gi
+      accessMode: ReadWriteOnce
+
+  # Pod annotations
+  podAnnotations: {}
+
+  # Node selector
+  nodeSelector: {}
+
+  # Tolerations
+  tolerations: []
+
+  # Affinity
+  affinity: {}
+
+  # Liveness probe
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 30
+
+  # Readiness probe
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+# UI (Frontend)
+ui:
+  enabled: true
+
+  image:
+    repository: agor/ui
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 80
+
+  # Environment variables passed at build time
+  env:
+    VITE_DAEMON_URL: ""  # Will be set via ingress hostname
+
+  # Pod annotations
+  podAnnotations: {}
+
+  # Node selector
+  nodeSelector: {}
+
+  # Tolerations
+  tolerations: []
+
+  # Affinity
+  affinity: {}
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+
+  # UI hostname
+  hosts:
+    - host: agor.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: ui
+        # API routes proxied to daemon
+        - path: /api
+          pathType: Prefix
+          service: daemon
+        - path: /socket.io
+          pathType: Prefix
+          service: daemon
+
+  tls: []
+  # - secretName: agor-tls
+  #   hosts:
+  #     - agor.local
+
+# Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod Security Context
+podSecurityContext:
+  fsGroup: 1000
+
+# Container Security Context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+
+# Network Policy
+networkPolicy:
+  enabled: false

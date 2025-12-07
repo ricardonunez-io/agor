@@ -1,0 +1,34 @@
+{{- if and .Values.daemon.enabled .Values.daemon.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "agor.daemon.fullname" . }}-data
+  labels:
+    {{- include "agor.daemon.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.daemon.persistence.data.accessMode }}
+  {{- if .Values.global.storageClass }}
+  storageClassName: {{ .Values.global.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.daemon.persistence.data.size }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "agor.daemon.fullname" . }}-worktrees
+  labels:
+    {{- include "agor.daemon.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.daemon.persistence.worktrees.accessMode }}
+  {{- if .Values.global.storageClass }}
+  storageClassName: {{ .Values.global.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.daemon.persistence.worktrees.size }}
+{{- end }}

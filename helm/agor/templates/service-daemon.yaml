@@ -1,0 +1,17 @@
+{{- if .Values.daemon.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "agor.daemon.fullname" . }}
+  labels:
+    {{- include "agor.daemon.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.daemon.service.type }}
+  ports:
+    - port: {{ .Values.daemon.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "agor.daemon.selectorLabels" . | nindent 4 }}
+{{- end }}

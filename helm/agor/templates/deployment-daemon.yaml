@@ -1,0 +1,185 @@
+{{- if .Values.daemon.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agor.daemon.fullname" . }}
+  labels:
+    {{- include "agor.daemon.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.daemon.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "agor.daemon.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.daemon.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "agor.daemon.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- include "agor.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "agor.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        {{- if .Values.daemon.homeSymlink }}
+        - name: init-home-symlink
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "=== Creating home symlink ==="
+              # Create symlink for path compatibility (e.g., /home/agorpg -> /home/agor)
+              ln -sfn /home/agor /home/{{ .Values.daemon.homeSymlink }}
+              echo "Created symlink /home/{{ .Values.daemon.homeSymlink }} -> /home/agor"
+              ls -la /home/
+          volumeMounts:
+            - name: home
+              mountPath: /home
+        {{- end }}
+        - name: init-config
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "=== Init config ==="
+              mkdir -p /home/agor/.agor
+              cp /etc/agor/config.yaml /home/agor/.agor/config.yaml
+              chown 1000:1000 /home/agor
+              chown 1000:1000 /home/agor/.agor
+              chown 1000:1000 /home/agor/.agor/config.yaml
+              echo "Config copied successfully"
+          volumeMounts:
+            - name: home
+              mountPath: /home
+            - name: config
+              mountPath: /etc/agor/config.yaml
+              subPath: config.yaml
+              readOnly: true
+        - name: init-db
+          image: "{{ .Values.daemon.image.repository }}:{{ .Values.daemon.image.tag }}"
+          imagePullPolicy: {{ .Values.daemon.image.pullPolicy }}
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          command:
+            - sh
+            - -c
+            - |
+              echo "=== Running database migrations ==="
+              node -e "
+                const { createDatabaseAsync, runMigrations } = require('@agor/core/db');
+                async function migrate() {
+                  const db = await createDatabaseAsync({ url: process.env.DATABASE_URL });
+                  await runMigrations(db);
+                  console.log('✅ Migrations complete');
+                }
+                migrate().catch(e => { console.error(e); process.exit(1); });
+              "
+          env:
+            {{- include "agor.databaseEnv" . | nindent 12 }}
+            - name: HOME
+              value: "/home/agor"
+          volumeMounts:
+            - name: home
+              mountPath: /home
+        {{- if and .Values.daemon.config.daemon.requireAuth (not .Values.daemon.skipAdminBootstrap) }}
+        - name: init-admin
+          image: "{{ .Values.daemon.image.repository }}:{{ .Values.daemon.image.tag }}"
+          imagePullPolicy: {{ .Values.daemon.image.pullPolicy }}
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          command:
+            - sh
+            - -c
+            - |
+              echo "=== Creating admin user (if not exists) ==="
+              agor user create-admin || true
+              echo "✅ Admin user ready"
+          env:
+            {{- include "agor.databaseEnv" . | nindent 12 }}
+            - name: HOME
+              value: "/home/agor"
+          volumeMounts:
+            - name: home
+              mountPath: /home
+        {{- end }}
+      containers:
+        - name: daemon
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.daemon.image.repository }}:{{ .Values.daemon.image.tag }}"
+          imagePullPolicy: {{ .Values.daemon.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.daemon.service.port }}
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: {{ .Values.daemon.env.NODE_ENV | quote }}
+            - name: PORT
+              value: {{ .Values.daemon.env.PORT | quote }}
+            {{- include "agor.databaseEnv" . | nindent 12 }}
+            # Ensure HOME is set correctly for os.homedir()
+            - name: HOME
+              value: "/home/agor"
+            {{- range .Values.daemon.extraEnv }}
+            - name: {{ .name }}
+              {{- if .value }}
+              value: {{ .value | quote }}
+              {{- else if .valueFrom }}
+              valueFrom:
+                {{- toYaml .valueFrom | nindent 16 }}
+              {{- end }}
+            {{- end }}
+          volumeMounts:
+            # /home directory (includes symlinks created by init container)
+            - name: home
+              mountPath: /home
+            # Worktrees storage
+            - name: worktrees
+              mountPath: /worktrees
+          livenessProbe:
+            {{- toYaml .Values.daemon.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.daemon.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.daemon.resources | nindent 12 }}
+      volumes:
+        # Home directory (emptyDir for structure + symlinks, config is copied in)
+        - name: home
+          {{- if .Values.daemon.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "agor.daemon.fullname" . }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: worktrees
+          {{- if .Values.daemon.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "agor.daemon.fullname" . }}-worktrees
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: config
+          configMap:
+            name: {{ include "agor.fullname" . }}-config
+      {{- with .Values.daemon.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.daemon.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.daemon.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
