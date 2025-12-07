@@ -2666,7 +2666,33 @@ async function main() {
         // Get session to find current message count
         const session = await sessionsService.get(id, params);
 
-        // Reject prompts if session is stopping
+        // Auto-queue prompts if session is running (prevents two tasks from running simultaneously)
+        // This makes the API simpler - clients don't need to check status first
+        if (session.status === SessionStatus.RUNNING) {
+          console.log(`📬 [Prompt] Session ${id.substring(0, 8)} is running, auto-queuing prompt`);
+
+          // Queue the message instead of executing immediately
+          const messageRepo = new MessagesRepository(db);
+          const queuedMessage = await messageRepo.createQueued(id as SessionID, data.prompt, {
+            queued_by_user_id: params.user?.user_id,
+          });
+
+          console.log(
+            `📬 Queued message for session ${id.substring(0, 8)} at position ${queuedMessage.queue_position}`
+          );
+
+          // Emit event for real-time UI updates
+          app.service('messages').emit('queued', queuedMessage);
+
+          return {
+            success: true,
+            queued: true,
+            message: queuedMessage,
+            status: 'queued',
+          };
+        }
+
+        // Reject prompts if session is stopping (can't queue during stop)
         if (session.status === SessionStatus.STOPPING) {
           throw new Error('Cannot send prompt: session is currently stopping');
         }
@@ -3234,44 +3260,17 @@ async function main() {
   );
 
   /**
-   * POST /sessions/:id/messages/queue
    * GET /sessions/:id/messages/queue
-   * Queue management endpoints (create and list)
+   * List queued messages for a session
    *
-   * NOTE: Queue deletion is handled via messages service directly (client.service('messages').remove(id))
-   * This keeps the client simple and avoids FeathersJS nested route issues
+   * NOTE: Queuing is now handled automatically by the prompt endpoint when session is running.
+   * This endpoint is only for listing queued messages.
+   * Queue deletion is handled via messages service directly (client.service('messages').remove(id))
    */
   registerAuthenticatedRoute(
     app,
     '/sessions/:id/messages/queue',
     {
-      async create(data: { prompt: string }, params: RouteParams) {
-        const sessionId = params.route?.id;
-        if (!sessionId) throw new Error('Session ID required');
-        if (!data.prompt) throw new Error('Prompt required');
-
-        const _session = await sessionsService.get(sessionId, params);
-
-        // Create queued message with user context preserved in metadata
-        // This ensures the message will be processed with the same authentication context
-        const messageRepo = new MessagesRepository(db);
-        const queuedMessage = await messageRepo.createQueued(sessionId as SessionID, data.prompt, {
-          queued_by_user_id: params.user?.user_id,
-        });
-
-        console.log(
-          `📬 Queued message for session ${sessionId.substring(0, 8)} at position ${queuedMessage.queue_position}`
-        );
-
-        // Emit event for real-time UI updates
-        app.service('messages').emit('queued', queuedMessage);
-
-        return {
-          success: true,
-          message: queuedMessage,
-        };
-      },
-
       async find(params: RouteParams) {
         const sessionId = params.route?.id;
         if (!sessionId) throw new Error('Session ID required');
@@ -3287,7 +3286,6 @@ async function main() {
       // biome-ignore lint/suspicious/noExplicitAny: Service type not compatible with Express
     } as any,
     {
-      create: { role: 'member', action: 'queue messages' },
       find: { role: 'member', action: 'view queue' },
     },
     requireAuth

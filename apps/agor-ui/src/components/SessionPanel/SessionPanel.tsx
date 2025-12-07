@@ -317,37 +317,39 @@ const SessionPanel: React.FC<SessionPanelProps> = ({
   const isStopping = session.status === SessionStatus.STOPPING;
 
   const handleSendPrompt = async () => {
-    if (!inputValue.trim()) return;
+    if (!inputValue.trim() || !client) return;
 
     const promptToSend = inputValue.trim();
 
     try {
-      if (isRunning && client) {
-        const response = (await client
-          .service(`/sessions/${session.session_id}/messages/queue`)
-          .create({
-            prompt: promptToSend,
-          })) as { success: boolean; message: Message; queue_position: number };
+      // The prompt endpoint now auto-queues if session is running
+      // This simplifies the client - no need to check status first
+      const response = (await client.service(`/sessions/${session.session_id}/prompt`).create({
+        prompt: promptToSend,
+        permissionMode,
+      })) as {
+        success: boolean;
+        queued?: boolean;
+        message?: Message;
+        taskId?: string;
+        status: string;
+      };
 
-        if (response.message) {
-          setQueuedMessages((prev) =>
-            [...prev, response.message].sort(
-              (a, b) => (a.queue_position ?? 0) - (b.queue_position ?? 0)
-            )
-          );
-        }
+      setInputValue('');
+      draftsRef.current.delete(session.session_id);
 
+      if (response.queued && response.message) {
+        // Prompt was auto-queued because session was running
+        // Don't add to state here - the socket 'queued' event will handle it
+        // This prevents duplicate entries from optimistic insert + socket event
         message.success(`Message queued at position ${response.message.queue_position}`);
-        setInputValue('');
-        draftsRef.current.delete(session.session_id);
       } else {
-        setInputValue('');
-        draftsRef.current.delete(session.session_id);
-        onSendPrompt?.(session.session_id, promptToSend, permissionMode);
+        // Prompt was executed immediately
+        message.success('Prompt sent');
       }
     } catch (error) {
       message.error(
-        `Failed to ${isRunning ? 'queue' : 'send'} message: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to send message: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   };
