@@ -7,13 +7,20 @@
  * - Sum tokens across all models (Haiku, Sonnet, etc.) for multi-model sessions
  * - Calculate context window usage from model usage data
  * - Extract primary model and costs
+ *
+ * Note: Claude reports per-task token usage directly (not cumulative),
+ * so no delta computation is needed. The context parameter is ignored.
  */
 
 import type { SDKResultMessage } from '@agor/core/sdk';
-import type { INormalizer, NormalizedSdkData } from '../base/normalizer.interface.js';
+import type {
+  INormalizer,
+  NormalizedSdkData,
+  NormalizerContext,
+} from '../base/normalizer.interface.js';
 
 export class ClaudeCodeNormalizer implements INormalizer<SDKResultMessage> {
-  normalize(msg: SDKResultMessage): NormalizedSdkData {
+  async normalize(msg: SDKResultMessage, _context?: NormalizerContext): Promise<NormalizedSdkData> {
     // Extract basic metadata
     const durationMs = msg.duration_ms;
     const costUsd = msg.total_cost_usd;

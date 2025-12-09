@@ -19,14 +19,24 @@
  * - Map cachedContentTokenCount to cacheReadTokens for consistency
  * - Calculate context window usage
  * - Determine context window limit (Gemini doesn't provide this in event)
+ *
+ * Note: Gemini reports per-task token usage directly (not cumulative),
+ * so no delta computation is needed. The context parameter is ignored.
  */
 
 import type { GeminiSdkResponse } from '../../types/sdk-response.js';
-import type { INormalizer, NormalizedSdkData } from '../base/normalizer.interface.js';
+import type {
+  INormalizer,
+  NormalizedSdkData,
+  NormalizerContext,
+} from '../base/normalizer.interface.js';
 import { DEFAULT_GEMINI_MODEL, getGeminiContextWindowLimit } from './models.js';
 
 export class GeminiNormalizer implements INormalizer<GeminiSdkResponse> {
-  normalize(event: GeminiSdkResponse): NormalizedSdkData {
+  async normalize(
+    event: GeminiSdkResponse,
+    _context?: NormalizerContext
+  ): Promise<NormalizedSdkData> {
     // Extract usageMetadata from ServerGeminiFinishedEvent
     // Note: event.value can be undefined in some cases (e.g., errors, incomplete responses)
     const usageMetadata = event.value?.usageMetadata;

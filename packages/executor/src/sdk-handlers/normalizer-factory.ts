@@ -6,10 +6,12 @@
  * the standardized format used by UI and analytics.
  *
  * Usage:
- *   const normalized = normalizeRawSdkResponse('claude-code', rawSdkResponse);
+ *   const normalized = await normalizeRawSdkResponse('claude-code', rawSdkResponse, context);
  */
 
-import type { NormalizedSdkData } from './base/normalizer.interface.js';
+import type { SessionID, TaskID } from '@agor/core/types';
+import type { AgorClient } from '../services/feathers-client.js';
+import type { NormalizedSdkData, NormalizerContext } from './base/normalizer.interface.js';
 import { ClaudeCodeNormalizer } from './claude/normalizer.js';
 import { CodexNormalizer } from './codex/normalizer.js';
 import { GeminiNormalizer } from './gemini/normalizer.js';
@@ -24,31 +26,42 @@ const geminiNormalizer = new GeminiNormalizer();
  *
  * @param agenticTool - The agentic tool type (determines which normalizer to use)
  * @param rawSdkResponse - Raw SDK response from the tool
+ * @param client - Feathers client for querying previous task data
+ * @param sessionId - Current session ID
+ * @param taskId - Current task ID
  * @returns Normalized data with consistent structure, or undefined if normalization fails
  */
-export function normalizeRawSdkResponse(
+export async function normalizeRawSdkResponse(
   agenticTool: 'claude-code' | 'codex' | 'gemini' | 'opencode' | string,
-  rawSdkResponse: unknown
-): NormalizedSdkData | undefined {
+  rawSdkResponse: unknown,
+  client: AgorClient,
+  sessionId: SessionID,
+  taskId: TaskID
+): Promise<NormalizedSdkData | undefined> {
   if (!rawSdkResponse) {
     return undefined;
   }
 
+  const context: NormalizerContext = { client, sessionId, taskId };
+
   try {
     switch (agenticTool) {
       case 'claude-code':
-        return claudeNormalizer.normalize(
-          rawSdkResponse as Parameters<typeof claudeNormalizer.normalize>[0]
+        return await claudeNormalizer.normalize(
+          rawSdkResponse as Parameters<typeof claudeNormalizer.normalize>[0],
+          context
         );
 
       case 'codex':
-        return codexNormalizer.normalize(
-          rawSdkResponse as Parameters<typeof codexNormalizer.normalize>[0]
+        return await codexNormalizer.normalize(
+          rawSdkResponse as Parameters<typeof codexNormalizer.normalize>[0],
+          context
         );
 
       case 'gemini':
-        return geminiNormalizer.normalize(
-          rawSdkResponse as Parameters<typeof geminiNormalizer.normalize>[0]
+        return await geminiNormalizer.normalize(
+          rawSdkResponse as Parameters<typeof geminiNormalizer.normalize>[0],
+          context
         );
 
       case 'opencode':

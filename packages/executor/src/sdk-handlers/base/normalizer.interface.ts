@@ -4,9 +4,13 @@
  * Each agentic tool implements this interface to transform its raw SDK response
  * into standardized derived values for consumption by UI, analytics, and other systems.
  *
- * Key principle: Normalizers are PURE FUNCTIONS - no mutations, no side effects.
- * They compute derived values on-demand from the raw SDK response.
+ * Normalizers receive context (client, sessionId, taskId) to enable tools like Codex
+ * to fetch previous task data for delta computation. Tools that don't need this
+ * context (like Claude, Gemini) can ignore these parameters.
  */
+
+import type { SessionID, TaskID } from '@agor/core/types';
+import type { AgorClient } from '../../services/feathers-client.js';
 
 export interface NormalizedTokenUsage {
   inputTokens: number;
@@ -50,6 +54,15 @@ export interface NormalizedSdkData {
 }
 
 /**
+ * Context passed to normalizers for tools that need to query previous task data
+ */
+export interface NormalizerContext {
+  client: AgorClient;
+  sessionId: SessionID;
+  taskId: TaskID;
+}
+
+/**
  * Normalizer interface for agentic tool SDKs
  *
  * @template TRawSdkMessage - The SDK's raw result message type
@@ -58,11 +71,10 @@ export interface INormalizer<TRawSdkMessage> {
   /**
    * Normalize raw SDK response into standardized format
    *
-   * This is a pure function - no mutations, no side effects.
-   * Computes derived values on-demand from the raw SDK response.
-   *
    * @param raw - Raw SDK response message
+   * @param context - Optional context with client and IDs for tools that need
+   *                  to query previous task data (e.g., Codex for delta computation)
    * @returns Normalized data with computed fields
    */
-  normalize(raw: TRawSdkMessage): NormalizedSdkData;
+  normalize(raw: TRawSdkMessage, context?: NormalizerContext): Promise<NormalizedSdkData>;
 }

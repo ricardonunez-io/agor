@@ -11,7 +11,7 @@ describe('GeminiNormalizer', () => {
     vi.restoreAllMocks();
   });
 
-  it('normalizes complete usage metadata', () => {
+  it('normalizes complete usage metadata', async () => {
     const event = {
       value: {
         usageMetadata: {
@@ -22,7 +22,7 @@ describe('GeminiNormalizer', () => {
       },
     } as GeminiSdkResponse;
 
-    const normalized = normalizer.normalize(event);
+    const normalized = await normalizer.normalize(event);
 
     expect(normalized.tokenUsage).toEqual({
       inputTokens: 180,
@@ -36,12 +36,12 @@ describe('GeminiNormalizer', () => {
     expect(normalized.durationMs).toBeUndefined();
   });
 
-  it('defaults missing usage metadata to zeros', () => {
+  it('defaults missing usage metadata to zeros', async () => {
     const event = {
       value: {},
     } as GeminiSdkResponse;
 
-    const normalized = normalizer.normalize(event);
+    const normalized = await normalizer.normalize(event);
 
     expect(normalized.tokenUsage).toEqual({
       inputTokens: 0,
@@ -52,10 +52,10 @@ describe('GeminiNormalizer', () => {
     });
   });
 
-  it('handles undefined event value without throwing', () => {
+  it('handles undefined event value without throwing', async () => {
     const event = {} as GeminiSdkResponse;
 
-    const normalized = normalizer.normalize(event);
+    const normalized = await normalizer.normalize(event);
 
     expect(normalized.tokenUsage).toEqual({
       inputTokens: 0,
@@ -66,7 +66,7 @@ describe('GeminiNormalizer', () => {
     });
   });
 
-  it('computes totals from input and output tokens even when SDK total differs', () => {
+  it('computes totals from input and output tokens even when SDK total differs', async () => {
     const event = {
       value: {
         usageMetadata: {
@@ -77,7 +77,7 @@ describe('GeminiNormalizer', () => {
       },
     } as GeminiSdkResponse;
 
-    const normalized = normalizer.normalize(event);
+    const normalized = await normalizer.normalize(event);
 
     expect(normalized.tokenUsage.totalTokens).toBe(370);
     expect(normalized.tokenUsage.inputTokens).toBe(250);
@@ -85,7 +85,7 @@ describe('GeminiNormalizer', () => {
     expect(normalized.tokenUsage.cacheReadTokens).toBe(0);
   });
 
-  it('falls back to zero for missing token counts', () => {
+  it('falls back to zero for missing token counts', async () => {
     const event = {
       value: {
         usageMetadata: {
@@ -94,7 +94,7 @@ describe('GeminiNormalizer', () => {
       },
     } as GeminiSdkResponse;
 
-    const normalized = normalizer.normalize(event);
+    const normalized = await normalizer.normalize(event);
 
     expect(normalized.tokenUsage).toEqual({
       inputTokens: 0,
@@ -105,7 +105,7 @@ describe('GeminiNormalizer', () => {
     });
   });
 
-  it('uses context window limit lookup for the default model', () => {
+  it('uses context window limit lookup for the default model', async () => {
     const contextWindowLimit = 2048;
     const spy = vi
       .spyOn(modelsModule, 'getGeminiContextWindowLimit')
@@ -120,7 +120,7 @@ describe('GeminiNormalizer', () => {
       },
     } as GeminiSdkResponse;
 
-    const normalized = normalizer.normalize(event);
+    const normalized = await normalizer.normalize(event);
 
     expect(spy).toHaveBeenCalledWith(DEFAULT_GEMINI_MODEL);
     expect(normalized.contextWindowLimit).toBe(contextWindowLimit);

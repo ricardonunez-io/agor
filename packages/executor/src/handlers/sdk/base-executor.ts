@@ -358,7 +358,14 @@ export async function executeToolTask(params: {
     if (result.rawSdkResponse) {
       patchData.raw_sdk_response = result.rawSdkResponse;
       // Normalize using tool-specific normalizer (toolName maps to agentic tool type)
-      const normalized = normalizeRawSdkResponse(toolName, result.rawSdkResponse);
+      // Pass context for tools like Codex that need to fetch previous task for delta computation
+      const normalized = await normalizeRawSdkResponse(
+        toolName,
+        result.rawSdkResponse,
+        client,
+        sessionId as SessionID,
+        taskId as TaskID
+      );
       if (normalized) {
         patchData.normalized_sdk_response = normalized;
         console.log(
