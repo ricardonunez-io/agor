@@ -22,7 +22,7 @@
 
 import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { homedir, userInfo } from 'node:os';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { loadConfig } from '@agor/core/config';
 import {
@@ -383,27 +383,29 @@ export default class SyncUnix extends Command {
 
       // Load config and get daemon user
       // The daemon user must be added to all Unix groups so it can access files
+      // Since this command runs under sudo, we MUST require explicit config
+      // (process.env.USER would return 'root' which is wrong)
       const config = await loadConfig();
-      let daemonUser = config.daemon?.unix_user;
+      const daemonUser = config.daemon?.unix_user;
+
       if (!daemonUser) {
-        try {
-          daemonUser = userInfo().username;
-        } catch {
-          daemonUser = undefined;
-        }
+        this.error(
+          'daemon.unix_user is not configured.\n' +
+            'This command requires explicit configuration because it runs with elevated privileges.\n' +
+            'Please set daemon.unix_user in ~/.agor/config.yaml.\n' +
+            'Example:\n' +
+            '  daemon:\n' +
+            '    unix_user: agor'
+        );
       }
 
-      if (daemonUser) {
-        this.log(chalk.cyan(`Daemon user: ${daemonUser}\n`));
-        if (verbose) {
-          this.log(
-            chalk.gray(
-              `   (from config.daemon.unix_user, will be added to all repo and worktree groups)\n`
-            )
-          );
-        }
-      } else {
-        this.log(chalk.yellow(`⚠ No daemon user configured, skipping daemon group memberships\n`));
+      this.log(chalk.cyan(`Daemon user: ${daemonUser}\n`));
+      if (verbose) {
+        this.log(
+          chalk.gray(
+            `   (from config.daemon.unix_user, will be added to all repo and worktree groups)\n`
+          )
+        );
       }
 
       // Track daemon memberships added

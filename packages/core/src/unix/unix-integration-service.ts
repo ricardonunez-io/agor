@@ -13,7 +13,6 @@
  * @see context/guides/rbac-and-unix-isolation.md
  */
 
-import { userInfo } from 'node:os';
 import type { Database } from '../db/index.js';
 import { RepoRepository, UsersRepository, WorktreeRepository } from '../db/repositories/index.js';
 import type { RepoID, UserID, UUID, WorktreeID } from '../types/index.js';
@@ -69,7 +68,7 @@ export interface UnixIntegrationConfig {
   autoManageSymlinks?: boolean;
 
   /** Unix user the daemon runs as. Added to all Unix groups to ensure daemon has access.
-   * If not set, falls back to os.userInfo().username at runtime. */
+   * Should be resolved via getAgorDaemonUser() before passing to the service. */
   daemonUser?: string;
 }
 
@@ -99,23 +98,14 @@ export class UnixIntegrationService {
     executor: CommandExecutor,
     config: UnixIntegrationConfig = { enabled: false }
   ) {
-    // Get daemon user from config, or fall back to current process user
-    let daemonUser = config.daemonUser;
-    if (!daemonUser) {
-      try {
-        daemonUser = userInfo().username;
-      } catch {
-        // userInfo() can fail in some environments (e.g., no passwd entry)
-        daemonUser = undefined;
-      }
-    }
-
+    // daemonUser should be resolved by the caller via getAgorDaemonUser()
+    // If not provided, daemon user operations will be skipped
     this.config = {
       enabled: config.enabled,
       homeBase: config.homeBase || AGOR_HOME_BASE,
       autoCreateUnixUsers: config.autoCreateUnixUsers ?? false,
       autoManageSymlinks: config.autoManageSymlinks ?? config.enabled,
-      daemonUser,
+      daemonUser: config.daemonUser,
     };
     this.executor = config.enabled ? executor : new NoOpExecutor();
     this.worktreeRepo = new WorktreeRepository(db);
@@ -126,7 +116,7 @@ export class UnixIntegrationService {
   /**
    * Get the configured daemon user
    *
-   * Returns the Unix user that runs the daemon process.
+   * Returns the Unix user that runs the daemon process, or undefined if not configured.
    * Used to ensure daemon has access to all Unix groups.
    */
   getDaemonUser(): string | undefined {
