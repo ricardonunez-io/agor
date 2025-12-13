@@ -142,9 +142,9 @@ spec:
             # /home directory (includes symlinks created by init container)
             - name: home
               mountPath: /home
-            # Worktrees storage
-            - name: worktrees
-              mountPath: /worktrees
+            # Data storage (worktrees + repos)
+            - name: data
+              mountPath: /data
           livenessProbe:
             {{- toYaml .Values.daemon.livenessProbe | nindent 12 }}
           readinessProbe:
@@ -152,18 +152,22 @@ spec:
           resources:
             {{- toYaml .Values.daemon.resources | nindent 12 }}
       volumes:
-        # Home directory (emptyDir for structure + symlinks, config is copied in)
+        # Home directory (~/.agor for SQLite db, config, etc)
         - name: home
           {{- if .Values.daemon.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ include "agor.daemon.fullname" . }}-data
+            claimName: {{ include "agor.daemon.fullname" . }}-home
           {{- else }}
           emptyDir: {}
           {{- end }}
-        - name: worktrees
-          {{- if .Values.daemon.persistence.enabled }}
+        # Data storage (EFS: worktrees + repos)
+        - name: data
+          {{- if .Values.daemon.persistence.data.existingClaim }}
           persistentVolumeClaim:
-            claimName: {{ include "agor.daemon.fullname" . }}-worktrees
+            claimName: {{ .Values.daemon.persistence.data.existingClaim }}
+          {{- else if .Values.daemon.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "agor.daemon.fullname" . }}-data
           {{- else }}
           emptyDir: {}
           {{- end }}

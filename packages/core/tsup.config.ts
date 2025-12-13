@@ -30,6 +30,7 @@ export default defineConfig({
     'sdk/index': 'src/sdk/index.ts', // AI SDK re-exports (Claude, Codex, Gemini, OpenCode)
     'tools/mcp/jwt-auth': 'src/tools/mcp/jwt-auth.ts', // MCP JWT authentication utilities
     'unix/index': 'src/unix/index.ts', // Unix group management utilities for worktree isolation
+    'kubernetes/index': 'src/kubernetes/index.ts', // Kubernetes pod management for isolated terminals
   },
   format: ['cjs', 'esm'],
   dts: true,
@@ -43,6 +44,7 @@ export default defineConfig({
     '@google/gemini-cli-core',
     '@google/genai',
     '@opencode-ai/sdk',
+    '@kubernetes/client-node',
     'node:fs',
     'node:fs/promises',
     'node:path',

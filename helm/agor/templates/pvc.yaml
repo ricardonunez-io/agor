@@ -1,5 +1,24 @@
 {{- if and .Values.daemon.enabled .Values.daemon.persistence.enabled }}
 ---
+# Home directory PVC (~/.agor for SQLite db, config)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "agor.daemon.fullname" . }}-home
+  labels:
+    {{- include "agor.daemon.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.daemon.persistence.home.accessMode | default "ReadWriteOnce" }}
+  {{- if .Values.global.storageClass }}
+  storageClassName: {{ .Values.global.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.daemon.persistence.home.size | default "1Gi" }}
+{{- if not .Values.daemon.persistence.data.existingClaim }}
+---
+# Data PVC (worktrees + repos) - only create if not using existingClaim
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -8,27 +27,12 @@ metadata:
     {{- include "agor.daemon.labels" . | nindent 4 }}
 spec:
   accessModes:
-    - {{ .Values.daemon.persistence.data.accessMode }}
+    - {{ .Values.daemon.persistence.data.accessMode | default "ReadWriteOnce" }}
   {{- if .Values.global.storageClass }}
   storageClassName: {{ .Values.global.storageClass }}
   {{- end }}
   resources:
     requests:
-      storage: {{ .Values.daemon.persistence.data.size }}
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ include "agor.daemon.fullname" . }}-worktrees
-  labels:
-    {{- include "agor.daemon.labels" . | nindent 4 }}
-spec:
-  accessModes:
-    - {{ .Values.daemon.persistence.worktrees.accessMode }}
-  {{- if .Values.global.storageClass }}
-  storageClassName: {{ .Values.global.storageClass }}
-  {{- end }}
-  resources:
-    requests:
-      storage: {{ .Values.daemon.persistence.worktrees.size }}
+      storage: {{ .Values.daemon.persistence.data.size | default "10Gi" }}
+{{- end }}
 {{- end }}

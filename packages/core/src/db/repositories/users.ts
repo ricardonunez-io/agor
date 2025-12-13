@@ -38,6 +38,7 @@ export class UsersRepository implements BaseRepository<User, Partial<User>> {
       emoji: row.emoji ?? undefined,
       role: row.role,
       unix_username: row.unix_username ?? undefined,
+      unix_uid: row.unix_uid ?? undefined,
       onboarding_completed: row.onboarding_completed,
       avatar: row.data.avatar,
       preferences: row.data.preferences as User['preferences'],
@@ -83,6 +84,7 @@ export class UsersRepository implements BaseRepository<User, Partial<User>> {
       emoji: user.emoji ?? null,
       role: user.role ?? 'member',
       unix_username: user.unix_username ?? null,
+      unix_uid: user.unix_uid ?? null,
       onboarding_completed: user.onboarding_completed ?? false,
       data: {
         avatar: user.avatar,

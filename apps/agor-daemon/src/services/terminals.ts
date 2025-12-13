@@ -2,20 +2,27 @@
  * Terminals Service
  *
  * Manages Zellij-based terminal sessions for web-based terminal access.
- * REQUIRES Zellij to be installed on the system.
+ *
+ * Supports two execution modes:
+ * 1. daemon mode (default): Run terminals in daemon pod via node-pty
+ *    - REQUIRES Zellij to be installed on the system
+ *    - node-pty for PTY allocation
+ *    - Zellij for session/tab multiplexing
+ *
+ * 2. pod mode: Run terminals in isolated Kubernetes pods
+ *    - Each user+worktree gets their own shell pod
+ *    - Podman pod per worktree for docker-compose support
+ *    - kubectl exec for terminal streaming
  *
  * Features:
  * - Full terminal emulation (vim, nano, htop, etc.)
  * - Job control (Ctrl+C, Ctrl+Z)
- * - Terminal resizing via node-pty
+ * - Terminal resizing
  * - ANSI colors and escape codes
- * - Persistent sessions via Zellij (survive daemon restarts)
+ * - Persistent sessions (survive daemon restarts)
  * - One session per user, one tab per worktree
  *
  * Architecture:
- * - node-pty for PTY allocation (Zellij requires TTY)
- * - Zellij for session/tab multiplexing
- * - Zellij CLI actions for tab/session management
  * - xterm.js frontend for rendering
  */
 
@@ -23,6 +30,7 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import type { Writable } from 'node:stream';
 import {
   createUserProcessEnvironment,
   loadConfig,
@@ -30,6 +38,13 @@ import {
 } from '@agor/core/config';
 import { type Database, formatShortId, UsersRepository, WorktreeRepository } from '@agor/core/db';
 import type { Application } from '@agor/core/feathers';
+import {
+  DEFAULT_USER_POD_CONFIG,
+  getPodManager,
+  type PodManager,
+  type TerminalMode,
+  type UserPodConfig,
+} from '@agor/core/kubernetes';
 import type { AuthenticatedParams, UserID, WorktreeID } from '@agor/core/types';
 import {
   buildImpersonationPrefix,
@@ -39,20 +54,43 @@ import {
   validateResolvedUnixUser,
 } from '@agor/core/unix';
 import * as pty from '@homebridge/node-pty-prebuilt-multiarch';
+import type WebSocket from 'ws';
 
-interface TerminalSession {
+/**
+ * Base terminal session fields (shared between modes)
+ */
+interface BaseTerminalSession {
   terminalId: string;
-  pty: pty.IPty;
-  shell: string;
   cwd: string;
-  userId?: UserID; // User context for env resolution
-  worktreeId?: WorktreeID; // Worktree context for Zellij session naming
-  zellijSession: string; // Zellij session name (always required)
+  userId?: UserID;
+  worktreeId?: WorktreeID;
   cols: number;
   rows: number;
   createdAt: Date;
-  env: Record<string, string>; // User environment variables
+  env: Record<string, string>;
 }
+
+/**
+ * Daemon mode terminal session (node-pty + Zellij)
+ */
+interface DaemonTerminalSession extends BaseTerminalSession {
+  mode: 'daemon';
+  pty: pty.IPty;
+  shell: string;
+  zellijSession: string;
+}
+
+/**
+ * Pod mode terminal session (k8s exec)
+ */
+interface PodTerminalSession extends BaseTerminalSession {
+  mode: 'pod';
+  podName: string;
+  stdinStream: Writable | null;
+  // WebSocket connection to pod exec is managed externally
+}
+
+type TerminalSession = DaemonTerminalSession | PodTerminalSession;
 
 interface CreateTerminalData {
   cwd?: string;
@@ -247,30 +285,165 @@ function getZellijTabs(sessionName: string, asUser?: string): string[] {
 }
 
 /**
- * Terminals service - manages Zellij sessions
+ * Build UserPodConfig from Agor config settings
+ */
+function buildUserPodConfig(
+  configSettings: {
+    user_pods?: {
+      enabled?: boolean;
+      shellPod?: {
+        image?: string;
+        resources?: {
+          requests?: { cpu?: string; memory?: string };
+          limits?: { cpu?: string; memory?: string };
+        };
+      };
+      podmanPod?: {
+        image?: string;
+        resources?: {
+          requests?: { cpu?: string; memory?: string };
+          limits?: { cpu?: string; memory?: string };
+        };
+      };
+      idleTimeoutMinutes?: { shell?: number; podman?: number };
+      storage?: { dataPvc?: string };
+    };
+  },
+  namespace: string
+): UserPodConfig {
+  const userPods = configSettings.user_pods || {};
+  return {
+    enabled: userPods.enabled ?? DEFAULT_USER_POD_CONFIG.enabled,
+    namespace,
+    shellPod: {
+      image: userPods.shellPod?.image ?? DEFAULT_USER_POD_CONFIG.shellPod.image,
+      resources: {
+        requests: {
+          cpu:
+            userPods.shellPod?.resources?.requests?.cpu ??
+            DEFAULT_USER_POD_CONFIG.shellPod.resources.requests.cpu,
+          memory:
+            userPods.shellPod?.resources?.requests?.memory ??
+            DEFAULT_USER_POD_CONFIG.shellPod.resources.requests.memory,
+        },
+        limits: {
+          cpu:
+            userPods.shellPod?.resources?.limits?.cpu ??
+            DEFAULT_USER_POD_CONFIG.shellPod.resources.limits.cpu,
+          memory:
+            userPods.shellPod?.resources?.limits?.memory ??
+            DEFAULT_USER_POD_CONFIG.shellPod.resources.limits.memory,
+        },
+      },
+    },
+    podmanPod: {
+      image: userPods.podmanPod?.image ?? DEFAULT_USER_POD_CONFIG.podmanPod.image,
+      resources: {
+        requests: {
+          cpu:
+            userPods.podmanPod?.resources?.requests?.cpu ??
+            DEFAULT_USER_POD_CONFIG.podmanPod.resources.requests.cpu,
+          memory:
+            userPods.podmanPod?.resources?.requests?.memory ??
+            DEFAULT_USER_POD_CONFIG.podmanPod.resources.requests.memory,
+        },
+        limits: {
+          cpu:
+            userPods.podmanPod?.resources?.limits?.cpu ??
+            DEFAULT_USER_POD_CONFIG.podmanPod.resources.limits.cpu,
+          memory:
+            userPods.podmanPod?.resources?.limits?.memory ??
+            DEFAULT_USER_POD_CONFIG.podmanPod.resources.limits.memory,
+        },
+      },
+    },
+    idleTimeoutMinutes: {
+      shell: userPods.idleTimeoutMinutes?.shell ?? DEFAULT_USER_POD_CONFIG.idleTimeoutMinutes.shell,
+      podman:
+        userPods.idleTimeoutMinutes?.podman ?? DEFAULT_USER_POD_CONFIG.idleTimeoutMinutes.podman,
+    },
+    storage: {
+      dataPvc: userPods.storage?.dataPvc ?? DEFAULT_USER_POD_CONFIG.storage.dataPvc,
+    },
+  };
+}
+
+/**
+ * Terminals service - manages terminal sessions
+ *
+ * Supports two modes:
+ * - daemon: Zellij sessions via node-pty (default)
+ * - pod: Isolated Kubernetes pods via kubectl exec
  */
 export class TerminalsService {
   private sessions = new Map<string, TerminalSession>();
   private app: Application;
   private db: Database;
+  private terminalMode: TerminalMode = 'daemon';
+  private podManager: PodManager | null = null;
 
   constructor(app: Application, db: Database) {
     this.app = app;
     this.db = db;
 
-    // Verify Zellij is available - fail hard if not
-    if (!isZellijAvailable()) {
-      throw new Error(
-        '❌ Zellij is not installed or not available in PATH.\n' +
-          'Agor requires Zellij for terminal management.\n' +
-          'Please install Zellij:\n' +
-          '  - Ubuntu/Debian: curl -L https://github.com/zellij-org/zellij/releases/latest/download/zellij-x86_64-unknown-linux-musl.tar.gz | tar -xz -C /usr/local/bin\n' +
-          '  - macOS: brew install zellij\n' +
-          '  - See: https://zellij.dev/documentation/installation'
+    // Async initialization - load config and set up mode
+    this.initialize().catch((error) => {
+      console.error('Failed to initialize terminals service:', error);
+    });
+  }
+
+  /**
+   * Initialize the service based on configuration
+   */
+  private async initialize(): Promise<void> {
+    const config = await loadConfig();
+    this.terminalMode = (config.execution?.terminal_mode as TerminalMode) ?? 'daemon';
+
+    if (this.terminalMode === 'pod') {
+      // Pod mode - initialize PodManager
+      const namespace = process.env.POD_NAMESPACE || 'agor';
+      const userPodConfig = buildUserPodConfig(config.execution || {}, namespace);
+      userPodConfig.enabled = true; // Force enabled in pod mode
+
+      this.podManager = getPodManager({ config: userPodConfig });
+
+      console.log('\x1b[36m✅ Pod mode enabled\x1b[0m - terminals run in isolated Kubernetes pods');
+
+      // Start GC interval (every 5 minutes)
+      setInterval(
+        async () => {
+          try {
+            await this.podManager?.runGC();
+          } catch (error) {
+            console.error('[Terminals] Pod GC error:', error);
+          }
+        },
+        5 * 60 * 1000
+      );
+    } else {
+      // Daemon mode - verify Zellij is available
+      if (!isZellijAvailable()) {
+        throw new Error(
+          '❌ Zellij is not installed or not available in PATH.\n' +
+            'Agor requires Zellij for terminal management in daemon mode.\n' +
+            'Please install Zellij:\n' +
+            '  - Ubuntu/Debian: curl -L https://github.com/zellij-org/zellij/releases/latest/download/zellij-x86_64-unknown-linux-musl.tar.gz | tar -xz -C /usr/local/bin\n' +
+            '  - macOS: brew install zellij\n' +
+            '  - See: https://zellij.dev/documentation/installation'
+        );
+      }
+
+      console.log(
+        '\x1b[36m✅ Daemon mode with Zellij\x1b[0m - persistent terminal sessions enabled'
       );
     }
+  }
 
-    console.log('\x1b[36m✅ Zellij detected\x1b[0m - persistent terminal sessions enabled');
+  /**
+   * Get current terminal mode
+   */
+  getTerminalMode(): TerminalMode {
+    return this.terminalMode;
   }
 
   /**
@@ -282,9 +455,247 @@ export class TerminalsService {
   ): Promise<{
     terminalId: string;
     cwd: string;
+    zellijSession?: string;
+    zellijReused?: boolean;
+    podName?: string;
+    worktreeName?: string;
+    mode: TerminalMode;
+  }> {
+    // Branch based on terminal mode
+    if (this.terminalMode === 'pod') {
+      return this.createPodTerminal(data, params);
+    }
+    return this.createDaemonTerminal(data, params);
+  }
+
+  /**
+   * Create terminal in pod mode (isolated Kubernetes pods)
+   */
+  private async createPodTerminal(
+    data: CreateTerminalData,
+    params?: AuthenticatedParams
+  ): Promise<{
+    terminalId: string;
+    cwd: string;
+    podName: string;
+    worktreeName?: string;
+    mode: 'pod';
+  }> {
+    if (!this.podManager) {
+      throw new Error('Pod mode is enabled but PodManager is not initialized');
+    }
+
+    const terminalId = `term-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const authenticatedUserId = params?.user?.user_id as UserID | undefined;
+    const resolvedUserId = data.userId ?? authenticatedUserId;
+
+    console.log(
+      `🔍 [Pod Mode] Terminal create - authenticatedUserId: ${authenticatedUserId}, resolvedUserId: ${resolvedUserId}`
+    );
+
+    // Resolve worktree - REQUIRED for pod mode
+    if (!data.worktreeId) {
+      throw new Error('Pod mode requires a worktreeId to create isolated terminals');
+    }
+    if (!resolvedUserId) {
+      throw new Error('Pod mode requires authenticated user');
+    }
+
+    const worktreeRepo = new WorktreeRepository(this.db);
+    const worktree = await worktreeRepo.findById(data.worktreeId);
+    if (!worktree) {
+      throw new Error(`Worktree ${data.worktreeId} not found`);
+    }
+
+    const worktreeName = worktree.name;
+    const cwd = worktree.path;
+
+    // Get user's UID and username for consistent file ownership on EFS/NFS
+    const usersRepo = new UsersRepository(this.db);
+    const user = await usersRepo.findById(resolvedUserId);
+    const userUid = user?.unix_uid;
+    const unixUsername = user?.unix_username;
+
+    console.log(
+      `🚀 [Pod Mode] Creating shell pod for user ${unixUsername ?? resolvedUserId.substring(0, 8)} (UID: ${userUid ?? 'default'}) in worktree ${worktreeName}`
+    );
+
+    // Ensure shell pod exists (creates Podman pod first if needed)
+    const podName = await this.podManager.ensureShellPod(
+      data.worktreeId,
+      resolvedUserId,
+      cwd,
+      userUid,
+      unixUsername
+    );
+
+    console.log(`✅ [Pod Mode] Shell pod ready: ${podName}`);
+
+    // Get user environment for the pod
+    const env = await createUserProcessEnvironment(resolvedUserId, this.db, {
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      LANG: 'C.UTF-8',
+    });
+
+    // Generate Zellij session name (same pattern as daemon mode)
+    const userSessionSuffix = formatShortId(resolvedUserId);
+    const zellijSession = `agor-${userSessionSuffix}`;
+
+    // Store session
+    const session: PodTerminalSession = {
+      mode: 'pod',
+      terminalId,
+      cwd,
+      userId: resolvedUserId,
+      worktreeId: data.worktreeId,
+      cols: data.cols || 80,
+      rows: data.rows || 30,
+      createdAt: new Date(),
+      env,
+      podName,
+      stdinStream: null,
+    };
+    this.sessions.set(terminalId, session);
+
+    // Start exec session to pod with Zellij
+    // The actual exec streaming is handled via WebSocket connection
+    // Frontend will connect to /terminals/:id/exec endpoint for streaming
+    this.startPodExec(terminalId, podName, data.cols || 80, data.rows || 30, zellijSession).catch(
+      (error) => {
+        console.error(`[Pod Mode] Failed to start exec for ${terminalId}:`, error);
+        this.sessions.delete(terminalId);
+        this.app.service('terminals').emit('exit', {
+          terminalId,
+          exitCode: 1,
+        });
+      }
+    );
+
+    return { terminalId, cwd, podName, worktreeName, mode: 'pod' };
+  }
+
+  /**
+   * Start kubectl exec session to a pod
+   */
+  private async startPodExec(
+    terminalId: string,
+    podName: string,
+    cols: number,
+    rows: number,
+    zellijSession: string
+  ): Promise<void> {
+    if (!this.podManager) return;
+
+    const exec = this.podManager.getExec();
+    const namespace = this.podManager.getNamespace();
+    const session = this.sessions.get(terminalId) as PodTerminalSession | undefined;
+
+    if (!session || session.mode !== 'pod') {
+      throw new Error(`Session ${terminalId} not found or not a pod session`);
+    }
+
+    console.log(
+      `[Pod Mode] Starting exec in pod ${podName} with Zellij session ${zellijSession} (${cols}x${rows})`
+    );
+
+    // Create WebSocket-like stream for exec
+    // Note: @kubernetes/client-node exec is WebSocket-based
+    const execPromise = exec.exec(
+      namespace,
+      podName,
+      'shell', // container name
+      ['zellij', 'attach', zellijSession, '--create'], // Zellij session like daemon mode
+      process.stdout, // Will be replaced with proper stream handling
+      process.stderr,
+      process.stdin,
+      true, // TTY
+      (status) => {
+        console.log(`[Pod Mode] Exec status for ${terminalId}:`, status);
+        this.sessions.delete(terminalId);
+        this.app.service('terminals').emit('exit', {
+          terminalId,
+          exitCode: status.status === 'Success' ? 0 : 1,
+        });
+      }
+    );
+
+    // The exec returns a WebSocket connection
+    // We need to pipe data through our terminal events
+    const ws = await execPromise;
+
+    // Handle incoming data from pod
+    ws.on('message', (data: Buffer | string) => {
+      this.app.service('terminals').emit('data', {
+        terminalId,
+        data: data.toString(),
+      });
+    });
+
+    ws.on('close', () => {
+      console.log(`[Pod Mode] WebSocket closed for ${terminalId}`);
+      this.sessions.delete(terminalId);
+      this.app.service('terminals').emit('exit', {
+        terminalId,
+        exitCode: 0,
+      });
+    });
+
+    ws.on('error', (error) => {
+      console.error(`[Pod Mode] WebSocket error for ${terminalId}:`, error);
+    });
+
+    // Store stdin stream reference for sending input
+    // The exec() method returns a WebSocket, we can send data via ws.send()
+    // Update session with ability to send input
+    session.stdinStream = {
+      write: (data: string | Buffer) => {
+        if (ws.readyState === ws.OPEN) {
+          // Kubernetes exec WebSocket protocol:
+          // First byte is stream type (0=stdin, 1=stdout, 2=stderr, 4=resize)
+          const payload = Buffer.concat([Buffer.from([0]), Buffer.from(data)]);
+          ws.send(payload);
+        }
+        return true;
+      },
+    } as Writable;
+
+    // Store WebSocket reference for resize
+    (session as PodTerminalSession & { ws?: WebSocket }).ws = ws;
+
+    // Send initial resize
+    this.sendPodResize(ws, cols, rows);
+
+    // Update activity
+    this.podManager.updateLastActivity(podName).catch(() => {});
+  }
+
+  /**
+   * Send resize message to pod exec WebSocket
+   * K8s exec protocol: channel 4 = resize, payload is JSON { Width, Height }
+   */
+  private sendPodResize(ws: WebSocket, cols: number, rows: number): void {
+    if (ws.readyState === ws.OPEN) {
+      const resizePayload = JSON.stringify({ Width: cols, Height: rows });
+      const payload = Buffer.concat([Buffer.from([4]), Buffer.from(resizePayload)]);
+      ws.send(payload);
+      console.log(`[Pod Mode] Sent resize: ${cols}x${rows}`);
+    }
+  }
+
+  /**
+   * Create terminal in daemon mode (node-pty + Zellij)
+   */
+  private async createDaemonTerminal(
+    data: CreateTerminalData,
+    params?: AuthenticatedParams
+  ): Promise<{
+    terminalId: string;
+    cwd: string;
     zellijSession: string;
     zellijReused: boolean;
     worktreeName?: string;
+    mode: 'daemon';
   }> {
     const terminalId = `term-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const authenticatedUserId = params?.user?.user_id as UserID | undefined;
@@ -521,7 +932,8 @@ export class TerminalsService {
     }
 
     // Store session (including env for future tab creation)
-    this.sessions.set(terminalId, {
+    const session: DaemonTerminalSession = {
+      mode: 'daemon',
       terminalId,
       pty: ptyProcess,
       shell: 'zellij',
@@ -533,7 +945,8 @@ export class TerminalsService {
       rows: data.rows || 30,
       createdAt: new Date(),
       env,
-    });
+    };
+    this.sessions.set(terminalId, session);
 
     // Handle PTY output
     ptyProcess.onData((data) => {
@@ -679,7 +1092,7 @@ export class TerminalsService {
       }
     }, 400);
 
-    return { terminalId, cwd, zellijSession, zellijReused, worktreeName };
+    return { terminalId, cwd, zellijSession, zellijReused, worktreeName, mode: 'daemon' };
   }
 
   /**
@@ -719,8 +1132,19 @@ export class TerminalsService {
     }
 
     if (data.input !== undefined) {
-      // Write input to PTY
-      session.pty.write(data.input);
+      if (session.mode === 'daemon') {
+        // Write input to PTY
+        session.pty.write(data.input);
+      } else {
+        // Write input to pod exec stdin
+        if (session.stdinStream) {
+          session.stdinStream.write(data.input);
+        }
+        // Update pod activity
+        if (this.podManager && session.podName) {
+          this.podManager.updateLastActivity(session.podName).catch(() => {});
+        }
+      }
     }
 
     if (data.resize) {
@@ -728,8 +1152,16 @@ export class TerminalsService {
       session.cols = data.resize.cols;
       session.rows = data.resize.rows;
 
-      // Resize PTY (this sends SIGWINCH to Zellij)
-      session.pty.resize(data.resize.cols, data.resize.rows);
+      if (session.mode === 'daemon') {
+        // Resize PTY (this sends SIGWINCH to Zellij)
+        session.pty.resize(data.resize.cols, data.resize.rows);
+      } else {
+        // For pod mode, resize is sent via WebSocket channel 4
+        const podSession = session as PodTerminalSession & { ws?: WebSocket };
+        if (podSession.ws) {
+          this.sendPodResize(podSession.ws, data.resize.cols, data.resize.rows);
+        }
+      }
     }
   }
 
@@ -742,10 +1174,26 @@ export class TerminalsService {
       throw new Error(`Terminal ${id} not found`);
     }
 
-    // Kill the PTY process
-    session.pty.kill('SIGTERM');
-    this.sessions.delete(id);
+    if (session.mode === 'daemon') {
+      // Kill the PTY process
+      session.pty.kill('SIGTERM');
+    } else {
+      // For pod mode, the exec connection will be closed
+      // Pod itself is not deleted (handled by GC)
+      if (session.stdinStream) {
+        // Close stdin to signal end of input
+        try {
+          session.stdinStream.end?.();
+        } catch {
+          // Ignore close errors
+        }
+      }
+      console.log(
+        `[Pod Mode] Terminal ${id} removed (pod ${session.podName} will be GC'd when idle)`
+      );
+    }
 
+    this.sessions.delete(id);
     return { terminalId: id };
   }
 
@@ -754,7 +1202,18 @@ export class TerminalsService {
    */
   cleanup(): void {
     for (const session of this.sessions.values()) {
-      session.pty.kill('SIGTERM');
+      if (session.mode === 'daemon') {
+        session.pty.kill('SIGTERM');
+      } else {
+        // Close pod exec stdin streams
+        if (session.stdinStream) {
+          try {
+            session.stdinStream.end?.();
+          } catch {
+            // Ignore close errors
+          }
+        }
+      }
     }
     this.sessions.clear();
   }

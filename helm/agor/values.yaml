@@ -83,22 +83,69 @@ daemon:
     execution:
       worktree_rbac: false
       unix_user_mode: simple
+      # Terminal execution mode:
+      # - daemon: Run terminals in daemon pod (default, simpler)
+      # - pod: Run terminals in isolated user pods (requires userPods config)
+      terminal_mode: daemon
+      # Unix UID range for user allocation (for consistent file ownership on EFS/NFS)
+      # UIDs are assigned from this range when Unix users are created
+      unix_uid_range:
+        min: 10000
+        max: 60000
+
+  # User Pods configuration (for terminal_mode: pod)
+  # Creates isolated pods per user+worktree for terminals
+  # with shared Podman pods per worktree for docker-compose
+  userPods:
+    enabled: false
+
+    # Shell pod configuration (one per user per worktree)
+    shellPod:
+      image: agor/shell:latest
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: "1"
+          memory: 1Gi
+
+    # Podman pod configuration (one per worktree, shared by users)
+    podmanPod:
+      image: quay.io/podman/stable
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: "4"
+          memory: 8Gi
+
+    # Idle timeout before pods are garbage collected (minutes)
+    idleTimeoutMinutes:
+      shell: 30    # Shell pods deleted after 30min of inactivity
+      podman: 60   # Podman pods deleted 60min after last shell pod
+
+    # Storage configuration (must be ReadWriteMany for user pods)
+    storage:
+      dataPvc: agor-data
 
   # Skip auto-creating admin user on startup
   # Set to true when using external database with pre-seeded users
   skipAdminBootstrap: false
 
-  # Persistence for SQLite database and worktrees
+  # Persistence for daemon storage
   persistence:
     enabled: true
-    # Database storage
-    data:
+    # Home directory (~/.agor for SQLite db, config)
+    home:
       size: 1Gi
       accessMode: ReadWriteOnce
-    # Git worktrees storage
-    worktrees:
+    # Data storage (worktrees + repos) - use existingClaim for EFS
+    data:
       size: 10Gi
       accessMode: ReadWriteOnce
+      # existingClaim: agor-data  # Use pre-existing PVC (e.g., EFS)
 
   # Pod annotations
   podAnnotations: {}

@@ -572,6 +572,10 @@ export const users = pgTable(
     // Unix username for process impersonation (optional, app-enforced uniqueness)
     unix_username: text('unix_username'),
 
+    // Unix UID for container security context (consistent file ownership on EFS/NFS)
+    // Assigned from configurable range (default 10000-60000) when unix_username is set
+    unix_uid: integer('unix_uid'),
+
     // Onboarding state
     onboarding_completed: t.bool('onboarding_completed').notNull().default(false),
 

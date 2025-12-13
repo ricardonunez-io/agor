@@ -1,0 +1,111 @@
+# Agor Shell Pod Dockerfile
+# Lightweight image for isolated terminal sessions
+#
+# Contains:
+# - Zellij (terminal multiplexer)
+# - Docker CLI (for DOCKER_HOST to Podman pod)
+# - Git (for version control)
+# - Common dev tools
+
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    # Docker CLI (uses DOCKER_HOST to connect to Podman pod)
+    docker.io \
+    # Version control
+    git \
+    # Networking tools
+    curl \
+    wget \
+    ca-certificates \
+    # Shell utilities
+    bash \
+    bash-completion \
+    less \
+    vim-tiny \
+    jq \
+    # Process management
+    procps \
+    htop \
+    # Build essentials (for some docker-compose projects)
+    make \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Zellij from GitHub releases
+ARG TARGETARCH
+RUN ARCH=$(case "${TARGETARCH}" in \
+        "amd64") echo "x86_64" ;; \
+        "arm64") echo "aarch64" ;; \
+        *) echo "x86_64" ;; \
+    esac) && \
+    curl -fsSL "https://github.com/zellij-org/zellij/releases/latest/download/zellij-${ARCH}-unknown-linux-musl.tar.gz" \
+    | tar -xz -C /usr/local/bin && \
+    chmod +x /usr/local/bin/zellij
+
+# Install docker-compose v2 (standalone)
+RUN ARCH=$(case "${TARGETARCH}" in \
+        "amd64") echo "x86_64" ;; \
+        "arm64") echo "aarch64" ;; \
+        *) echo "x86_64" ;; \
+    esac) && \
+    curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${ARCH}" \
+    -o /usr/local/bin/docker-compose && \
+    chmod +x /usr/local/bin/docker-compose
+
+# Create agor user with uid 1000
+RUN groupadd -g 1000 agor && \
+    useradd -u 1000 -g 1000 -m -s /bin/bash agor
+
+# Setup .agor directory with symlinks to /data (mounted at runtime)
+RUN mkdir -p /home/agor/.agor && \
+    ln -s /data/worktrees /home/agor/.agor/worktrees && \
+    ln -s /data/repos /home/agor/.agor/repos
+
+# Setup home directory and config files
+RUN mkdir -p /home/agor/.config/zellij && \
+    # Default Zellij config (simple layout)
+    echo '// Agor shell pod Zellij config' > /home/agor/.config/zellij/config.kdl && \
+    echo 'default_shell "bash"' >> /home/agor/.config/zellij/config.kdl && \
+    echo 'pane_frames false' >> /home/agor/.config/zellij/config.kdl && \
+    echo 'theme "default"' >> /home/agor/.config/zellij/config.kdl && \
+    # Bash profile for nicer terminal experience
+    echo '# Agor shell pod bashrc' > /home/agor/.bashrc && \
+    echo "export PS1='\\[\\033[01;32m\\]\\u@agor\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\$ '" >> /home/agor/.bashrc && \
+    echo 'export EDITOR=vim' >> /home/agor/.bashrc && \
+    echo '' >> /home/agor/.bashrc && \
+    echo '# Docker aliases (works via DOCKER_HOST)' >> /home/agor/.bashrc && \
+    echo "alias d='docker'" >> /home/agor/.bashrc && \
+    echo "alias dc='docker-compose'" >> /home/agor/.bashrc && \
+    echo "alias dps='docker ps'" >> /home/agor/.bashrc && \
+    echo "alias dlogs='docker logs -f'" >> /home/agor/.bashrc && \
+    echo '' >> /home/agor/.bashrc && \
+    echo '# Git aliases' >> /home/agor/.bashrc && \
+    echo "alias gs='git status'" >> /home/agor/.bashrc && \
+    echo "alias gd='git diff'" >> /home/agor/.bashrc && \
+    echo "alias gl='git log --oneline -10'" >> /home/agor/.bashrc && \
+    echo '' >> /home/agor/.bashrc && \
+    echo '# Source bash completion' >> /home/agor/.bashrc && \
+    echo 'if [ -f /etc/bash_completion ]; then' >> /home/agor/.bashrc && \
+    echo '    . /etc/bash_completion' >> /home/agor/.bashrc && \
+    echo 'fi' >> /home/agor/.bashrc && \
+    echo '' >> /home/agor/.bashrc && \
+    echo '# Show DOCKER_HOST on login' >> /home/agor/.bashrc && \
+    echo 'if [ -n "$DOCKER_HOST" ]; then' >> /home/agor/.bashrc && \
+    echo '    echo "DOCKER_HOST: $DOCKER_HOST"' >> /home/agor/.bashrc && \
+    echo 'fi' >> /home/agor/.bashrc && \
+    echo '' >> /home/agor/.bashrc && \
+    echo 'cd "${WORKTREE_PATH:-$HOME}"' >> /home/agor/.bashrc && \
+    chown -R agor:agor /home/agor
+
+# Set environment
+ENV HOME=/home/agor
+ENV USER=agor
+ENV SHELL=/bin/bash
+
+# Switch to non-root user
+USER agor
+WORKDIR /home/agor
+
+# Default command (overridden by K8s)
+CMD ["sleep", "infinity"]

@@ -7,3 +7,5 @@ metadata:
 data:
   config.yaml: |
     {{- toYaml .Values.daemon.config | nindent 4 }}
+    kubernetes:
+      namespace: {{ .Release.Namespace }}

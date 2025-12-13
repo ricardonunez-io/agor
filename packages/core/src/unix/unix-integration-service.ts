@@ -49,6 +49,17 @@ show_release_notes false
 `;
 
 /**
+ * Unix UID range for user allocation
+ */
+export interface UnixUidRange {
+  min: number;
+  max: number;
+}
+
+/** Default UID range for Agor users (avoids system UIDs 0-999 and common user range 1000-9999) */
+export const DEFAULT_UID_RANGE: UnixUidRange = { min: 10000, max: 60000 };
+
+/**
  * Unix integration service configuration
  */
 export interface UnixIntegrationConfig {
@@ -63,6 +74,9 @@ export interface UnixIntegrationConfig {
 
   /** Whether to auto-create symlinks when ownership changes (default: true when enabled) */
   autoManageSymlinks?: boolean;
+
+  /** Unix UID range for user allocation (default: 10000-60000) */
+  uidRange?: UnixUidRange;
 }
 
 /**
@@ -95,10 +109,42 @@ export class UnixIntegrationService {
       homeBase: config.homeBase || AGOR_HOME_BASE,
       autoCreateUnixUsers: config.autoCreateUnixUsers ?? false,
       autoManageSymlinks: config.autoManageSymlinks ?? config.enabled,
+      uidRange: config.uidRange ?? DEFAULT_UID_RANGE,
     };
     this.executor = config.enabled ? executor : new NoOpExecutor();
     this.worktreeRepo = new WorktreeRepository(db);
     this.usersRepo = new UsersRepository(db);
+  }
+
+  /**
+   * Allocate a unique UID for a new user
+   *
+   * Finds the next available UID in the configured range by checking
+   * existing users in the database.
+   */
+  async allocateUid(): Promise<number> {
+    // Get all existing UIDs from database
+    const allUsers = await this.usersRepo.findAll();
+    const usedUids = new Set(
+      allUsers
+        .filter(
+          (u): u is typeof u & { unix_uid: number } =>
+            u.unix_uid !== undefined && u.unix_uid !== null
+        )
+        .map((u) => u.unix_uid)
+    );
+
+    // Find first available UID in range
+    for (let uid = this.config.uidRange.min; uid <= this.config.uidRange.max; uid++) {
+      if (!usedUids.has(uid)) {
+        return uid;
+      }
+    }
+
+    throw new Error(
+      `No available UIDs in range ${this.config.uidRange.min}-${this.config.uidRange.max}. ` +
+        'Consider expanding the UID range or cleaning up unused users.'
+    );
   }
 
   /**
@@ -378,11 +424,12 @@ export class UnixIntegrationService {
    *
    * Creates the Unix user if it doesn't exist.
    * Also sets up the ~/agor/worktrees directory.
+   * Assigns a unique UID for consistent file ownership on EFS/NFS.
    *
    * @param userId - Agor user ID
-   * @returns Unix username (existing or newly created)
+   * @returns Object with Unix username and UID
    */
-  async ensureUnixUser(userId: UserID): Promise<string> {
+  async ensureUnixUser(userId: UserID): Promise<{ username: string; uid: number }> {
     const user = await this.usersRepo.findById(userId);
     if (!user) {
       throw new Error(`User not found: ${userId}`);
@@ -390,6 +437,7 @@ export class UnixIntegrationService {
 
     // If user already has a unix_username, ensure it exists on the system
     let unixUsername = user.unix_username;
+    let unixUid = user.unix_uid;
 
     if (!unixUsername) {
       // Generate a default username
@@ -408,10 +456,22 @@ export class UnixIntegrationService {
     const exists = await this.executor.check(UnixUserCommands.userExists(unixUsername));
 
     if (!exists) {
-      console.log(`[UnixIntegration] Creating Unix user: ${unixUsername}`);
-      // Pass homeBase to ensure home directory is created in the configured location
+      // Allocate a UID if not already assigned
+      if (!unixUid) {
+        unixUid = await this.allocateUid();
+        console.log(`[UnixIntegration] Allocated UID ${unixUid} for user ${unixUsername}`);
+      }
+
+      console.log(`[UnixIntegration] Creating Unix user: ${unixUsername} (UID: ${unixUid})`);
+      // Create user with specific UID for consistent file ownership on EFS/NFS
       await this.executor.exec(
-        UnixUserCommands.createUser(unixUsername, AGOR_DEFAULT_SHELL, this.config.homeBase)
+        UnixUserCommands.createUserWithId(
+          unixUsername,
+          unixUid,
+          undefined,
+          AGOR_DEFAULT_SHELL,
+          this.config.homeBase
+        )
       );
 
       // Setup ~/agor/worktrees directory
@@ -420,6 +480,17 @@ export class UnixIntegrationService {
       );
     } else {
       console.log(`[UnixIntegration] Unix user ${unixUsername} already exists`);
+
+      // If user exists but we don't have their UID recorded, get it from the system
+      if (!unixUid) {
+        try {
+          const uidResult = await this.executor.exec(`id -u "${unixUsername}"`);
+          unixUid = parseInt(uidResult.stdout.trim(), 10);
+          console.log(`[UnixIntegration] Retrieved existing UID ${unixUid} for ${unixUsername}`);
+        } catch {
+          console.warn(`[UnixIntegration] Could not retrieve UID for ${unixUsername}`);
+        }
+      }
 
       // Ensure ~/agor/worktrees exists
       const worktreesDir = getUserWorktreesDir(unixUsername, this.config.homeBase);
@@ -431,9 +502,16 @@ export class UnixIntegrationService {
       }
     }
 
-    // Update Agor user record if username was generated
+    // Update Agor user record with username and UID
+    const updates: { unix_username?: string; unix_uid?: number } = {};
     if (!user.unix_username) {
-      await this.usersRepo.update(userId, { unix_username: unixUsername });
+      updates.unix_username = unixUsername;
+    }
+    if (!user.unix_uid && unixUid) {
+      updates.unix_uid = unixUid;
+    }
+    if (Object.keys(updates).length > 0) {
+      await this.usersRepo.update(userId, updates);
     }
 
     // Add user to agor_users group (enables impersonation)
@@ -442,7 +520,7 @@ export class UnixIntegrationService {
     // Prepare user's home directory with default configs
     await this.prepareUserHome(unixUsername);
 
-    return unixUsername;
+    return { username: unixUsername, uid: unixUid || 0 };
   }
 
   /**

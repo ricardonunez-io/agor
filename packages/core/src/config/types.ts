@@ -145,6 +145,43 @@ export interface AgorCodexSettings {
 }
 
 /**
+ * User Pods configuration for terminal_mode: pod
+ */
+export interface AgorUserPodsSettings {
+  /** Enable user pods (default: false) */
+  enabled?: boolean;
+
+  /** Shell pod configuration */
+  shellPod?: {
+    image?: string;
+    resources?: {
+      requests?: { cpu?: string; memory?: string };
+      limits?: { cpu?: string; memory?: string };
+    };
+  };
+
+  /** Podman pod configuration */
+  podmanPod?: {
+    image?: string;
+    resources?: {
+      requests?: { cpu?: string; memory?: string };
+      limits?: { cpu?: string; memory?: string };
+    };
+  };
+
+  /** Idle timeout in minutes */
+  idleTimeoutMinutes?: {
+    shell?: number;
+    podman?: number;
+  };
+
+  /** Storage PVC name */
+  storage?: {
+    dataPvc?: string;
+  };
+}
+
+/**
  * Execution settings
  */
 export interface AgorExecutionSettings {
@@ -165,6 +202,18 @@ export interface AgorExecutionSettings {
 
   /** Sync web passwords to Unix user passwords (default: true). When enabled, passwords are synced on user creation/update. */
   sync_unix_passwords?: boolean;
+
+  /** Terminal execution mode: daemon (run in daemon pod), pod (isolated user pods) */
+  terminal_mode?: 'daemon' | 'pod';
+
+  /** User pods configuration (for terminal_mode: pod) */
+  user_pods?: AgorUserPodsSettings;
+
+  /** Unix UID range for user allocation (default: 10000-60000) */
+  unix_uid_range?: {
+    min?: number;
+    max?: number;
+  };
 }
 
 /**

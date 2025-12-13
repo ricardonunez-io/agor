@@ -61,14 +61,17 @@ done
 if [[ -n "$REGISTRY" ]]; then
     DAEMON_IMAGE="${REGISTRY}/agor/daemon:${TAG}"
     UI_IMAGE="${REGISTRY}/agor/ui:${TAG}"
+    SHELL_IMAGE="${REGISTRY}/agor/shell:${TAG}"
 else
     DAEMON_IMAGE="agor/daemon:${TAG}"
     UI_IMAGE="agor/ui:${TAG}"
+    SHELL_IMAGE="agor/shell:${TAG}"
 fi
 
 echo -e "${CYAN}Building Agor Docker images${NC}"
 echo -e "  Daemon: ${DAEMON_IMAGE}"
 echo -e "  UI:     ${UI_IMAGE}"
+echo -e "  Shell:  ${SHELL_IMAGE}"
 echo ""
 
 # Build daemon
@@ -87,11 +90,20 @@ docker build \
     "$PROJECT_ROOT"
 echo -e "${GREEN}✓ UI image built${NC}"
 
+# Build shell pod image (for terminal_mode: pod)
+echo -e "${YELLOW}Building shell pod image...${NC}"
+docker build \
+    -t "$SHELL_IMAGE" \
+    -f "$SCRIPT_DIR/docker/Dockerfile.shell" \
+    "$SCRIPT_DIR/docker"
+echo -e "${GREEN}✓ Shell image built${NC}"
+
 # Push if requested
 if $PUSH; then
     echo -e "${YELLOW}Pushing images to registry...${NC}"
     docker push "$DAEMON_IMAGE"
     docker push "$UI_IMAGE"
+    docker push "$SHELL_IMAGE"
     echo -e "${GREEN}✓ Images pushed${NC}"
 fi
 
@@ -106,11 +118,13 @@ if $DEPLOY; then
             echo -e "${YELLOW}Loading images into minikube...${NC}"
             minikube image load "$DAEMON_IMAGE"
             minikube image load "$UI_IMAGE"
+            minikube image load "$SHELL_IMAGE"
             ;;
         kind)
             echo -e "${YELLOW}Loading images into kind...${NC}"
             kind load docker-image "$DAEMON_IMAGE"
             kind load docker-image "$UI_IMAGE"
+            kind load docker-image "$SHELL_IMAGE"
             ;;
     esac
 

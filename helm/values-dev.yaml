@@ -1,10 +1,10 @@
 # Development values for Agor
 # Usage: helm install agor ./helm/agor -f helm/values-dev.yaml
 
-# Database: PostgreSQL
+# Database: PostgreSQL (local docker container via host.docker.internal)
 database:
   type: postgresql
-  existingSecret: agor-db-credentials
+  existingSecret: agor-db-credentials-local
 
 # Use local images (built with docker build)
 daemon:
@@ -34,6 +34,38 @@ daemon:
     execution:
       worktree_rbac: false
       unix_user_mode: opportunistic
+      terminal_mode: pod  # Use isolated shell pods instead of daemon
+      unix_uid_range:
+        min: 10000
+        max: 60000
+      user_pods:
+        enabled: true
+        shellPod:
+          image: agor/shell:dev
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+        storage:
+          dataPvc: agor-data
+
+  # User Pods configuration (for terminal_mode: pod)
+  userPods:
+    enabled: true
+    shellPod:
+      image: agor/shell:dev
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: "1"
+          memory: 1Gi
+    storage:
+      dataPvc: agor-data
 
   # Skip admin bootstrap - using external PostgreSQL
   skipAdminBootstrap: true
@@ -46,9 +78,11 @@ daemon:
           name: agor-github-token
           key: token
 
-  # Disable persistence for quick iteration (use emptyDir)
+  # Enable persistence with local PVC (simulating EFS)
   persistence:
-    enabled: false
+    enabled: true
+    data:
+      existingClaim: agor-data
 
 ui:
   image:

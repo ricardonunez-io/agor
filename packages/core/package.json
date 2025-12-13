@@ -149,6 +149,11 @@
       "types": "./dist/unix/index.d.ts",
       "import": "./dist/unix/index.js",
       "require": "./dist/unix/index.cjs"
+    },
+    "./kubernetes": {
+      "types": "./dist/kubernetes/index.d.ts",
+      "import": "./dist/kubernetes/index.js",
+      "require": "./dist/kubernetes/index.cjs"
     }
   },
   "scripts": {
@@ -171,6 +176,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.55",
     "@feathersjs/authentication": "^5.0.37",
+    "@kubernetes/client-node": "^0.22.3",
     "@feathersjs/authentication-client": "^5.0.37",
     "@feathersjs/authentication-local": "^5.0.37",
     "@feathersjs/errors": "^5.0.37",

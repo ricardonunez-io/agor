@@ -119,6 +119,8 @@ export interface User extends BaseUserFields {
   updated_at?: Date;
   // Unix username for process impersonation (optional, unique, admin-managed)
   unix_username?: string;
+  // Unix UID for container security context (consistent file ownership on EFS/NFS)
+  unix_uid?: number;
   // API key status (boolean only, never exposes actual keys)
   api_keys?: {
     ANTHROPIC_API_KEY?: boolean; // true = key is set, false/undefined = not set
