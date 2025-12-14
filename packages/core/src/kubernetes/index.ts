@@ -15,14 +15,17 @@ export {
   resetPodManager,
 } from './pod-manager';
 
-// Pod manifest builders
+// Deployment manifest builders
 export {
-  buildPodmanPodManifest,
+  buildPodmanDeploymentManifest,
   buildPodmanServiceManifest,
-  buildShellPodManifest,
+  buildShellDeploymentManifest,
   type PodmanPodParams,
   type ShellPodParams,
 } from './pod-manifests';
+
+// Legacy Pod manifests (deprecated)
+export { buildPodmanPodManifest, buildShellPodManifest } from './pod-manifests';
 // Types
 export {
   DEFAULT_USER_POD_CONFIG,

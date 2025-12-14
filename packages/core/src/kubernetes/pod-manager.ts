@@ -5,12 +5,13 @@
  * Uses @kubernetes/client-node to interact with the Kubernetes API.
  */
 
+import { Writable } from 'node:stream';
 import * as k8s from '@kubernetes/client-node';
 import type { UserID, WorktreeID } from '../types/id.js';
 import {
-  buildPodmanPodManifest,
+  buildPodmanDeploymentManifest,
   buildPodmanServiceManifest,
-  buildShellPodManifest,
+  buildShellDeploymentManifest,
 } from './pod-manifests';
 import {
   DEFAULT_USER_POD_CONFIG,
@@ -52,7 +53,9 @@ export interface PodManagerOptions {
  */
 export class PodManager {
   private kc: k8s.KubeConfig;
-  private k8sApi: k8s.CoreV1Api;
+  private coreApi: k8s.CoreV1Api;
+  private appsApi: k8s.AppsV1Api;
+  private networkingApi: k8s.NetworkingV1Api;
   private exec: k8s.Exec;
   private config: UserPodConfig;
   private initialized = false;
@@ -73,7 +76,9 @@ export class PodManager {
       }
     }
 
-    this.k8sApi = this.kc.makeApiClient(k8s.CoreV1Api);
+    this.coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
+    this.appsApi = this.kc.makeApiClient(k8s.AppsV1Api);
+    this.networkingApi = this.kc.makeApiClient(k8s.NetworkingV1Api);
     this.exec = new k8s.Exec(this.kc);
     this.initialized = true;
   }
@@ -100,8 +105,9 @@ export class PodManager {
   }
 
   /**
-   * Ensure shell pod exists for user + worktree
-   * Creates Podman pod first if needed (shared for worktree)
+   * Ensure shell deployment exists for user + worktree
+   * Creates Podman deployment first if needed (shared for worktree)
+   * Returns the actual pod name (not deployment name) for exec
    *
    * @param userUid - Unix UID for consistent file ownership on EFS/NFS
    * @param unixUsername - Unix username for /etc/passwd entry
@@ -113,89 +119,100 @@ export class PodManager {
     userUid?: number,
     unixUsername?: string
   ): Promise<string> {
-    const shellPodName = getShellPodName(worktreeId, userId);
+    const deploymentName = getShellPodName(worktreeId, userId);
 
-    // Ensure Podman pod exists first (shared for worktree)
+    // Ensure Podman deployment exists first (shared for worktree)
     await this.ensurePodmanPod(worktreeId, worktreePath);
 
     try {
-      const { body: pod } = await this.k8sApi.readNamespacedPod(
-        shellPodName,
+      const { body: deployment } = await this.appsApi.readNamespacedDeployment(
+        deploymentName,
         this.config.namespace
       );
 
-      if (pod.status?.phase === 'Running') {
-        // Update last activity
-        await this.updateLastActivity(shellPodName);
-        return shellPodName;
+      if (deployment.status?.readyReplicas === 1) {
+        // Update last activity on the deployment
+        await this.updateDeploymentActivity(deploymentName);
+        // Return actual pod name for exec
+        const podName = await this.getPodNameFromDeployment(deploymentName);
+        if (!podName) {
+          throw new PodManagerError(`No running pod found for deployment ${deploymentName}`);
+        }
+        return podName;
       }
 
-      // Pod exists but not running, wait for it
-      await this.waitForPod(shellPodName);
-      return shellPodName;
+      // Deployment exists but not ready, wait for it
+      await this.waitForDeployment(deploymentName);
     } catch (error: unknown) {
       const e = error as { statusCode?: number };
       if (e.statusCode === 404) {
-        // Create shell pod
-        await this.createShellPod(worktreeId, userId, worktreePath, userUid, unixUsername);
-        await this.waitForPod(shellPodName);
-        return shellPodName;
+        // Create shell deployment
+        await this.createShellDeployment(worktreeId, userId, worktreePath, userUid, unixUsername);
+        await this.waitForDeployment(deploymentName);
+      } else {
+        throw new PodManagerError(
+          `Failed to get shell deployment: ${error instanceof Error ? error.message : String(error)}`,
+          e.statusCode,
+          deploymentName
+        );
       }
-      throw new PodManagerError(
-        `Failed to get shell pod: ${error instanceof Error ? error.message : String(error)}`,
-        e.statusCode,
-        shellPodName
-      );
     }
+
+    // Get actual pod name for exec
+    const podName = await this.getPodNameFromDeployment(deploymentName);
+    if (!podName) {
+      throw new PodManagerError(`No running pod found for deployment ${deploymentName}`);
+    }
+    return podName;
   }
 
   /**
-   * Ensure Podman pod exists for worktree (shared by all users)
+   * Ensure Podman deployment exists for worktree (shared by all users)
    */
   async ensurePodmanPod(worktreeId: WorktreeID, worktreePath: string): Promise<string> {
-    const podmanPodName = getPodmanPodName(worktreeId);
+    const deploymentName = getPodmanPodName(worktreeId);
 
     try {
-      const { body: pod } = await this.k8sApi.readNamespacedPod(
-        podmanPodName,
+      const { body: deployment } = await this.appsApi.readNamespacedDeployment(
+        deploymentName,
         this.config.namespace
       );
 
-      if (pod.status?.phase === 'Running') {
-        return podmanPodName;
+      if (deployment.status?.readyReplicas === 1) {
+        return deploymentName;
       }
 
-      // Pod exists but not running, wait for it
-      await this.waitForPod(podmanPodName);
-      return podmanPodName;
+      // Deployment exists but not ready, wait for it
+      await this.waitForDeployment(deploymentName);
+      return deploymentName;
     } catch (error: unknown) {
       const e = error as { statusCode?: number };
       if (e.statusCode === 404) {
-        // Create Podman pod and service
-        await this.createPodmanPod(worktreeId, worktreePath);
+        // Create Podman deployment and service
+        await this.createPodmanDeployment(worktreeId, worktreePath);
         await this.createPodmanService(worktreeId);
-        await this.waitForPod(podmanPodName);
-        return podmanPodName;
+        await this.waitForDeployment(deploymentName);
+        return deploymentName;
       }
       throw new PodManagerError(
-        `Failed to get Podman pod: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to get Podman deployment: ${error instanceof Error ? error.message : String(error)}`,
         e.statusCode,
-        podmanPodName
+        deploymentName
       );
     }
   }
 
   /**
-   * Create shell pod
+   * Create shell deployment
    */
-  private async createShellPod(
+  private async createShellDeployment(
     worktreeId: WorktreeID,
     userId: UserID,
     worktreePath: string,
     userUid?: number,
     unixUsername?: string
   ): Promise<void> {
-    const manifest = buildShellPodManifest({
+    const manifest = buildShellDeploymentManifest({
       worktreeId,
       userId,
       worktreePath,
@@ -205,15 +222,15 @@ export class PodManager {
     });
 
     console.log(
-      `[PodManager] Creating shell pod: ${manifest.metadata?.name} (UID: ${userUid ?? 'default'})`
+      `[PodManager] Creating shell deployment: ${manifest.metadata?.name} (UID: ${userUid ?? 'default'})`
     );
 
     try {
-      await this.k8sApi.createNamespacedPod(this.config.namespace, manifest);
+      await this.appsApi.createNamespacedDeployment(this.config.namespace, manifest);
     } catch (error: unknown) {
       const e = error as { statusCode?: number; body?: { message?: string } };
       throw new PodManagerError(
-        `Failed to create shell pod: ${e.body?.message || String(error)}`,
+        `Failed to create shell deployment: ${e.body?.message || String(error)}`,
         e.statusCode,
         manifest.metadata?.name
       );
@@ -221,23 +238,23 @@ export class PodManager {
   }
 
   /**
-   * Create Podman pod
+   * Create Podman deployment
    */
-  private async createPodmanPod(worktreeId: WorktreeID, worktreePath: string): Promise<void> {
-    const manifest = buildPodmanPodManifest({
+  private async createPodmanDeployment(worktreeId: WorktreeID, worktreePath: string): Promise<void> {
+    const manifest = buildPodmanDeploymentManifest({
       worktreeId,
       worktreePath,
       config: this.config,
     });
 
-    console.log(`[PodManager] Creating Podman pod: ${manifest.metadata?.name}`);
+    console.log(`[PodManager] Creating Podman deployment: ${manifest.metadata?.name}`);
 
     try {
-      await this.k8sApi.createNamespacedPod(this.config.namespace, manifest);
+      await this.appsApi.createNamespacedDeployment(this.config.namespace, manifest);
     } catch (error: unknown) {
       const e = error as { statusCode?: number; body?: { message?: string } };
       throw new PodManagerError(
-        `Failed to create Podman pod: ${e.body?.message || String(error)}`,
+        `Failed to create Podman deployment: ${e.body?.message || String(error)}`,
         e.statusCode,
         manifest.metadata?.name
       );
@@ -254,7 +271,7 @@ export class PodManager {
     console.log(`[PodManager] Creating Podman service: ${serviceName}`);
 
     try {
-      await this.k8sApi.createNamespacedService(this.config.namespace, manifest);
+      await this.coreApi.createNamespacedService(this.config.namespace, manifest);
     } catch (error: unknown) {
       const e = error as { statusCode?: number; body?: { message?: string } };
       // Ignore if service already exists
@@ -268,48 +285,48 @@ export class PodManager {
   }
 
   /**
-   * Delete shell pod
+   * Delete shell deployment
    */
   async deleteShellPod(worktreeId: WorktreeID, userId: UserID): Promise<void> {
-    const podName = getShellPodName(worktreeId, userId);
+    const deploymentName = getShellPodName(worktreeId, userId);
 
-    console.log(`[PodManager] Deleting shell pod: ${podName}`);
+    console.log(`[PodManager] Deleting shell deployment: ${deploymentName}`);
 
     try {
-      await this.k8sApi.deleteNamespacedPod(podName, this.config.namespace);
+      await this.appsApi.deleteNamespacedDeployment(deploymentName, this.config.namespace);
     } catch (error: unknown) {
       const e = error as { statusCode?: number };
       // Ignore if already deleted
       if (e.statusCode !== 404) {
         throw new PodManagerError(
-          `Failed to delete shell pod: ${error instanceof Error ? error.message : String(error)}`,
+          `Failed to delete shell deployment: ${error instanceof Error ? error.message : String(error)}`,
           e.statusCode,
-          podName
+          deploymentName
         );
       }
     }
   }
 
   /**
-   * Delete Podman pod and service
+   * Delete Podman deployment and service
    */
   async deletePodmanPod(worktreeId: WorktreeID): Promise<void> {
-    const podName = getPodmanPodName(worktreeId);
+    const deploymentName = getPodmanPodName(worktreeId);
     const serviceName = getPodmanServiceName(worktreeId);
 
-    console.log(`[PodManager] Deleting Podman pod and service: ${podName}`);
+    console.log(`[PodManager] Deleting Podman deployment and service: ${deploymentName}`);
 
     try {
-      await this.k8sApi.deleteNamespacedPod(podName, this.config.namespace);
+      await this.appsApi.deleteNamespacedDeployment(deploymentName, this.config.namespace);
     } catch (error: unknown) {
       const e = error as { statusCode?: number };
       if (e.statusCode !== 404) {
-        console.error(`Failed to delete Podman pod ${podName}:`, error);
+        console.error(`Failed to delete Podman deployment ${deploymentName}:`, error);
       }
     }
 
     try {
-      await this.k8sApi.deleteNamespacedService(serviceName, this.config.namespace);
+      await this.coreApi.deleteNamespacedService(serviceName, this.config.namespace);
     } catch (error: unknown) {
       const e = error as { statusCode?: number };
       if (e.statusCode !== 404) {
@@ -319,12 +336,181 @@ export class PodManager {
   }
 
   /**
-   * Update last activity annotation on pod
+   * Create an Ingress to expose a worktree's app port via subdomain
+   * Creates a Service pointing to the podman pod's app port, then an Ingress for it
+   *
+   * @param worktreeId - Worktree ID
+   * @param worktreeName - Worktree name (used for subdomain)
+   * @param port - Port to expose (e.g., 8000)
+   * @param baseDomain - Base domain (e.g., "agor.local") - subdomain will be {worktreeName}.{baseDomain}
    */
-  async updateLastActivity(podName: string): Promise<void> {
+  async createWorktreeIngress(
+    worktreeId: WorktreeID,
+    worktreeName: string,
+    port: number,
+    baseDomain: string = 'agor.local'
+  ): Promise<string> {
+    const shortId = worktreeId.substring(0, 8);
+    const appServiceName = `app-${shortId}`;
+    const ingressName = `app-${shortId}`;
+    const hostname = `${worktreeName}.${baseDomain}`;
+
+    console.log(`[PodManager] Creating Ingress for ${worktreeName} on port ${port} -> ${hostname}`);
+
+    // Get the podman pod selector to target
+    const podmanDeploymentName = getPodmanPodName(worktreeId);
+
+    // Create Service for the app port (targets podman pod)
+    const serviceManifest: k8s.V1Service = {
+      apiVersion: 'v1',
+      kind: 'Service',
+      metadata: {
+        name: appServiceName,
+        namespace: this.config.namespace,
+        labels: {
+          [POD_LABELS.COMPONENT]: 'worktree-app',
+          [POD_LABELS.WORKTREE_ID]: worktreeId,
+        },
+      },
+      spec: {
+        selector: {
+          // Use APP_NAME (not COMPONENT) - podman pods have app.kubernetes.io/name=agor-podman-pod
+          [POD_LABELS.APP_NAME]: POD_LABEL_VALUES.PODMAN_POD,
+          [POD_LABELS.WORKTREE_ID]: worktreeId,
+        },
+        ports: [
+          {
+            name: 'http',
+            port: port,
+            targetPort: port,
+            protocol: 'TCP',
+          },
+        ],
+      },
+    };
+
+    // Create Ingress with Traefik
+    const ingressManifest: k8s.V1Ingress = {
+      apiVersion: 'networking.k8s.io/v1',
+      kind: 'Ingress',
+      metadata: {
+        name: ingressName,
+        namespace: this.config.namespace,
+        labels: {
+          [POD_LABELS.COMPONENT]: 'worktree-app',
+          [POD_LABELS.WORKTREE_ID]: worktreeId,
+        },
+        annotations: {
+          'traefik.ingress.kubernetes.io/router.entrypoints': 'web',
+        },
+      },
+      spec: {
+        ingressClassName: 'traefik',
+        rules: [
+          {
+            host: hostname,
+            http: {
+              paths: [
+                {
+                  path: '/',
+                  pathType: 'Prefix',
+                  backend: {
+                    service: {
+                      name: appServiceName,
+                      port: {
+                        number: port,
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    };
+
     try {
-      await this.k8sApi.patchNamespacedPod(
-        podName,
+      // Create or update Service
+      try {
+        await this.coreApi.createNamespacedService(this.config.namespace, serviceManifest);
+        console.log(`[PodManager] Created app Service: ${appServiceName}`);
+      } catch (error: unknown) {
+        const e = error as { statusCode?: number };
+        if (e.statusCode === 409) {
+          // Already exists, update it
+          await this.coreApi.replaceNamespacedService(appServiceName, this.config.namespace, serviceManifest);
+          console.log(`[PodManager] Updated app Service: ${appServiceName}`);
+        } else {
+          throw error;
+        }
+      }
+
+      // Create or update Ingress
+      try {
+        await this.networkingApi.createNamespacedIngress(this.config.namespace, ingressManifest);
+        console.log(`[PodManager] Created Ingress: ${ingressName} -> ${hostname}`);
+      } catch (error: unknown) {
+        const e = error as { statusCode?: number };
+        if (e.statusCode === 409) {
+          // Already exists, update it
+          await this.networkingApi.replaceNamespacedIngress(ingressName, this.config.namespace, ingressManifest);
+          console.log(`[PodManager] Updated Ingress: ${ingressName} -> ${hostname}`);
+        } else {
+          throw error;
+        }
+      }
+
+      return `http://${hostname}`;
+    } catch (error) {
+      console.error(`[PodManager] Failed to create Ingress for ${worktreeName}:`, error);
+      throw new PodManagerError(
+        `Failed to create Ingress: ${error instanceof Error ? error.message : String(error)}`,
+        undefined,
+        ingressName
+      );
+    }
+  }
+
+  /**
+   * Delete the Ingress and app Service for a worktree
+   */
+  async deleteWorktreeIngress(worktreeId: WorktreeID): Promise<void> {
+    const shortId = worktreeId.substring(0, 8);
+    const appServiceName = `app-${shortId}`;
+    const ingressName = `app-${shortId}`;
+
+    console.log(`[PodManager] Deleting Ingress and app Service for worktree ${shortId}`);
+
+    try {
+      await this.networkingApi.deleteNamespacedIngress(ingressName, this.config.namespace);
+      console.log(`[PodManager] Deleted Ingress: ${ingressName}`);
+    } catch (error: unknown) {
+      const e = error as { statusCode?: number };
+      if (e.statusCode !== 404) {
+        console.error(`Failed to delete Ingress ${ingressName}:`, error);
+      }
+    }
+
+    try {
+      await this.coreApi.deleteNamespacedService(appServiceName, this.config.namespace);
+      console.log(`[PodManager] Deleted app Service: ${appServiceName}`);
+    } catch (error: unknown) {
+      const e = error as { statusCode?: number };
+      if (e.statusCode !== 404) {
+        console.error(`Failed to delete app Service ${appServiceName}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Update last activity annotation on deployment (internal)
+   */
+  private async updateDeploymentActivity(deploymentName: string): Promise<void> {
+    try {
+      // Update deployment metadata annotations (NOT pod template) to avoid triggering rolling updates
+      await this.appsApi.patchNamespacedDeployment(
+        deploymentName,
         this.config.namespace,
         {
           metadata: {
@@ -338,53 +524,111 @@ export class PodManager {
         undefined,
         undefined,
         undefined,
-        { headers: { 'Content-Type': 'application/merge-patch+json' } }
+        { headers: { 'Content-Type': 'application/strategic-merge-patch+json' } }
       );
     } catch (error) {
       // Non-critical, just log
-      console.warn(`Failed to update last activity for ${podName}:`, error);
+      console.warn(`Failed to update last activity for deployment ${deploymentName}:`, error);
     }
   }
 
   /**
-   * Wait for pod to be running
+   * Update last activity timestamp for a deployment
+   * Called when terminal activity occurs
+   * @param podName - The actual pod name (will extract deployment name from it)
    */
-  private async waitForPod(podName: string, timeoutMs = 60000): Promise<void> {
+  async updateLastActivity(podName: string): Promise<void> {
+    // Pod name format: agor-shell-{worktree}-{user}-{replicaset}-{random}
+    // Deployment name: agor-shell-{worktree}-{user}
+    // Remove the last two hyphen-separated parts to get deployment name
+    const parts = podName.split('-');
+    if (parts.length >= 6) {
+      // Remove replicaset hash and pod random suffix
+      const deploymentName = parts.slice(0, -2).join('-');
+      await this.updateDeploymentActivity(deploymentName);
+    } else {
+      // Fallback: try as-is (might be deployment name already)
+      await this.updateDeploymentActivity(podName);
+    }
+  }
+
+  /**
+   * Wait for deployment to have ready replicas
+   */
+  private async waitForDeployment(deploymentName: string, timeoutMs = 120000): Promise<void> {
     const start = Date.now();
 
     while (Date.now() - start < timeoutMs) {
       try {
-        const { body: pod } = await this.k8sApi.readNamespacedPod(podName, this.config.namespace);
+        const { body: deployment } = await this.appsApi.readNamespacedDeployment(
+          deploymentName,
+          this.config.namespace
+        );
 
-        if (pod.status?.phase === 'Running') {
+        if (deployment.status?.readyReplicas === 1) {
           return;
         }
 
-        if (pod.status?.phase === 'Failed' || pod.status?.phase === 'Succeeded') {
+        // Check for failure conditions
+        const conditions = deployment.status?.conditions || [];
+        const failedCondition = conditions.find(
+          (c) => c.type === 'ReplicaFailure' && c.status === 'True'
+        );
+        if (failedCondition) {
           throw new PodManagerError(
-            `Pod ${podName} is in terminal state: ${pod.status.phase}`,
+            `Deployment ${deploymentName} failed: ${failedCondition.message}`,
             undefined,
-            podName
+            deploymentName
           );
         }
       } catch (error: unknown) {
+        if (error instanceof PodManagerError) throw error;
         const e = error as { statusCode?: number };
         if (e.statusCode !== 404) {
           throw error;
         }
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
-    throw new PodManagerError(`Timeout waiting for pod ${podName} to be ready`, undefined, podName);
+    throw new PodManagerError(
+      `Timeout waiting for deployment ${deploymentName} to be ready`,
+      undefined,
+      deploymentName
+    );
   }
 
   /**
-   * List all shell pods
+   * Get pod name from deployment (finds the running pod created by the deployment)
+   */
+  private async getPodNameFromDeployment(deploymentName: string): Promise<string | null> {
+    try {
+      const { body } = await this.coreApi.listNamespacedPod(
+        this.config.namespace,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        `app.kubernetes.io/name in (${POD_LABEL_VALUES.SHELL_POD},${POD_LABEL_VALUES.PODMAN_POD})`
+      );
+
+      // Find pod whose name starts with the deployment name
+      const pod = body.items.find(
+        (p) => p.metadata?.name?.startsWith(deploymentName) && p.status?.phase === 'Running'
+      );
+
+      return pod?.metadata?.name || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * List all shell pods (returns pod info from deployments' pods)
    */
   async listShellPods(): Promise<ShellPodInfo[]> {
-    const { body } = await this.k8sApi.listNamespacedPod(
+    const { body } = await this.coreApi.listNamespacedPod(
       this.config.namespace,
       undefined,
       undefined,
@@ -404,10 +648,10 @@ export class PodManager {
   }
 
   /**
-   * List all Podman pods
+   * List all Podman pods (returns pod info from deployments' pods)
    */
   async listPodmanPods(): Promise<PodmanPodInfo[]> {
-    const { body } = await this.k8sApi.listNamespacedPod(
+    const { body } = await this.coreApi.listNamespacedPod(
       this.config.namespace,
       undefined,
       undefined,
@@ -430,7 +674,7 @@ export class PodManager {
   }
 
   /**
-   * Garbage collect idle shell pods
+   * Garbage collect idle shell deployments
    */
   async gcIdleShellPods(): Promise<number> {
     const pods = await this.listShellPods();
@@ -438,18 +682,25 @@ export class PodManager {
     const timeoutMs = this.config.idleTimeoutMinutes.shell * 60 * 1000;
     let deleted = 0;
 
+    // Track which deployments we've already deleted (pods may have same labels)
+    const deletedDeployments = new Set<string>();
+
     for (const pod of pods) {
-      if (pod.lastActivity) {
+      if (pod.lastActivity && pod.worktreeId && pod.userId) {
         const idleMs = now - new Date(pod.lastActivity).getTime();
         if (idleMs > timeoutMs) {
+          const deploymentName = getShellPodName(pod.worktreeId, pod.userId);
+          if (deletedDeployments.has(deploymentName)) continue;
+
           console.log(
-            `[PodManager] GC: Deleting idle shell pod ${pod.podName} (idle ${Math.round(idleMs / 60000)}min)`
+            `[PodManager] GC: Deleting idle shell deployment ${deploymentName} (idle ${Math.round(idleMs / 60000)}min)`
           );
           try {
-            await this.k8sApi.deleteNamespacedPod(pod.podName, this.config.namespace);
+            await this.deleteShellPod(pod.worktreeId, pod.userId);
+            deletedDeployments.add(deploymentName);
             deleted++;
           } catch (error) {
-            console.error(`Failed to delete shell pod ${pod.podName}:`, error);
+            console.error(`Failed to delete shell deployment ${deploymentName}:`, error);
           }
         }
       }
@@ -524,6 +775,81 @@ export class PodManager {
    */
   getNamespace(): string {
     return this.config.namespace;
+  }
+
+  /**
+   * Execute a command in the Podman pod for a worktree
+   * Returns stdout/stderr and exit code
+   */
+  async execInPodmanPod(
+    worktreeId: WorktreeID,
+    command: string[],
+    cwd?: string,
+    env?: Record<string, string>
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const deploymentName = getPodmanPodName(worktreeId);
+
+    // Find the actual pod created by the deployment
+    const podName = await this.getPodNameFromDeployment(deploymentName);
+    if (!podName) {
+      throw new PodManagerError(
+        `No running pod found for Podman deployment ${deploymentName}`,
+        undefined,
+        deploymentName
+      );
+    }
+
+    // Build the full command with cd and env if needed
+    let fullCommand = command;
+    if (cwd || env) {
+      const envVars = env
+        ? Object.entries(env)
+            .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+            .join(' ')
+        : '';
+      const cdCmd = cwd ? `cd ${JSON.stringify(cwd)} &&` : '';
+      const envCmd = envVars ? `env ${envVars}` : '';
+      fullCommand = ['sh', '-c', `${cdCmd} ${envCmd} ${command.join(' ')}`];
+    }
+
+    console.log(`[PodManager] Exec in Podman pod ${podName}: ${fullCommand.join(' ')}`);
+
+    return new Promise((resolve, reject) => {
+      let stdout = '';
+      let stderr = '';
+
+      const stdoutStream = new Writable({
+        write(chunk: Buffer, _encoding: string, callback: () => void) {
+          stdout += chunk.toString();
+          callback();
+        },
+      });
+
+      const stderrStream = new Writable({
+        write(chunk: Buffer, _encoding: string, callback: () => void) {
+          stderr += chunk.toString();
+          callback();
+        },
+      });
+
+      this.exec
+        .exec(
+          this.config.namespace,
+          podName,
+          'podman', // container name
+          fullCommand,
+          stdoutStream,
+          stderrStream,
+          null, // stdin
+          false, // tty
+          (status) => {
+            const exitCode = status?.status === 'Success' ? 0 : 1;
+            console.log(`[PodManager] Exec completed with code ${exitCode}`);
+            resolve({ stdout, stderr, exitCode });
+          }
+        )
+        .catch(reject);
+    });
   }
 }
 

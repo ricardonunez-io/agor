@@ -23,6 +23,7 @@ NC='\033[0m'
 # Default values
 TAG="${TAG:-dev}"
 REGISTRY="${REGISTRY:-}"
+VITE_DAEMON_URL="${VITE_DAEMON_URL:-http://agor.local}"
 PUSH=false
 DEPLOY=false
 CLUSTER_TYPE=""
@@ -62,16 +63,19 @@ if [[ -n "$REGISTRY" ]]; then
     DAEMON_IMAGE="${REGISTRY}/agor/daemon:${TAG}"
     UI_IMAGE="${REGISTRY}/agor/ui:${TAG}"
     SHELL_IMAGE="${REGISTRY}/agor/shell:${TAG}"
+    PODMAN_IMAGE="${REGISTRY}/agor/podman:${TAG}"
 else
     DAEMON_IMAGE="agor/daemon:${TAG}"
     UI_IMAGE="agor/ui:${TAG}"
     SHELL_IMAGE="agor/shell:${TAG}"
+    PODMAN_IMAGE="agor/podman:${TAG}"
 fi
 
 echo -e "${CYAN}Building Agor Docker images${NC}"
 echo -e "  Daemon: ${DAEMON_IMAGE}"
 echo -e "  UI:     ${UI_IMAGE}"
 echo -e "  Shell:  ${SHELL_IMAGE}"
+echo -e "  Podman: ${PODMAN_IMAGE}"
 echo ""
 
 # Build daemon
@@ -85,6 +89,7 @@ echo -e "${GREEN}✓ Daemon image built${NC}"
 # Build UI
 echo -e "${YELLOW}Building UI image...${NC}"
 docker build \
+    --build-arg VITE_DAEMON_URL="$VITE_DAEMON_URL" \
     -t "$UI_IMAGE" \
     -f "$SCRIPT_DIR/docker/Dockerfile.ui" \
     "$PROJECT_ROOT"
@@ -98,12 +103,21 @@ docker build \
     "$SCRIPT_DIR/docker"
 echo -e "${GREEN}✓ Shell image built${NC}"
 
+# Build podman pod image (for docker-compose environments)
+echo -e "${YELLOW}Building podman pod image...${NC}"
+docker build \
+    -t "$PODMAN_IMAGE" \
+    -f "$SCRIPT_DIR/docker/Dockerfile.podman" \
+    "$SCRIPT_DIR/docker"
+echo -e "${GREEN}✓ Podman image built${NC}"
+
 # Push if requested
 if $PUSH; then
     echo -e "${YELLOW}Pushing images to registry...${NC}"
     docker push "$DAEMON_IMAGE"
     docker push "$UI_IMAGE"
     docker push "$SHELL_IMAGE"
+    docker push "$PODMAN_IMAGE"
     echo -e "${GREEN}✓ Images pushed${NC}"
 fi
 
@@ -119,12 +133,14 @@ if $DEPLOY; then
             minikube image load "$DAEMON_IMAGE"
             minikube image load "$UI_IMAGE"
             minikube image load "$SHELL_IMAGE"
+            minikube image load "$PODMAN_IMAGE"
             ;;
         kind)
             echo -e "${YELLOW}Loading images into kind...${NC}"
             kind load docker-image "$DAEMON_IMAGE"
             kind load docker-image "$UI_IMAGE"
             kind load docker-image "$SHELL_IMAGE"
+            kind load docker-image "$PODMAN_IMAGE"
             ;;
     esac
 

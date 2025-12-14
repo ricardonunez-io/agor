@@ -65,8 +65,34 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Zellij from GitHub releases
+# Install Docker CLI (client only, no daemon) and Docker Compose plugin
+# Used to communicate with Podman pods via DOCKER_HOST
 ARG TARGETARCH
+RUN DOCKER_ARCH=$(case "${TARGETARCH}" in \
+        "amd64") echo "x86_64" ;; \
+        "arm64") echo "aarch64" ;; \
+        *) echo "x86_64" ;; \
+    esac) && \
+    # Install docker CLI
+    curl -fsSL "https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-24.0.7.tgz" \
+    | tar -xz --strip-components=1 -C /usr/local/bin docker/docker && \
+    chmod +x /usr/local/bin/docker && \
+    # Install docker-compose standalone (v2)
+    COMPOSE_ARCH=$(case "${TARGETARCH}" in \
+        "amd64") echo "x86_64" ;; \
+        "arm64") echo "aarch64" ;; \
+        *) echo "x86_64" ;; \
+    esac) && \
+    curl -fsSL "https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-${COMPOSE_ARCH}" \
+    -o /usr/local/bin/docker-compose && \
+    chmod +x /usr/local/bin/docker-compose && \
+    # Create docker cli plugins directory and symlink for "docker compose" command
+    mkdir -p /usr/local/lib/docker/cli-plugins && \
+    ln -s /usr/local/bin/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose && \
+    docker --version && \
+    docker-compose --version
+
+# Install Zellij from GitHub releases
 RUN ARCH=$(case "${TARGETARCH}" in \
         "amd64") echo "x86_64" ;; \
         "arm64") echo "aarch64" ;; \
@@ -75,6 +101,7 @@ RUN ARCH=$(case "${TARGETARCH}" in \
     curl -fsSL "https://github.com/zellij-org/zellij/releases/latest/download/zellij-${ARCH}-unknown-linux-musl.tar.gz" \
     | tar -xz -C /usr/local/bin && \
     chmod +x /usr/local/bin/zellij
+
 
 # Create agor user with uid 1000 (replacing node user from base image)
 # Add passwordless sudo for Unix user management and impersonation

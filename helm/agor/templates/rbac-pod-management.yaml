@@ -8,10 +8,14 @@ metadata:
   labels:
     {{- include "agor.labels" . | nindent 4 }}
 rules:
-# Pod management (shell pods, Podman pods)
+# Deployment management (shell deployments, Podman deployments)
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["create", "delete", "get", "list", "watch", "patch"]
+# Pod read access (for listing pods from deployments, exec)
 - apiGroups: [""]
   resources: ["pods"]
-  verbs: ["create", "delete", "get", "list", "watch", "patch"]
+  verbs: ["get", "list", "watch"]
 # Terminal streaming via exec (get required for initial connection, create for exec)
 - apiGroups: [""]
   resources: ["pods/exec"]
@@ -20,10 +24,14 @@ rules:
 - apiGroups: [""]
   resources: ["pods/log"]
   verbs: ["get"]
-# Service management (for Podman sockets)
+# Service management (for Podman sockets and app services)
 - apiGroups: [""]
   resources: ["services"]
-  verbs: ["create", "delete", "get", "list"]
+  verbs: ["create", "delete", "get", "list", "patch", "update"]
+# Ingress management (for app URLs)
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["create", "delete", "get", "list", "patch", "update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

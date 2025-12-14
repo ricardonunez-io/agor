@@ -30,7 +30,7 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { Writable } from 'node:stream';
+import { PassThrough, Writable } from 'node:stream';
 import {
   createUserProcessEnvironment,
   loadConfig,
@@ -501,6 +501,26 @@ export class TerminalsService {
       throw new Error('Pod mode requires authenticated user');
     }
 
+    // Check if there's already an active session for this user+worktree
+    for (const [existingTerminalId, existingSession] of this.sessions.entries()) {
+      if (
+        existingSession.mode === 'pod' &&
+        existingSession.userId === resolvedUserId &&
+        existingSession.worktreeId === data.worktreeId
+      ) {
+        console.log(
+          `♻️ [Pod Mode] Reusing existing terminal ${existingTerminalId} for user ${resolvedUserId.substring(0, 8)} in worktree ${data.worktreeId.substring(0, 8)}`
+        );
+        return {
+          terminalId: existingTerminalId,
+          cwd: existingSession.cwd,
+          podName: (existingSession as PodTerminalSession).podName,
+          worktreeName: undefined, // Could fetch if needed
+          mode: 'pod',
+        };
+      }
+    }
+
     const worktreeRepo = new WorktreeRepository(this.db);
     const worktree = await worktreeRepo.findById(data.worktreeId);
     if (!worktree) {
@@ -599,16 +619,32 @@ export class TerminalsService {
       `[Pod Mode] Starting exec in pod ${podName} with Zellij session ${zellijSession} (${cols}x${rows})`
     );
 
-    // Create WebSocket-like stream for exec
-    // Note: @kubernetes/client-node exec is WebSocket-based
+    // Create stdout stream that emits data to our terminal events
+    const stdoutStream = new Writable({
+      write: (chunk: Buffer, _encoding: string, callback: () => void) => {
+        if (chunk.length > 0) {
+          this.app.service('terminals').emit('data', {
+            terminalId,
+            data: chunk.toString(),
+          });
+        }
+        callback();
+      },
+    });
+
+    // Create stdin as PassThrough stream that stays open
+    // This is critical - without an open stdin, TTY processes exit immediately
+    const stdinStream = new PassThrough();
+
+    // Create exec with all streams for TTY mode
     const execPromise = exec.exec(
       namespace,
       podName,
       'shell', // container name
-      ['zellij', 'attach', zellijSession, '--create'], // Zellij session like daemon mode
-      process.stdout, // Will be replaced with proper stream handling
-      process.stderr,
-      process.stdin,
+      ['zellij', 'attach', zellijSession, '--create'],
+      stdoutStream,
+      stdoutStream, // stderr goes to same stream for TTY
+      stdinStream, // stdin must be provided for TTY to stay open
       true, // TTY
       (status) => {
         console.log(`[Pod Mode] Exec status for ${terminalId}:`, status);
@@ -621,16 +657,7 @@ export class TerminalsService {
     );
 
     // The exec returns a WebSocket connection
-    // We need to pipe data through our terminal events
     const ws = await execPromise;
-
-    // Handle incoming data from pod
-    ws.on('message', (data: Buffer | string) => {
-      this.app.service('terminals').emit('data', {
-        terminalId,
-        data: data.toString(),
-      });
-    });
 
     ws.on('close', () => {
       console.log(`[Pod Mode] WebSocket closed for ${terminalId}`);
@@ -646,19 +673,8 @@ export class TerminalsService {
     });
 
     // Store stdin stream reference for sending input
-    // The exec() method returns a WebSocket, we can send data via ws.send()
-    // Update session with ability to send input
-    session.stdinStream = {
-      write: (data: string | Buffer) => {
-        if (ws.readyState === ws.OPEN) {
-          // Kubernetes exec WebSocket protocol:
-          // First byte is stream type (0=stdin, 1=stdout, 2=stderr, 4=resize)
-          const payload = Buffer.concat([Buffer.from([0]), Buffer.from(data)]);
-          ws.send(payload);
-        }
-        return true;
-      },
-    } as Writable;
+    // Write to the PassThrough stream which pipes to the WebSocket
+    session.stdinStream = stdinStream;
 
     // Store WebSocket reference for resize
     (session as PodTerminalSession & { ws?: WebSocket }).ws = ws;

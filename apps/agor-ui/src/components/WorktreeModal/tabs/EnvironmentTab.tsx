@@ -16,6 +16,7 @@ import {
   CopyOutlined,
   DownloadOutlined,
   EditOutlined,
+  ExportOutlined,
   FileTextOutlined,
   FireOutlined,
   LoadingOutlined,
@@ -680,6 +681,30 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
                   }
                 >
                   View Logs
+                </Button>
+
+                <Button
+                  size="small"
+                  icon={<ExportOutlined />}
+                  onClick={() => {
+                    const appUrl = worktree.environment_instance?.access_urls?.[0]?.url;
+                    if (appUrl) {
+                      window.open(appUrl, '_blank', 'noopener,noreferrer');
+                    }
+                  }}
+                  disabled={
+                    envStatus !== 'running' ||
+                    !worktree.environment_instance?.access_urls?.length
+                  }
+                  title={
+                    envStatus !== 'running'
+                      ? 'Start the environment first'
+                      : !worktree.environment_instance?.access_urls?.length
+                        ? 'No app URL configured'
+                        : `Open ${worktree.environment_instance?.access_urls?.[0]?.url}`
+                  }
+                >
+                  Open App
                 </Button>
               </div>
 

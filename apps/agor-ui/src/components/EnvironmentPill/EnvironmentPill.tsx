@@ -3,6 +3,7 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   EditOutlined,
+  ExportOutlined,
   FileTextOutlined,
   FireOutlined,
   GlobalOutlined,
@@ -38,8 +39,8 @@ export function EnvironmentPill({
   const hasConfig = !!repo.environment_config;
   const env = worktree.environment_instance;
 
-  // Get static app_url (user-editable, initialized from template)
-  const environmentUrl = worktree.app_url;
+  // Get environment URL - prefer runtime access_urls (from ingress), fall back to static app_url
+  const environmentUrl = env?.access_urls?.[0]?.url || worktree.app_url;
 
   // Case 1: No config at all - show grayed discovery pill
   if (!hasConfig) {
@@ -311,6 +312,35 @@ export function EnvironmentPill({
                 />
               </Tooltip>
             )}
+            {/* Open App button */}
+            <Tooltip
+              title={
+                !isRunning
+                  ? 'Start environment first'
+                  : !environmentUrl
+                    ? 'No app URL configured'
+                    : `Open ${environmentUrl}`
+              }
+            >
+              <Button
+                type="text"
+                size="small"
+                icon={<ExportOutlined />}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (isRunning && environmentUrl) {
+                    window.open(environmentUrl, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+                disabled={!isRunning || !environmentUrl}
+                style={{
+                  height: 22,
+                  width: 22,
+                  minWidth: 22,
+                  padding: 0,
+                }}
+              />
+            </Tooltip>
             {onNukeEnvironment && worktree.nuke_command && (
               <Tooltip title="Nuke environment (destructive - removes all data and volumes)">
                 <Button

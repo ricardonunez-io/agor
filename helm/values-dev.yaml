@@ -11,6 +11,9 @@ daemon:
   # Symlink for path compatibility with local dev (e.g., /home/agorpg -> /home/agor)
   homeSymlink: agorpg
 
+  # Force pod restart on every helm upgrade (picks up new images)
+  forceRollout: true
+
   image:
     repository: agor/daemon
     tag: dev
@@ -49,6 +52,15 @@ daemon:
             limits:
               cpu: "1"
               memory: 1Gi
+        podmanPod:
+          image: agor/podman:dev
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 3Gi
         storage:
           dataPvc: agor-data
 
@@ -64,6 +76,15 @@ daemon:
         limits:
           cpu: "1"
           memory: 1Gi
+    podmanPod:
+      image: agor/podman:dev
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          cpu: "4"
+          memory: 6Gi
     storage:
       dataPvc: agor-data
 
@@ -98,16 +119,13 @@ ui:
       cpu: 100m
       memory: 64Mi
 
-# Enable ingress for local development with nginx
+# Enable ingress for local development with Traefik (Colima default)
 ingress:
   enabled: true
-  className: nginx
+  className: traefik
   annotations:
-    # WebSocket support
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
-    nginx.ingress.kubernetes.io/upstream-hash-by: "$request_uri"
+    # WebSocket support for Traefik
+    traefik.ingress.kubernetes.io/router.middlewares: ""
   hosts:
     - host: agor.local
       paths:

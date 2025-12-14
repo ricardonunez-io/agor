@@ -1,0 +1,22 @@
+# Agor Podman Pod Dockerfile
+# Podman with podman-compose for running user environments
+#
+# Based on official podman image, adds podman-compose
+
+FROM quay.io/podman/stable
+
+# Install podman-compose (Python-based docker-compose compatible tool)
+# The podman image is Fedora-based, use dnf
+RUN dnf install -y \
+    python3-pip \
+    git \
+    && dnf clean all && \
+    pip3 install podman-compose
+
+# Verify installation
+RUN podman --version && \
+    podman-compose --version
+
+# Default command: run podman system service
+# Creates socket at /run/podman/podman.sock and TCP on 2375
+CMD ["sh", "-c", "podman system service --time=0 unix:///run/podman/podman.sock & podman system service --time=0 tcp://0.0.0.0:2375"]

@@ -13,6 +13,7 @@ import { createUserProcessEnvironment, ENVIRONMENT, PAGINATION } from '@agor/cor
 import { type Database, WorktreeRepository } from '@agor/core/db';
 import type { Application } from '@agor/core/feathers';
 import { cleanWorktree, removeWorktree } from '@agor/core/git';
+import { getDockerHost, getPodManager, type PodManager } from '@agor/core/kubernetes';
 import type { BoardID, QueryParams, Repo, UUID, Worktree, WorktreeID } from '@agor/core/types';
 import { getNextRunTime, validateCron } from '@agor/core/utils/cron';
 import { DrizzleService } from '../adapters/drizzle';
@@ -67,6 +68,18 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     this.worktreeRepo = worktreeRepo;
     this.db = db;
     this.app = app;
+  }
+
+  /**
+   * Get PodManager if pod mode is enabled (uses singleton)
+   */
+  private getPodManager(): PodManager | null {
+    try {
+      const pm = getPodManager();
+      return pm.isEnabled() ? pm : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -199,7 +212,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
   }
 
   /**
-   * Override remove to support filesystem deletion
+   * Override remove to support filesystem deletion and pod cleanup
    */
   async remove(id: WorktreeID, params?: WorktreeParams): Promise<Worktree> {
     const { deleteFromFilesystem } = params?.query || {};
@@ -210,6 +223,14 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     // Remove from database FIRST for instant UI feedback
     // CASCADE will clean up related comments automatically
     const result = await super.remove(id, params);
+
+    // Clean up Kubernetes pods/deployments for this worktree (async, non-blocking)
+    this.cleanupWorktreePods(id).catch((error) => {
+      console.warn(
+        `⚠️  Failed to cleanup pods for worktree ${id}:`,
+        error instanceof Error ? error.message : String(error)
+      );
+    });
 
     // Then remove from filesystem (slower operation, happens in background)
     if (deleteFromFilesystem) {
@@ -229,6 +250,40 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     }
 
     return result as Worktree;
+  }
+
+  /**
+   * Clean up all Kubernetes pods/deployments associated with a worktree
+   */
+  private async cleanupWorktreePods(worktreeId: WorktreeID): Promise<void> {
+    try {
+      const podManager = getPodManager();
+      if (!podManager.isEnabled()) return;
+
+      console.log(`🧹 Cleaning up pods for worktree ${worktreeId.substring(0, 8)}`);
+
+      // Delete Podman deployment and service
+      await podManager.deletePodmanPod(worktreeId);
+
+      // Delete Ingress and app Service (if created)
+      await podManager.deleteWorktreeIngress(worktreeId);
+
+      // List and delete all shell pods for this worktree (for all users)
+      const shellPods = await podManager.listShellPods();
+      for (const pod of shellPods) {
+        if (pod.worktreeId === worktreeId && pod.userId) {
+          await podManager.deleteShellPod(worktreeId, pod.userId);
+        }
+      }
+
+      console.log(`✅ Pods cleaned up for worktree ${worktreeId.substring(0, 8)}`);
+    } catch (error) {
+      // Log but don't fail - this is best-effort cleanup
+      console.error(
+        `Failed to cleanup pods for worktree ${worktreeId}:`,
+        error instanceof Error ? error.message : String(error)
+      );
+    }
   }
 
   /**
@@ -555,55 +610,127 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
 
       console.log(`🚀 Starting environment for worktree ${worktree.name}: ${command}`);
 
-      // Create log directory
-      const logPath = join(
-        homedir(),
-        '.agor',
-        'logs',
-        'worktrees',
-        worktree.worktree_id,
-        'environment.log'
-      );
-      await mkdir(dirname(logPath), { recursive: true });
-
       // Create clean environment for user process (filters Agor-internal vars like NODE_ENV)
       const env = await createUserProcessEnvironment(worktree.created_by, this.db);
 
-      // Execute command and wait for it to complete
-      // The command should start services and return (e.g., docker-compose up -d)
-      await new Promise<void>((resolve, reject) => {
-        const childProcess = spawn(command, {
-          cwd: worktree.path,
-          shell: true,
-          stdio: 'inherit', // Show output directly in daemon logs
-          env, // Pass clean environment without Agor-internal variables
+      const podManager = this.getPodManager();
+      if (podManager) {
+        // Pod mode: ensure podman pod exists, then use DOCKER_HOST to communicate with it
+        console.log(`[Pod Mode] Ensuring Podman pod exists for worktree ${worktree.worktree_id}`);
+        await podManager.ensurePodmanPod(worktree.worktree_id, worktree.path);
+
+        // Set DOCKER_HOST to point to the podman pod's Docker-compatible API
+        // Also disable BuildKit which requires cgroups access that podman in k8s doesn't have
+        const dockerHost = getDockerHost(worktree.worktree_id, podManager.getConfig().namespace);
+        const podEnv = {
+          ...env,
+          DOCKER_HOST: dockerHost,
+          DOCKER_BUILDKIT: '0',
+          COMPOSE_DOCKER_CLI_BUILD: '0',
+        };
+
+        console.log(`[Pod Mode] DOCKER_HOST=${dockerHost}`);
+        console.log(`[Pod Mode] Running command: ${command}`);
+        console.log(`[Pod Mode] CWD: ${worktree.path}`);
+
+        // Execute command locally - docker CLI will talk to podman pod via DOCKER_HOST
+        await new Promise<void>((resolve, reject) => {
+          const childProcess = spawn(command, {
+            cwd: worktree.path,
+            shell: true,
+            stdio: 'inherit',
+            env: podEnv,
+          });
+
+          childProcess.on('exit', (code) => {
+            if (code === 0) {
+              console.log(`✅ Start command completed successfully for ${worktree.name}`);
+              resolve();
+            } else {
+              reject(new Error(`Start command exited with code ${code}`));
+            }
+          });
+
+          childProcess.on('error', reject);
         });
+      } else {
+        // Daemon mode: spawn locally (no DOCKER_HOST, uses local Docker daemon)
+        await new Promise<void>((resolve, reject) => {
+          const childProcess = spawn(command, {
+            cwd: worktree.path,
+            shell: true,
+            stdio: 'inherit',
+            env,
+          });
 
-        childProcess.on('exit', (code) => {
-          if (code === 0) {
-            console.log(`✅ Start command completed successfully for ${worktree.name}`);
-            resolve();
-          } else {
-            reject(new Error(`Start command exited with code ${code}`));
-          }
+          childProcess.on('exit', (code) => {
+            if (code === 0) {
+              console.log(`✅ Start command completed successfully for ${worktree.name}`);
+              resolve();
+            } else {
+              reject(new Error(`Start command exited with code ${code}`));
+            }
+          });
+
+          childProcess.on('error', reject);
         });
-
-        childProcess.on('error', reject);
-      });
-
-      // Use static app_url (initialized from template at worktree creation)
-      let access_urls: Array<{ name: string; url: string }> | undefined;
-      if (worktree.app_url) {
-        access_urls = [{ name: 'App', url: worktree.app_url }];
       }
 
-      // Keep status as 'starting' - let health checks transition to 'running'
-      // The first successful health check will transition from 'starting' → 'running'
-      // This prevents premature "healthy" status before app is truly ready
+      // Use static app_url (initialized from template at worktree creation)
+      // If app_url is a port number or localhost URL, create an Ingress for it
+      let access_urls: Array<{ name: string; url: string }> | undefined;
+      if (worktree.app_url && podManager) {
+        // Match: "8000" or "http://localhost:8000" or "http://127.0.0.1:8000"
+        const portOnlyMatch = worktree.app_url.match(/^(\d+)$/);
+        const localhostMatch = worktree.app_url.match(/^https?:\/\/(?:localhost|127\.0\.0\.1):(\d+)/);
+        const port = portOnlyMatch?.[1] || localhostMatch?.[1];
+
+        if (port) {
+          // Create Ingress for the port
+          const portNum = parseInt(port, 10);
+          try {
+            const ingressUrl = await podManager.createWorktreeIngress(
+              worktree.worktree_id,
+              worktree.name,
+              portNum
+            );
+            access_urls = [{ name: 'App', url: ingressUrl }];
+            console.log(`✅ Created Ingress for ${worktree.name}: ${ingressUrl}`);
+          } catch (error) {
+            console.error(
+              `⚠️ Failed to create Ingress for ${worktree.name}:`,
+              error instanceof Error ? error.message : String(error)
+            );
+            // Fall back to port-only URL so user can at least see intended port
+            access_urls = [{ name: 'App', url: `http://localhost:${portNum}` }];
+          }
+        } else {
+          // app_url is a full URL (not localhost) - use as-is
+          access_urls = [{ name: 'App', url: worktree.app_url }];
+        }
+      } else if (worktree.app_url) {
+        // No podManager (daemon mode) - convert port to localhost URL if needed
+        const portOnlyMatch = worktree.app_url.match(/^(\d+)$/);
+        if (portOnlyMatch) {
+          access_urls = [{ name: 'App', url: `http://localhost:${portOnlyMatch[1]}` }];
+        } else {
+          access_urls = [{ name: 'App', url: worktree.app_url }];
+        }
+      }
+
+      // Determine final status:
+      // - If health_check_url is configured, stay 'starting' and let health checks transition to 'running'
+      // - If no health check, transition directly to 'running' (start command succeeded)
+      const finalStatus = worktree.health_check_url ? undefined : 'running';
+
+      if (!worktree.health_check_url) {
+        console.log(`✅ No health check configured - transitioning directly to 'running'`);
+      }
+
       return await this.updateEnvironment(
         id,
         {
-          // Don't change status - keep as 'starting' until first successful health check
+          status: finalStatus,
           access_urls,
         },
         params
@@ -653,20 +780,37 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
         // Create clean environment for user process (filters Agor-internal vars like NODE_ENV)
         const env = await createUserProcessEnvironment(worktree.created_by, this.db);
 
-        // Execute down command
+        const podManager = this.getPodManager();
+        // Set DOCKER_HOST if in pod mode, also disable BuildKit for cgroup compatibility
+        const podEnv = podManager
+          ? {
+              ...env,
+              DOCKER_HOST: getDockerHost(worktree.worktree_id, podManager.getConfig().namespace),
+              DOCKER_BUILDKIT: '0',
+              COMPOSE_DOCKER_CLI_BUILD: '0',
+            }
+          : env;
+
+        if (podManager) {
+          console.log(`[Pod Mode] DOCKER_HOST=${podEnv.DOCKER_HOST}`);
+        }
+        console.log(`Running stop command: ${command}`);
+
+        // Execute command - docker CLI will talk to podman pod via DOCKER_HOST if set
         await new Promise<void>((resolve, reject) => {
           const stopProcess = spawn(command, {
             cwd: worktree.path,
             shell: true,
             stdio: 'inherit',
-            env, // Pass clean environment without Agor-internal variables
+            env: podEnv,
           });
 
           stopProcess.on('exit', (code) => {
             if (code === 0) {
+              console.log(`✅ Stop command completed successfully for ${worktree.name}`);
               resolve();
             } else {
-              reject(new Error(`Down command exited with code ${code}`));
+              reject(new Error(`Stop command exited with code ${code}`));
             }
           });
 
@@ -687,6 +831,20 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
               `Failed to kill process ${worktree.environment_instance.process.pid}: ${error}`
             );
           }
+        }
+      }
+
+      // Clean up Ingress if it was created for this worktree
+      const podManager = this.getPodManager();
+      if (podManager && worktree.app_url?.match(/^\d+$/)) {
+        try {
+          await podManager.deleteWorktreeIngress(worktree.worktree_id);
+          console.log(`✅ Deleted Ingress for ${worktree.name}`);
+        } catch (error) {
+          console.warn(
+            `⚠️ Failed to delete Ingress for ${worktree.name}:`,
+            error instanceof Error ? error.message : String(error)
+          );
         }
       }
 
@@ -770,17 +928,34 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       // Create clean environment for user process (filters Agor-internal vars like NODE_ENV)
       const env = await createUserProcessEnvironment(worktree.created_by, this.db);
 
-      // Execute nuke command
+      const podManager = this.getPodManager();
+      // Set DOCKER_HOST if in pod mode, also disable BuildKit for cgroup compatibility
+      const podEnv = podManager
+        ? {
+            ...env,
+            DOCKER_HOST: getDockerHost(worktree.worktree_id, podManager.getConfig().namespace),
+            DOCKER_BUILDKIT: '0',
+            COMPOSE_DOCKER_CLI_BUILD: '0',
+          }
+        : env;
+
+      if (podManager) {
+        console.log(`[Pod Mode] DOCKER_HOST=${podEnv.DOCKER_HOST}`);
+      }
+      console.log(`Executing nuke command: ${command}`);
+
+      // Execute command - docker CLI will talk to podman pod via DOCKER_HOST if set
       await new Promise<void>((resolve, reject) => {
         const nukeProcess = spawn(command, {
           cwd: worktree.path,
           shell: true,
           stdio: 'inherit',
-          env, // Pass clean environment without Agor-internal variables
+          env: podEnv,
         });
 
         nukeProcess.on('exit', (code) => {
           if (code === 0) {
+            console.log(`✅ Nuke command completed successfully for ${worktree.name}`);
             resolve();
           } else {
             reject(new Error(`Nuke command exited with code ${code}`));
@@ -863,7 +1038,19 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     }
 
     // Use static health_check_url (initialized from template at worktree creation)
-    const healthUrl = worktree.health_check_url;
+    // In pod mode, convert localhost URLs to internal service URL
+    let healthUrl = worktree.health_check_url;
+    const podManager = this.getPodManager();
+    if (podManager && healthUrl) {
+      const localhostMatch = healthUrl.match(/^(https?):\/\/(?:localhost|127\.0\.0\.1):(\d+)(\/.*)?$/);
+      if (localhostMatch) {
+        const [, protocol, port, path = ''] = localhostMatch;
+        const shortId = worktree.worktree_id.substring(0, 8);
+        // Use internal service URL instead of localhost
+        healthUrl = `${protocol}://app-${shortId}.${podManager.getConfig().namespace}.svc:${port}${path}`;
+        console.log(`[Health] Converted localhost URL to internal service: ${healthUrl}`);
+      }
+    }
 
     // Track previous health status to detect changes
     const previousHealthStatus = worktree.environment_instance?.last_health_check?.status;
@@ -985,7 +1172,22 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       // Create clean environment for user process (filters Agor-internal vars like NODE_ENV)
       const env = await createUserProcessEnvironment(worktree.created_by, this.db);
 
-      // Execute command with timeout and output limits
+      const podManager = this.getPodManager();
+      // Set DOCKER_HOST if in pod mode, also disable BuildKit for cgroup compatibility
+      const podEnv = podManager
+        ? {
+            ...env,
+            DOCKER_HOST: getDockerHost(worktree.worktree_id, podManager.getConfig().namespace),
+            DOCKER_BUILDKIT: '0',
+            COMPOSE_DOCKER_CLI_BUILD: '0',
+          }
+        : env;
+
+      if (podManager) {
+        console.log(`[Pod Mode] DOCKER_HOST=${podEnv.DOCKER_HOST}`);
+      }
+
+      // Execute command - docker CLI will talk to podman pod via DOCKER_HOST if set
       const result = await new Promise<{
         stdout: string;
         stderr: string;
@@ -994,7 +1196,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
         const childProcess = spawn(command, {
           cwd: worktree.path,
           shell: true,
-          env, // Pass clean environment without Agor-internal variables
+          env: podEnv,
         });
 
         let stdout = '';

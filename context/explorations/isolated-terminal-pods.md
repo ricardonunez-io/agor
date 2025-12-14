@@ -1,11 +1,12 @@
 # Isolated Terminal Pods
 
-**Status**: Exploration
+**Status**: Implementation
 **Created**: 2024-12-07
+**Updated**: 2024-12-13
 
 ## Overview
 
-Enable terminals to run in dedicated Kubernetes pods instead of the daemon pod. Each worktree gets its own isolated pod with Podman, allowing users to run docker-compose stacks without affecting other users or worktrees.
+Enable terminals to run in dedicated Kubernetes Deployments instead of the daemon pod. Each worktree gets its own isolated Podman Deployment for running docker-compose, and each user gets their own Shell Deployment for terminal access.
 
 ## Motivation
 
@@ -24,29 +25,52 @@ Enable terminals to run in dedicated Kubernetes pods instead of the daemon pod. 
 
 ### High-Level Design
 
-The architecture separates **shell pods** (isolated per user) from **Podman pods** (shared per worktree):
+The architecture separates **Shell Deployments** (isolated per user) from **Podman Deployments** (shared per worktree):
 
 ```
-Worktree: feature-xyz
+Worktree A (feature-xyz)
 │
-├── Shell Pod (user: jose)          ← Isolated terminal
-│   └── Zellij + DOCKER_HOST
+├── Podman Deployment (worktree)     ← Shared containers, runs docker-compose
+│   ├── Service: podman-a44d097c:2375
+│   ├── app container
+│   ├── db container
+│   └── redis container
 │
-├── Shell Pod (user: alice)         ← Isolated terminal
-│   └── Zellij + DOCKER_HOST
+├── Shell Deployment (user: jose)    ← Isolated terminal
+│   └── DOCKER_HOST → podman-a44d097c:2375
 │
-└── Podman Pod (worktree)           ← Shared containers
-    ├── podman socket :2375
-    ├── app container
-    ├── db container
-    └── redis container
+└── Shell Deployment (user: alice)   ← Isolated terminal
+    └── DOCKER_HOST → podman-a44d097c:2375
+
+Worktree B (bugfix-123)              ← Completely separate
+│
+├── Podman Deployment (worktree)
+│   └── Service: podman-b55e198d:2375
+│
+└── Shell Deployment (user: jose)    ← Same user, different worktree
+    └── DOCKER_HOST → podman-b55e198d:2375
 ```
+
+### User Actions Flow
+
+**"Start Environment" Button** (per worktree):
+1. Creates Podman Deployment if not exists
+2. Creates Podman Service (exposes port 2375)
+3. Waits for Deployment to be ready
+4. Executes `docker-compose up` inside Podman pod
+
+**"Open Terminal" Button** (per user per worktree):
+1. Ensures Podman Deployment exists (calls Start Environment flow)
+2. Creates Shell Deployment for this user + worktree
+3. Sets `DOCKER_HOST=tcp://podman-{worktreeId}.agor.svc:2375`
+4. Opens terminal via `kubectl exec`
 
 **Key benefits:**
 - Users have isolated terminals (can't see each other's shell history, processes)
 - Shared docker-compose stack (both users see same running app)
 - One set of containers per worktree (resource efficient)
 - Users manage containers via `DOCKER_HOST` environment variable
+- Deployments provide self-healing (pods auto-restart on crash)
 
 ### Mermaid Diagram
 
@@ -337,13 +361,13 @@ environment:
   terminal_mode: pod  # or 'daemon'
 ```
 
-## Pod Specifications
+## Deployment Specifications
 
-### Shell Pod (per user per worktree)
+### Shell Deployment (per user per worktree)
 
 ```yaml
-apiVersion: v1
-kind: Pod
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: agor-shell-{worktree_id_short}-{user_id_short}
   namespace: agor
@@ -352,49 +376,98 @@ metadata:
     app.kubernetes.io/component: terminal
     agor.io/worktree-id: "{worktree_id}"
     agor.io/user-id: "{user_id}"
-  annotations:
-    agor.io/created-at: "{timestamp}"
-    agor.io/last-activity: "{timestamp}"
 spec:
-  serviceAccountName: agor-shell-pod
-
-  containers:
-  - name: shell
-    image: agor/shell:latest  # Lightweight: zellij + docker CLI + git
-    command: ["sleep", "infinity"]
-    env:
-    - name: WORKTREE_PATH
-      value: "/worktrees/{repo_slug}/{worktree_name}"
-    - name: DOCKER_HOST
-      value: "tcp://podman-{worktree_id_short}.agor.svc:2375"
-    volumeMounts:
-    - name: worktrees
-      mountPath: /worktrees
-    - name: repos
-      mountPath: /repos
-    workingDir: "/worktrees/{repo_slug}/{worktree_name}"
-    resources:
-      requests:
-        cpu: 50m
-        memory: 128Mi
-      limits:
-        cpu: 1
-        memory: 1Gi
-
-  volumes:
-  - name: worktrees
-    persistentVolumeClaim:
-      claimName: agor-worktrees
-  - name: repos
-    persistentVolumeClaim:
-      claimName: agor-repos
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agor-shell-pod
+      agor.io/worktree-id: "{worktree_id}"
+      agor.io/user-id: "{user_id}"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agor-shell-pod
+        app.kubernetes.io/component: terminal
+        agor.io/worktree-id: "{worktree_id}"
+        agor.io/user-id: "{user_id}"
+      annotations:
+        agor.io/created-at: "{timestamp}"
+        agor.io/last-activity: "{timestamp}"
+    spec:
+      serviceAccountName: agor-shell-pod
+      securityContext:
+        fsGroup: {user_unix_uid}  # For EFS file permissions
+      initContainers:
+      - name: init-user
+        image: busybox:1.36
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+        command: ["sh", "-c"]
+        args:
+        - |
+          # Create /etc/passwd and /etc/group with user's UID
+          cat > /etc-override/passwd << 'EOF'
+          root:x:0:0:root:/root:/bin/sh
+          nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin
+          EOF
+          echo "{username}:x:{uid}:{gid}:{username}:/home/agor:/bin/bash" >> /etc-override/passwd
+          cat > /etc-override/group << 'EOF'
+          root:x:0:
+          nobody:x:65534:
+          EOF
+          echo "{username}:x:{gid}:" >> /etc-override/group
+          chmod 644 /etc-override/passwd /etc-override/group
+        volumeMounts:
+        - name: etc-override
+          mountPath: /etc-override
+      containers:
+      - name: shell
+        image: agor/shell:dev
+        command: ["sleep", "infinity"]
+        securityContext:
+          runAsUser: {user_unix_uid}
+          runAsGroup: {user_unix_uid}
+          runAsNonRoot: true
+        env:
+        - name: WORKTREE_PATH
+          value: "{worktree_path}"
+        - name: DOCKER_HOST
+          value: "tcp://podman-{worktree_id_short}.agor.svc:2375"
+        - name: HOME
+          value: "/home/agor"
+        - name: USER
+          value: "{username}"
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: etc-override
+          mountPath: /etc/passwd
+          subPath: passwd
+        - name: etc-override
+          mountPath: /etc/group
+          subPath: group
+        workingDir: "{worktree_path}"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 1
+            memory: 1Gi
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: agor-data
+      - name: etc-override
+        emptyDir: {}
 ```
 
-### Podman Pod (per worktree, shared)
+### Podman Deployment (per worktree, shared)
 
 ```yaml
-apiVersion: v1
-kind: Pod
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: agor-podman-{worktree_id_short}
   namespace: agor
@@ -402,49 +475,65 @@ metadata:
     app.kubernetes.io/name: agor-podman-pod
     app.kubernetes.io/component: container-runtime
     agor.io/worktree-id: "{worktree_id}"
-  annotations:
-    agor.io/created-at: "{timestamp}"
-    agor.io/last-activity: "{timestamp}"
 spec:
-  serviceAccountName: agor-podman-pod
-
-  containers:
-  - name: podman
-    image: quay.io/podman/stable
-    command:
-    - podman
-    - system
-    - service
-    - --time=0
-    - tcp://0.0.0.0:2375
-    securityContext:
-      privileged: true  # Required for nested containers
-    ports:
-    - containerPort: 2375
-      name: docker-api
-    env:
-    - name: WORKTREE_PATH
-      value: "/worktrees/{repo_slug}/{worktree_name}"
-    volumeMounts:
-    - name: worktrees
-      mountPath: /worktrees
-    - name: podman-storage
-      mountPath: /var/lib/containers
-    workingDir: "/worktrees/{repo_slug}/{worktree_name}"
-    resources:
-      requests:
-        cpu: 100m
-        memory: 256Mi
-      limits:
-        cpu: 4
-        memory: 8Gi
-
-  volumes:
-  - name: worktrees
-    persistentVolumeClaim:
-      claimName: agor-worktrees
-  - name: podman-storage
-    emptyDir: {}
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agor-podman-pod
+      agor.io/worktree-id: "{worktree_id}"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agor-podman-pod
+        app.kubernetes.io/component: container-runtime
+        agor.io/worktree-id: "{worktree_id}"
+      annotations:
+        agor.io/created-at: "{timestamp}"
+        agor.io/last-activity: "{timestamp}"
+    spec:
+      serviceAccountName: agor-podman-pod
+      containers:
+      - name: podman
+        image: quay.io/podman/stable
+        command:
+        - podman
+        - system
+        - service
+        - --time=0
+        - tcp://0.0.0.0:2375
+        securityContext:
+          privileged: true  # Required for nested containers
+        ports:
+        - containerPort: 2375
+          name: docker-api
+          protocol: TCP
+        env:
+        - name: WORKTREE_PATH
+          value: "{worktree_path}"
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: podman-storage
+          mountPath: /var/lib/containers
+        workingDir: "{worktree_path}"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 4
+            memory: 8Gi
+        readinessProbe:
+          tcpSocket:
+            port: 2375
+          initialDelaySeconds: 2
+          periodSeconds: 5
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: agor-data
+      - name: podman-storage
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -461,6 +550,7 @@ spec:
   - port: 2375
     targetPort: 2375
     name: docker-api
+    protocol: TCP
 ```
 
 ### Shell Pod Image (Dockerfile.shell)
@@ -994,14 +1084,18 @@ metadata:
   name: agor-daemon
   namespace: agor
 rules:
-# Pod management (shell pods, Podman pods)
+# Deployment management (shell deployments, Podman deployments)
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["create", "delete", "get", "list", "watch", "patch"]
+# Pod read access (for listing pods from deployments, exec)
 - apiGroups: [""]
   resources: ["pods"]
-  verbs: ["create", "delete", "get", "list", "watch", "patch"]
+  verbs: ["get", "list", "watch"]
 # Terminal streaming via exec
 - apiGroups: [""]
   resources: ["pods/exec"]
-  verbs: ["create"]
+  verbs: ["create", "get"]
 # Pod logs (for debugging)
 - apiGroups: [""]
   resources: ["pods/log"]
@@ -1052,33 +1146,35 @@ metadata:
 
 ## Migration Path
 
-### Phase 1: Shell Pod Isolation
-- [ ] Add `terminal_mode` config flag
-- [ ] Build `agor/shell` Docker image (Zellij + docker CLI)
-- [ ] Implement PodManager class
-- [ ] Shell pod creation/deletion
-- [ ] kubectl exec streaming for terminals
-- [ ] GC loop for idle shell pods
-- [ ] EFS PVC setup for worktrees/repos
+### Phase 1: Shell Deployment Isolation ✅
+- [x] Add `terminal_mode` config flag (via `userPods.enabled`)
+- [x] Build `agor/shell` Docker image (Dockerfile.shell)
+- [x] Implement PodManager class with AppsV1Api
+- [x] Shell Deployment creation/deletion
+- [x] kubectl exec streaming for terminals
+- [x] GC loop for idle shell deployments
+- [x] EFS PVC setup (agor-data)
+- [x] Unix UID consistency for file ownership
 
-### Phase 2: Podman Pod + DOCKER_HOST
-- [ ] Podman pod creation with socket exposed
-- [ ] Kubernetes Service for each Podman pod
-- [ ] Set DOCKER_HOST env var in shell pods
-- [ ] Test docker-compose commands from shell pod
-- [ ] GC for orphaned Podman pods (no shell pods)
+### Phase 2: Podman Deployment + DOCKER_HOST ✅
+- [x] Podman Deployment creation with socket exposed
+- [x] Kubernetes Service for each Podman deployment
+- [x] Set DOCKER_HOST env var in shell pods
+- [x] execInPodmanPod for running docker-compose
+- [x] GC for orphaned Podman deployments (no shell deployments)
+- [x] Use Deployments instead of Pods for self-healing
 
 ### Phase 3: Networking & Access
 - [ ] Port forwarding helper in UI (for accessing app ports)
 - [ ] Optional: Ingress per worktree for web access
-- [ ] Health checks for Podman pods
+- [x] Readiness probes for Podman pods
 
 ### Phase 4: Polish
 - [ ] Pod startup optimization (pre-pull images on nodes)
 - [ ] Shell pod image caching
-- [ ] Metrics and monitoring (pod count, resource usage)
+- [ ] Metrics and monitoring (deployment count, resource usage)
 - [ ] Pod logs accessible in UI
-- [ ] Handle pod eviction/restart gracefully
+- [x] Handle pod eviction/restart gracefully (via Deployments)
 
 ## Open Questions
 

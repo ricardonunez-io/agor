@@ -14,6 +14,9 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.daemon.forceRollout }}
+        rollout/timestamp: {{ now | quote }}
+        {{- end }}
         {{- with .Values.daemon.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -53,10 +56,21 @@ spec:
               chown 1000:1000 /home/agor
               chown 1000:1000 /home/agor/.agor
               chown 1000:1000 /home/agor/.agor/config.yaml
-              echo "Config copied successfully"
+
+              # Create symlinks to /data for worktrees and repos
+              echo "Creating symlinks to /data..."
+              mkdir -p /data/worktrees /data/repos
+              ln -sfn /data/worktrees /home/agor/.agor/worktrees
+              ln -sfn /data/repos /home/agor/.agor/repos
+              chown -h 1000:1000 /home/agor/.agor/worktrees /home/agor/.agor/repos
+
+              echo "Config and symlinks ready"
+              ls -la /home/agor/.agor/
           volumeMounts:
             - name: home
               mountPath: /home
+            - name: data
+              mountPath: /data
             - name: config
               mountPath: /etc/agor/config.yaml
               subPath: config.yaml
