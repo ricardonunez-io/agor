@@ -739,6 +739,8 @@ export class PodManager {
             `[PodManager] GC: Deleting orphaned Podman pod ${pod.podName} (idle ${Math.round(idleMs / 60000)}min)`
           );
           await this.deletePodmanPod(pod.worktreeId);
+          // Also delete associated ingress and app service
+          await this.deleteWorktreeIngress(pod.worktreeId);
           deleted++;
         }
       }

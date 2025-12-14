@@ -321,6 +321,20 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       }
     }
 
+    // Clean up Kubernetes ingress and app service (if in pod mode)
+    const podManager = this.getPodManager();
+    if (podManager) {
+      try {
+        await podManager.deleteWorktreeIngress(id);
+        console.log(`🗑️  Deleted ingress and app service for ${worktree.name}`);
+      } catch (error) {
+        console.warn(
+          `Failed to delete ingress/service:`,
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }
+
     // Perform filesystem action first (before DB changes)
     let filesRemoved = 0;
     if (filesystemAction === 'cleaned') {
@@ -969,6 +983,19 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       const managedProcess = this.processes.get(id);
       if (managedProcess) {
         this.processes.delete(id);
+      }
+
+      // Clean up Kubernetes ingress and app service (if in pod mode)
+      if (podManager) {
+        try {
+          await podManager.deleteWorktreeIngress(id);
+          console.log(`🗑️  Deleted ingress and app service for ${worktree.name}`);
+        } catch (error) {
+          console.warn(
+            `Failed to delete ingress/service:`,
+            error instanceof Error ? error.message : String(error)
+          );
+        }
       }
 
       // Update status to 'stopped' with clear nuke message
