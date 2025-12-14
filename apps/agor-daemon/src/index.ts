@@ -240,6 +240,79 @@ async function main() {
   const authStrategies = allowAnonymous ? ['jwt', 'anonymous'] : ['jwt'];
   const requireAuth = authenticate({ strategies: authStrategies });
 
+  /**
+   * Enforces password change requirement.
+   * Users with must_change_password=true are blocked from all services except:
+   * - users (PATCH for password change, GET for own profile)
+   * - authentication (login/logout)
+   * - health (public endpoint)
+   *
+   * NOTE: We fetch fresh user data from DB because JWT token may have stale must_change_password value
+   */
+  const enforcePasswordChange = async (context: HookContext) => {
+    const user = context.params?.user as User | undefined;
+
+    // Skip if no user (anonymous/internal)
+    if (!user) {
+      return context;
+    }
+
+    // Fetch fresh user data from database to check current must_change_password status
+    // (JWT token may have stale data after password change)
+    let freshUser: User;
+    try {
+      freshUser = await context.app.service('users').get(user.user_id, { provider: undefined }); // internal call
+    } catch {
+      // User not found or error - skip enforcement
+      return context;
+    }
+
+    // Skip if flag not set
+    if (!freshUser.must_change_password) {
+      return context;
+    }
+
+    // Allow authentication service (login/logout/refresh)
+    if (context.path === 'authentication' || context.path === 'authentication/refresh') {
+      return context;
+    }
+
+    // Allow health endpoint
+    if (context.path === 'health') {
+      return context;
+    }
+
+    // Allow users service for specific operations:
+    // - GET own profile (to check must_change_password status)
+    // - PATCH own profile (to change password)
+    if (context.path === 'users') {
+      // Allow GET/PATCH on own user record
+      if (context.id === freshUser.user_id) {
+        if (context.method === 'get') {
+          return context;
+        }
+        // Allow PATCH only if changing password
+        if (context.method === 'patch') {
+          const data = context.data as { password?: string } | undefined;
+          if (data?.password) {
+            return context;
+          }
+          // PATCH without password change - block
+          throw new Forbidden('Password change required. Please update your password.', {
+            code: 'PASSWORD_CHANGE_REQUIRED',
+            user_id: freshUser.user_id,
+          });
+        }
+      }
+    }
+
+    // Block all other requests
+    throw new Forbidden('Password change required. Please update your password.', {
+      code: 'PASSWORD_CHANGE_REQUIRED',
+      user_id: freshUser.user_id,
+    });
+  };
+
   // Helper: Return empty array for auth in anonymous mode (read-only services don't need auth)
   const getReadAuthHooks = () => (allowAnonymous ? [] : [requireAuth]);
 
@@ -1643,7 +1716,7 @@ async function main() {
           const params = context.params as AuthenticatedParams;
           const userId = context.id as string;
 
-          // Field-level restrictions: only admins can modify unix_username and role
+          // Field-level restrictions: only admins can modify unix_username, role, and must_change_password
           if (!Array.isArray(context.data)) {
             if (context.data?.unix_username !== undefined) {
               if (!params.user || params.user.role !== 'admin') {
@@ -1653,6 +1726,11 @@ async function main() {
             if (context.data?.role !== undefined) {
               if (!params.user || params.user.role !== 'admin') {
                 throw new Forbidden('Only admins can modify user roles');
+              }
+            }
+            if (context.data?.must_change_password !== undefined) {
+              if (!params.user || params.user.role !== 'admin') {
+                throw new Forbidden('Only admins can force password changes');
               }
             }
           }
@@ -4372,6 +4450,14 @@ async function main() {
   } else {
     console.log('🔒 MCP server disabled via config (daemon.mcpEnabled=false)');
   }
+
+  // Global app hooks - enforce password change requirement
+  // This runs after authentication and before any service method
+  app.hooks({
+    before: {
+      all: [enforcePasswordChange],
+    },
+  });
 
   // Error handling
   app.use(errorHandler());

@@ -19,6 +19,7 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { AVAILABLE_AGENTS } from './components/AgentSelectionGrid';
 import { App as AgorApp } from './components/App';
+import { ForcePasswordChangeModal } from './components/ForcePasswordChangeModal';
 import { LoginPage } from './components/LoginPage';
 import { MobileApp } from './components/mobile/MobileApp';
 import { SandboxBanner } from './components/SandboxBanner';
@@ -124,6 +125,7 @@ function AppContent() {
   });
 
   // Fetch data (only when connected and authenticated)
+  // Skip data fetch if user needs to change password - the ForcePasswordChangeModal will handle that
   const {
     sessionById,
     sessionsByWorktree,
@@ -137,7 +139,9 @@ function AppContent() {
     sessionMcpServerIds,
     loading,
     error: dataError,
-  } = useAgorData(connected ? client : null);
+  } = useAgorData(connected ? client : null, {
+    enabled: !user?.must_change_password,
+  });
 
   // Session actions
   const { createSession, forkSession, spawnSession, updateSession, deleteSession } =
@@ -351,8 +355,8 @@ function AppContent() {
     );
   }
 
-  // Show data error
-  if (dataError) {
+  // Show data error (but not if user needs to change password - let the modal render)
+  if (dataError && !user?.must_change_password) {
     return (
       <ConfigProvider theme={getCurrentThemeConfig()}>
         <div
@@ -573,6 +577,14 @@ function AppContent() {
     } catch (error) {
       showError(`Failed to delete user: ${error instanceof Error ? error.message : String(error)}`);
     }
+  };
+
+  // Handle forced password change (from ForcePasswordChangeModal)
+  const handleForcePasswordChange = async (userId: string, newPassword: string) => {
+    if (!client) throw new Error('Not connected');
+    // This will auto-clear must_change_password flag on the backend
+    await client.service('users').patch(userId, { password: newPassword } as Partial<User>);
+    showSuccess('Password changed successfully!');
   };
 
   // Handle board CRUD
@@ -990,6 +1002,13 @@ function AppContent() {
   // Render main app
   return (
     <ConnectionProvider value={{ connected, connecting }}>
+      {/* Force Password Change Modal - shown when user.must_change_password is true */}
+      <ForcePasswordChangeModal
+        open={!!currentUser?.must_change_password}
+        user={currentUser}
+        onChangePassword={handleForcePasswordChange}
+        onLogout={logout}
+      />
       <DeviceRouter />
       <Routes>
         {/* Demo route */}
