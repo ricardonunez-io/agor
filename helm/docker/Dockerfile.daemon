@@ -24,7 +24,6 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages/core/package.json ./packages/core/
 COPY packages/executor/package.json ./packages/executor/
 COPY apps/agor-daemon/package.json ./apps/agor-daemon/
-COPY apps/agor-cli/package.json ./apps/agor-cli/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
@@ -33,21 +32,16 @@ RUN pnpm install --frozen-lockfile
 COPY packages/core ./packages/core
 COPY packages/executor ./packages/executor
 COPY apps/agor-daemon ./apps/agor-daemon
-COPY apps/agor-cli ./apps/agor-cli
 COPY turbo.json ./
 
 # Build all packages
 RUN pnpm --filter @agor/core build
 RUN pnpm --filter @agor/executor build
-RUN pnpm --filter @agor/cli build
 RUN pnpm --filter @agor/daemon build
 
 # Use pnpm deploy to create a standalone production bundle
 # This properly handles workspace dependencies
 RUN pnpm --filter @agor/daemon deploy --prod /prod/daemon
-
-# Also deploy CLI
-RUN pnpm --filter @agor/cli deploy --prod /prod/cli
 
 # Deploy executor
 RUN pnpm --filter @agor/executor deploy --prod /prod/executor
@@ -115,13 +109,6 @@ WORKDIR /app
 
 # Copy the deployed production bundle (includes all dependencies)
 COPY --from=builder --chown=agor:agor /prod/daemon ./
-
-# Copy CLI and create symlink
-COPY --from=builder --chown=agor:agor /prod/cli /opt/agor-cli
-RUN chmod +x /opt/agor-cli/bin/run.js && \
-    ln -s /opt/agor-cli/bin/run.js /usr/local/bin/agor && \
-    # Verify CLI is accessible (will fail build if broken)
-    node /opt/agor-cli/bin/run.js --version
 
 # Copy executor to expected location
 # Daemon expects cli.js at /app/executor/cli.js
