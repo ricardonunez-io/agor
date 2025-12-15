@@ -1,12 +1,24 @@
 /**
  * Agor Desktop - Main Process
  *
- * Electron main process that orchestrates the Agor daemon and UI.
- * Inspired by VS Code's architecture:
- * - Main process manages lifecycle
- * - Daemon runs as child process (like VS Code's extension host)
+ * Electron wrapper that connects to an Agor backend (local or remote).
+ *
+ * Architecture (inspired by VS Code):
+ * - Main process manages lifecycle and configuration
+ * - Optional local daemon runs as child process (like VS Code's extension host)
  * - UI renders in Chromium (like VS Code's workbench)
  * - Tray provides quick access (like VS Code's status bar)
+ *
+ * This app is a thin wrapper - all real functionality lives in the Agor daemon/UI.
+ * The app simply provides:
+ * - Native window with macOS traffic lights
+ * - Optional local daemon management
+ * - URL configuration for connecting to local or remote Agor instances
+ *
+ * Future work (see context/explorations/desktop-app.md):
+ * - Settings panel for API keys, daemon port, theme
+ * - Auto-update support
+ * - Deep linking (agor:// protocol)
  */
 
 import fs from 'node:fs';
@@ -14,9 +26,6 @@ import path from 'node:path';
 import { app, BrowserWindow, dialog, Menu, nativeImage } from 'electron';
 import { DaemonManager } from './main/daemon';
 import { TrayManager } from './main/tray';
-
-// Note: electron-squirrel-startup is only needed for Windows Squirrel installers
-// We don't use Squirrel for macOS distribution, so it's removed entirely
 
 // Set app name (shows in menu bar, dock, etc.)
 app.name = 'Agor';
@@ -29,8 +38,45 @@ let mainWindow: BrowserWindow | null = null;
 // Track quitting state for menu bar app behavior
 let isQuitting = false;
 
-// UI URL configuration
-const configPath = path.join(app.getPath('userData'), 'ui-url.txt');
+// Configuration file (JSON for extensibility)
+// Currently stores: { uiUrl?: string }
+// Future: apiKey, daemonPort, theme, etc.
+const configPath = path.join(app.getPath('userData'), 'config.json');
+
+interface AppConfig {
+  uiUrl?: string;
+  // Future settings:
+  // daemonPort?: number;
+  // theme?: 'dark' | 'light' | 'system';
+  // apiKey?: string;
+}
+
+/**
+ * Load app configuration from disk
+ */
+function loadConfig(): AppConfig {
+  try {
+    if (fs.existsSync(configPath)) {
+      const data = fs.readFileSync(configPath, 'utf-8');
+      return JSON.parse(data) as AppConfig;
+    }
+  } catch (error) {
+    console.error('[Main] Failed to load config:', error);
+  }
+  return {};
+}
+
+/**
+ * Save app configuration to disk
+ */
+function saveConfig(config: AppConfig): void {
+  try {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+    console.log('[Main] Config saved:', config);
+  } catch (error) {
+    console.error('[Main] Failed to save config:', error);
+  }
+}
 
 /**
  * Check if URL points to a remote server (not localhost)
@@ -52,19 +98,18 @@ function isRemoteUrl(url: string): boolean {
 
 /**
  * Get the UI URL from config or defaults
+ *
+ * Priority:
+ * 1. Saved config (config.json)
+ * 2. Environment variable (AGOR_UI_URL)
+ * 3. Default based on packaged status
  */
 function getUIUrl(): string {
-  // Check for saved custom URL
-  try {
-    if (fs.existsSync(configPath)) {
-      const savedUrl = fs.readFileSync(configPath, 'utf-8').trim();
-      if (savedUrl) {
-        console.log('[Main] Using saved custom UI URL:', savedUrl);
-        return savedUrl;
-      }
-    }
-  } catch (error) {
-    console.error('[Main] Failed to read saved UI URL:', error);
+  // Check for saved custom URL in config
+  const config = loadConfig();
+  if (config.uiUrl) {
+    console.log('[Main] Using saved UI URL from config:', config.uiUrl);
+    return config.uiUrl;
   }
 
   // Check for environment variable override
@@ -82,15 +127,12 @@ function getUIUrl(): string {
 }
 
 /**
- * Save custom UI URL
+ * Save custom UI URL to config
  */
 function saveUIUrl(url: string): void {
-  try {
-    fs.writeFileSync(configPath, url, 'utf-8');
-    console.log('[Main] Saved custom UI URL:', url);
-  } catch (error) {
-    console.error('[Main] Failed to save UI URL:', error);
-  }
+  const config = loadConfig();
+  config.uiUrl = url;
+  saveConfig(config);
 }
 
 /**
