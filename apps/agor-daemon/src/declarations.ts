@@ -229,4 +229,12 @@ export interface WorktreesServiceImpl extends Service<Worktree, Partial<Worktree
     options?: { boardId?: import('@agor/core/types').BoardID },
     params?: FeathersParams
   ): Promise<Worktree>;
+  getBuildLogs(
+    id: WorktreeID,
+    params?: FeathersParams
+  ): Promise<{
+    logs: string;
+    exists: boolean;
+    path: string;
+  }>;
 }

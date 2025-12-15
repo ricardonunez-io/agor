@@ -71,6 +71,7 @@ interface WorktreeCardProps {
   onStartEnvironment?: (worktreeId: string) => void;
   onStopEnvironment?: (worktreeId: string) => void;
   onViewLogs?: (worktreeId: string) => void;
+  onViewBuildLogs?: (worktreeId: string) => void;
   onNukeEnvironment?: (worktreeId: string) => void;
   onUnpin?: (worktreeId: string) => void;
   isPinned?: boolean;
@@ -99,6 +100,7 @@ const WorktreeCardComponent = ({
   onStartEnvironment,
   onStopEnvironment,
   onViewLogs,
+  onViewBuildLogs,
   onNukeEnvironment,
   onUnpin,
   isPinned = false,
@@ -593,6 +595,7 @@ const WorktreeCardComponent = ({
             onStartEnvironment={onStartEnvironment}
             onStopEnvironment={onStopEnvironment}
             onViewLogs={onViewLogs}
+            onViewBuildLogs={onViewBuildLogs}
             onNukeEnvironment={onNukeEnvironment}
             connectionDisabled={connectionDisabled}
           />

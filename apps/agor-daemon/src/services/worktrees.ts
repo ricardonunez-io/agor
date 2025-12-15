@@ -6,14 +6,20 @@
  */
 
 import { type ChildProcess, spawn } from 'node:child_process';
-import { mkdir } from 'node:fs/promises';
+import { createWriteStream, existsSync } from 'node:fs';
+import { mkdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createUserProcessEnvironment, ENVIRONMENT, PAGINATION } from '@agor/core/config';
 import { type Database, WorktreeRepository } from '@agor/core/db';
 import type { Application } from '@agor/core/feathers';
 import { cleanWorktree, removeWorktree } from '@agor/core/git';
-import { getDockerHost, getPodManager, type PodManager } from '@agor/core/kubernetes';
+import {
+  getAppServiceName,
+  getDockerHost,
+  getPodManager,
+  type PodManager,
+} from '@agor/core/kubernetes';
 import type { BoardID, QueryParams, Repo, UUID, Worktree, WorktreeID } from '@agor/core/types';
 import { getNextRunTime, validateCron } from '@agor/core/utils/cron';
 import { DrizzleService } from '../adapters/drizzle';
@@ -27,6 +33,81 @@ export type WorktreeParams = QueryParams<{
   ref?: string;
   deleteFromFilesystem?: boolean;
 }>;
+
+/**
+ * Build log file path for a worktree
+ */
+function getBuildLogPath(worktreePath: string): string {
+  return join(worktreePath, '.agor', 'build.log');
+}
+
+/**
+ * Run a command and capture output to a log file
+ * Output is also streamed to console for daemon visibility
+ */
+async function runCommandWithLogs(options: {
+  command: string;
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  logPath: string;
+  label: string; // e.g., "start", "stop", "nuke"
+}): Promise<void> {
+  const { command, cwd, env, logPath, label } = options;
+
+  // Ensure .agor directory exists
+  await mkdir(dirname(logPath), { recursive: true });
+
+  // Open log file for writing (overwrite previous)
+  const logStream = createWriteStream(logPath, { flags: 'w' });
+
+  // Write header
+  const header = `=== ${label.toUpperCase()} ===\nCommand: ${command}\nCWD: ${cwd}\nStarted: ${new Date().toISOString()}\n${'='.repeat(50)}\n\n`;
+  logStream.write(header);
+  console.log(header.trim());
+
+  return new Promise<void>((resolve, reject) => {
+    const childProcess = spawn(command, {
+      cwd,
+      shell: true,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    // Pipe stdout to log file and console
+    childProcess.stdout?.on('data', (data: Buffer) => {
+      const text = data.toString();
+      logStream.write(text);
+      process.stdout.write(text);
+    });
+
+    // Pipe stderr to log file and console
+    childProcess.stderr?.on('data', (data: Buffer) => {
+      const text = data.toString();
+      logStream.write(text);
+      process.stderr.write(text);
+    });
+
+    childProcess.on('exit', (code) => {
+      const footer = `\n${'='.repeat(50)}\nExit code: ${code}\nFinished: ${new Date().toISOString()}\n`;
+      logStream.write(footer);
+      logStream.end();
+      console.log(footer.trim());
+
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`${label} command exited with code ${code}`));
+      }
+    });
+
+    childProcess.on('error', (error) => {
+      const errorMsg = `\n${'='.repeat(50)}\nError: ${error.message}\n`;
+      logStream.write(errorMsg);
+      logStream.end();
+      reject(error);
+    });
+  });
+}
 
 /**
  * Process tracking for environment management
@@ -628,67 +709,33 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       const env = await createUserProcessEnvironment(worktree.created_by, this.db);
 
       const podManager = this.getPodManager();
+      const logPath = getBuildLogPath(worktree.path);
+
+      // Build environment with DOCKER_HOST if in pod mode
+      let execEnv = env;
       if (podManager) {
         // Pod mode: ensure podman pod exists, then use DOCKER_HOST to communicate with it
         console.log(`[Pod Mode] Ensuring Podman pod exists for worktree ${worktree.worktree_id}`);
         await podManager.ensurePodmanPod(worktree.worktree_id, worktree.path);
 
-        // Set DOCKER_HOST to point to the podman pod's Docker-compatible API
-        // Also disable BuildKit which requires cgroups access that podman in k8s doesn't have
         const dockerHost = getDockerHost(worktree.worktree_id, podManager.getConfig().namespace);
-        const podEnv = {
+        execEnv = {
           ...env,
           DOCKER_HOST: dockerHost,
           DOCKER_BUILDKIT: '0',
           COMPOSE_DOCKER_CLI_BUILD: '0',
         };
-
         console.log(`[Pod Mode] DOCKER_HOST=${dockerHost}`);
-        console.log(`[Pod Mode] Running command: ${command}`);
-        console.log(`[Pod Mode] CWD: ${worktree.path}`);
-
-        // Execute command locally - docker CLI will talk to podman pod via DOCKER_HOST
-        await new Promise<void>((resolve, reject) => {
-          const childProcess = spawn(command, {
-            cwd: worktree.path,
-            shell: true,
-            stdio: 'inherit',
-            env: podEnv,
-          });
-
-          childProcess.on('exit', (code) => {
-            if (code === 0) {
-              console.log(`✅ Start command completed successfully for ${worktree.name}`);
-              resolve();
-            } else {
-              reject(new Error(`Start command exited with code ${code}`));
-            }
-          });
-
-          childProcess.on('error', reject);
-        });
-      } else {
-        // Daemon mode: spawn locally (no DOCKER_HOST, uses local Docker daemon)
-        await new Promise<void>((resolve, reject) => {
-          const childProcess = spawn(command, {
-            cwd: worktree.path,
-            shell: true,
-            stdio: 'inherit',
-            env,
-          });
-
-          childProcess.on('exit', (code) => {
-            if (code === 0) {
-              console.log(`✅ Start command completed successfully for ${worktree.name}`);
-              resolve();
-            } else {
-              reject(new Error(`Start command exited with code ${code}`));
-            }
-          });
-
-          childProcess.on('error', reject);
-        });
       }
+
+      // Run command and capture output to build.log
+      await runCommandWithLogs({
+        command,
+        cwd: worktree.path,
+        env: execEnv,
+        logPath,
+        label: 'start',
+      });
 
       // Use static app_url (initialized from template at worktree creation)
       // If app_url is a port number or localhost URL, create an Ingress for it
@@ -786,17 +833,17 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     try {
       // Check if we have a static stop command
       if (worktree.stop_command) {
-        // Use static stop_command (initialized from template at worktree creation)
         const command = worktree.stop_command;
-
         console.log(`🛑 Stopping environment for worktree ${worktree.name}: ${command}`);
 
         // Create clean environment for user process (filters Agor-internal vars like NODE_ENV)
         const env = await createUserProcessEnvironment(worktree.created_by, this.db);
 
         const podManager = this.getPodManager();
-        // Set DOCKER_HOST if in pod mode, also disable BuildKit for cgroup compatibility
-        const podEnv = podManager
+        const logPath = getBuildLogPath(worktree.path);
+
+        // Build environment with DOCKER_HOST if in pod mode
+        const execEnv = podManager
           ? {
               ...env,
               DOCKER_HOST: getDockerHost(worktree.worktree_id, podManager.getConfig().namespace),
@@ -806,29 +853,16 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
           : env;
 
         if (podManager) {
-          console.log(`[Pod Mode] DOCKER_HOST=${podEnv.DOCKER_HOST}`);
+          console.log(`[Pod Mode] DOCKER_HOST=${execEnv.DOCKER_HOST}`);
         }
-        console.log(`Running stop command: ${command}`);
 
-        // Execute command - docker CLI will talk to podman pod via DOCKER_HOST if set
-        await new Promise<void>((resolve, reject) => {
-          const stopProcess = spawn(command, {
-            cwd: worktree.path,
-            shell: true,
-            stdio: 'inherit',
-            env: podEnv,
-          });
-
-          stopProcess.on('exit', (code) => {
-            if (code === 0) {
-              console.log(`✅ Stop command completed successfully for ${worktree.name}`);
-              resolve();
-            } else {
-              reject(new Error(`Stop command exited with code ${code}`));
-            }
-          });
-
-          stopProcess.on('error', reject);
+        // Run command and capture output to build.log
+        await runCommandWithLogs({
+          command,
+          cwd: worktree.path,
+          env: execEnv,
+          logPath,
+          label: 'stop',
         });
       } else {
         // No down command - kill the managed process if we have it
@@ -935,7 +969,6 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
 
     try {
       const command = worktree.nuke_command;
-
       console.log(`💣 NUKING environment for worktree ${worktree.name}: ${command}`);
       console.warn('⚠️  This is a destructive operation!');
 
@@ -943,8 +976,10 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       const env = await createUserProcessEnvironment(worktree.created_by, this.db);
 
       const podManager = this.getPodManager();
-      // Set DOCKER_HOST if in pod mode, also disable BuildKit for cgroup compatibility
-      const podEnv = podManager
+      const logPath = getBuildLogPath(worktree.path);
+
+      // Build environment with DOCKER_HOST if in pod mode
+      const execEnv = podManager
         ? {
             ...env,
             DOCKER_HOST: getDockerHost(worktree.worktree_id, podManager.getConfig().namespace),
@@ -954,29 +989,16 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
         : env;
 
       if (podManager) {
-        console.log(`[Pod Mode] DOCKER_HOST=${podEnv.DOCKER_HOST}`);
+        console.log(`[Pod Mode] DOCKER_HOST=${execEnv.DOCKER_HOST}`);
       }
-      console.log(`Executing nuke command: ${command}`);
 
-      // Execute command - docker CLI will talk to podman pod via DOCKER_HOST if set
-      await new Promise<void>((resolve, reject) => {
-        const nukeProcess = spawn(command, {
-          cwd: worktree.path,
-          shell: true,
-          stdio: 'inherit',
-          env: podEnv,
-        });
-
-        nukeProcess.on('exit', (code) => {
-          if (code === 0) {
-            console.log(`✅ Nuke command completed successfully for ${worktree.name}`);
-            resolve();
-          } else {
-            reject(new Error(`Nuke command exited with code ${code}`));
-          }
-        });
-
-        nukeProcess.on('error', reject);
+      // Run command and capture output to build.log
+      await runCommandWithLogs({
+        command,
+        cwd: worktree.path,
+        env: execEnv,
+        logPath,
+        label: 'nuke',
       });
 
       // Clean up any managed process references
@@ -1072,9 +1094,9 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       const localhostMatch = healthUrl.match(/^(https?):\/\/(?:localhost|127\.0\.0\.1):(\d+)(\/.*)?$/);
       if (localhostMatch) {
         const [, protocol, port, path = ''] = localhostMatch;
-        const shortId = worktree.worktree_id.substring(0, 8);
+        const appServiceName = getAppServiceName(worktree.worktree_id);
         // Use internal service URL instead of localhost
-        healthUrl = `${protocol}://app-${shortId}.${podManager.getConfig().namespace}.svc:${port}${path}`;
+        healthUrl = `${protocol}://${appServiceName}.${podManager.getConfig().namespace}.svc:${port}${path}`;
         console.log(`[Health] Converted localhost URL to internal service: ${healthUrl}`);
       }
     }
@@ -1164,6 +1186,45 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
         },
         params
       );
+    }
+  }
+
+  /**
+   * Custom method: Get build logs
+   * Returns the output from the last start/stop/nuke command
+   */
+  async getBuildLogs(
+    id: WorktreeID,
+    params?: WorktreeParams
+  ): Promise<{
+    logs: string;
+    exists: boolean;
+    path: string;
+  }> {
+    const worktree = await this.get(id, params);
+    const logPath = getBuildLogPath(worktree.path);
+
+    if (!existsSync(logPath)) {
+      return {
+        logs: '',
+        exists: false,
+        path: logPath,
+      };
+    }
+
+    try {
+      const content = await readFile(logPath, 'utf-8');
+      return {
+        logs: content,
+        exists: true,
+        path: logPath,
+      };
+    } catch (error) {
+      return {
+        logs: `Error reading build logs: ${error instanceof Error ? error.message : String(error)}`,
+        exists: true,
+        path: logPath,
+      };
     }
   }
 

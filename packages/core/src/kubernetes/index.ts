@@ -13,34 +13,44 @@ export {
   PodManagerError,
   type PodManagerOptions,
   resetPodManager,
-} from './pod-manager';
+} from './pod-manager.js';
 
 // Deployment manifest builders
 export {
+  buildAppIngressManifest,
+  buildAppServiceManifest,
   buildPodmanDeploymentManifest,
   buildPodmanServiceManifest,
   buildShellDeploymentManifest,
   type PodmanPodParams,
   type ShellPodParams,
-} from './pod-manifests';
+} from './pod-manifests.js';
 
-// Legacy Pod manifests (deprecated)
-export { buildPodmanPodManifest, buildShellPodManifest } from './pod-manifests';
-// Types
+// Template loader (for advanced use cases)
+export { clearTemplateCache } from './template-loader.js';
+
+// Types and naming utilities
 export {
   DEFAULT_USER_POD_CONFIG,
+  // Naming functions
+  getAppIngressName,
+  getAppServiceName,
   getDockerHost,
   getPodmanPodName,
   getPodmanServiceName,
   getShellPodName,
+  getUserShortId,
+  getWorktreeShortId,
+  // Labels and annotations
   POD_ANNOTATIONS,
   POD_LABEL_VALUES,
   POD_LABELS,
+  SERVICE_ACCOUNTS,
+  // Types
   type PodmanPodConfig,
   type PodmanPodInfo,
-  SERVICE_ACCOUNTS,
   type ShellPodConfig,
   type ShellPodInfo,
   type TerminalMode,
   type UserPodConfig,
-} from './types';
+} from './types.js';

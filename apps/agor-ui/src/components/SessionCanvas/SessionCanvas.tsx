@@ -117,6 +117,7 @@ interface SessionCanvasProps {
   onStartEnvironment?: (worktreeId: string) => void;
   onStopEnvironment?: (worktreeId: string) => void;
   onViewLogs?: (worktreeId: string) => void;
+  onViewBuildLogs?: (worktreeId: string) => void;
   onNukeEnvironment?: (worktreeId: string) => void;
   onOpenCommentsPanel?: () => void;
   onCommentHover?: (commentId: string | null) => void;
@@ -188,6 +189,7 @@ interface WorktreeNodeData {
   onStartEnvironment?: (worktreeId: string) => void;
   onStopEnvironment?: (worktreeId: string) => void;
   onViewLogs?: (worktreeId: string) => void;
+  onViewBuildLogs?: (worktreeId: string) => void;
   onUnpin?: (worktreeId: string) => void;
   compact?: boolean;
   isPinned?: boolean;
@@ -220,6 +222,7 @@ const WorktreeNode = ({ data }: { data: WorktreeNodeData }) => {
         onStartEnvironment={data.onStartEnvironment}
         onStopEnvironment={data.onStopEnvironment}
         onViewLogs={data.onViewLogs}
+        onViewBuildLogs={data.onViewBuildLogs}
         onUnpin={data.onUnpin}
         isPinned={data.isPinned}
         zoneName={data.zoneName}
@@ -274,6 +277,7 @@ const SessionCanvas = forwardRef<SessionCanvasRef, SessionCanvasProps>(
       onStartEnvironment,
       onStopEnvironment,
       onViewLogs,
+      onViewBuildLogs,
       onNukeEnvironment,
       onOpenCommentsPanel,
       onCommentHover,
@@ -580,6 +584,7 @@ const SessionCanvas = forwardRef<SessionCanvasRef, SessionCanvasProps>(
             onStartEnvironment,
             onStopEnvironment,
             onViewLogs,
+            onViewBuildLogs,
             onNukeEnvironment,
             onUnpin: handleUnpinWorktree,
             compact: false,
@@ -611,6 +616,7 @@ const SessionCanvas = forwardRef<SessionCanvasRef, SessionCanvasProps>(
       onStartEnvironment,
       onStopEnvironment,
       onViewLogs,
+      onViewBuildLogs,
       onNukeEnvironment,
       handleUnpinWorktree,
       zoneLabels,

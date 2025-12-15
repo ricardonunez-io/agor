@@ -3968,6 +3968,33 @@ async function main() {
     requireAuth
   );
 
+  // GET /worktrees/build-logs?worktree_id=xxx - Get build logs (start/stop/nuke output)
+  registerAuthenticatedRoute(
+    app,
+    '/worktrees/build-logs',
+    {
+      async find(params: Params) {
+        console.log('🔧 Build logs endpoint called');
+
+        // Extract worktree ID from query params
+        const id = params?.query?.worktree_id;
+
+        if (!id) {
+          console.error('❌ No worktree_id in query params');
+          throw new Error('worktree_id query parameter required');
+        }
+
+        console.log('✅ Found worktree ID:', id);
+        return worktreesService.getBuildLogs(id as import('@agor/core/types').WorktreeID, params);
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: Service type not compatible with Express
+    } as any,
+    {
+      find: { role: 'member', action: 'view worktree build logs' },
+    },
+    requireAuth
+  );
+
   // ===== RBAC: Worktree Owner Management =====
   // Now handled by the worktree-owners service (registered above)
 

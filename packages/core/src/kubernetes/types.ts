@@ -142,29 +142,72 @@ export const SERVICE_ACCOUNTS = {
   PODMAN_POD: 'agor-podman-pod',
 } as const;
 
+// ============================================
+// Resource Naming Convention
+// ============================================
+// All worktree-related Kubernetes resources follow the pattern:
+//   wt-{worktreeId}-{component}[-{extra}]
+//
+// Components:
+//   - shell-{userId}  : Shell deployment for terminal access
+//   - podman          : Podman deployment for container runtime
+//   - podman-svc      : Service for podman docker API
+//   - app-svc         : Service for worktree app port
+//   - ingress         : Ingress for external app access
+// ============================================
+
 /**
- * Generate shell pod name
+ * Get short worktree ID (first 8 chars)
  */
-export function getShellPodName(worktreeId: WorktreeID, userId: UserID): string {
-  const worktreeShort = worktreeId.slice(0, 8);
-  const userShort = userId.slice(0, 8);
-  return `agor-shell-${worktreeShort}-${userShort}`;
+export function getWorktreeShortId(worktreeId: WorktreeID): string {
+  return worktreeId.slice(0, 8);
 }
 
 /**
- * Generate podman pod name
+ * Get short user ID (first 8 chars)
+ */
+export function getUserShortId(userId: UserID): string {
+  return userId.slice(0, 8);
+}
+
+/**
+ * Generate shell deployment name
+ * Format: wt-{worktreeId}-shell-{userId}
+ */
+export function getShellPodName(worktreeId: WorktreeID, userId: UserID): string {
+  return `wt-${getWorktreeShortId(worktreeId)}-shell-${getUserShortId(userId)}`;
+}
+
+/**
+ * Generate podman deployment name
+ * Format: wt-{worktreeId}-podman
  */
 export function getPodmanPodName(worktreeId: WorktreeID): string {
-  const worktreeShort = worktreeId.slice(0, 8);
-  return `agor-podman-${worktreeShort}`;
+  return `wt-${getWorktreeShortId(worktreeId)}-podman`;
 }
 
 /**
  * Generate podman service name
+ * Format: wt-{worktreeId}-podman-svc
  */
 export function getPodmanServiceName(worktreeId: WorktreeID): string {
-  const worktreeShort = worktreeId.slice(0, 8);
-  return `podman-${worktreeShort}`;
+  return `wt-${getWorktreeShortId(worktreeId)}-podman-svc`;
+}
+
+/**
+ * Generate app service name
+ * Format: wt-{worktreeId}-app-svc
+ */
+export function getAppServiceName(worktreeId: WorktreeID): string {
+  return `wt-${getWorktreeShortId(worktreeId)}-app-svc`;
+}
+
+/**
+ * Generate app ingress name
+ * Format: wt-{worktreeId}-ingress
+ */
+export function getAppIngressName(worktreeId: WorktreeID): string {
+  return `wt-${getWorktreeShortId(worktreeId)}-ingress`;
 }
 
 /**

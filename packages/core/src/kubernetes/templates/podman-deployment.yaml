@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{name}}"
+  namespace: "{{namespace}}"
+  labels:
+    app.kubernetes.io/name: agor-podman-pod
+    app.kubernetes.io/component: container-runtime
+    agor.io/worktree-id: "{{worktreeId}}"
+  annotations:
+    agor.io/created-at: "{{createdAt}}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agor-podman-pod
+      agor.io/worktree-id: "{{worktreeId}}"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agor-podman-pod
+        app.kubernetes.io/component: container-runtime
+        agor.io/worktree-id: "{{worktreeId}}"
+      annotations:
+        agor.io/created-at: "{{createdAt}}"
+        agor.io/last-activity: "{{createdAt}}"
+    spec:
+      serviceAccountName: agor-podman-pod
+      initContainers:
+        - name: init-paths
+          image: busybox:1.36
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              cat /proc/sys/kernel/random/uuid | tr -d "-" > /etc-override/machine-id
+              chmod 444 /etc-override/machine-id
+
+              mkdir -p /home/agor/.agor
+              ln -sf /data/worktrees /home/agor/.agor/worktrees
+              ln -sf /data/repos /home/agor/.agor/repos
+              echo "Init complete"
+          volumeMounts:
+            - name: etc-override
+              mountPath: /etc-override
+            - name: data
+              mountPath: /data
+            - name: home
+              mountPath: /home
+      containers:
+        - name: podman
+          image: "{{podmanImage}}"
+          command: ["podman", "system", "service", "--time=0", "tcp://0.0.0.0:2375"]
+          securityContext:
+            privileged: true
+          ports:
+            - containerPort: 2375
+              name: docker-api
+              protocol: TCP
+          env:
+            - name: WORKTREE_PATH
+              value: "{{worktreePath}}"
+          workingDir: "{{worktreePath}}"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: home
+              mountPath: /home
+            - name: podman-storage
+              mountPath: /var/lib/containers
+            - name: etc-override
+              mountPath: /etc/machine-id
+              subPath: machine-id
+          resources:
+            requests:
+              cpu: "{{requestsCpu}}"
+              memory: "{{requestsMemory}}"
+            limits:
+              cpu: "{{limitsCpu}}"
+              memory: "{{limitsMemory}}"
+          readinessProbe:
+            tcpSocket:
+              port: 2375
+            initialDelaySeconds: 2
+            periodSeconds: 5
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: "{{dataPvc}}"
+        - name: home
+          emptyDir: {}
+        - name: podman-storage
+          emptyDir: {}
+        - name: etc-override
+          emptyDir: {}

@@ -1,0 +1,125 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{name}}"
+  namespace: "{{namespace}}"
+  labels:
+    app.kubernetes.io/name: agor-shell-pod
+    app.kubernetes.io/component: terminal
+    agor.io/worktree-id: "{{worktreeId}}"
+    agor.io/user-id: "{{userId}}"
+    agor.io/unix-username: "{{username}}"
+    agor.io/unix-uid: "{{runAsUser}}"
+  annotations:
+    agor.io/created-at: "{{createdAt}}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agor-shell-pod
+      agor.io/worktree-id: "{{worktreeId}}"
+      agor.io/user-id: "{{userId}}"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agor-shell-pod
+        app.kubernetes.io/component: terminal
+        agor.io/worktree-id: "{{worktreeId}}"
+        agor.io/user-id: "{{userId}}"
+        agor.io/unix-username: "{{username}}"
+        agor.io/unix-uid: "{{runAsUser}}"
+      annotations:
+        agor.io/created-at: "{{createdAt}}"
+        agor.io/last-activity: "{{createdAt}}"
+    spec:
+      serviceAccountName: agor-shell-pod
+      securityContext:
+        fsGroup: {{runAsGroup}}
+      initContainers:
+        - name: init-user
+          image: busybox:1.36
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              cat > /etc-override/passwd << 'PASSWD'
+              root:x:0:0:root:/root:/bin/sh
+              nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin
+              PASSWD
+              echo "{{username}}:x:{{runAsUser}}:{{runAsGroup}}:{{username}}:/home/{{username}}:/bin/bash" >> /etc-override/passwd
+
+              cat > /etc-override/group << 'GROUP'
+              root:x:0:
+              nobody:x:65534:
+              GROUP
+              echo "{{username}}:x:{{runAsGroup}}:" >> /etc-override/group
+
+              chmod 644 /etc-override/passwd /etc-override/group
+
+              mkdir -p /data/homes/{{username}}
+              mkdir -p /data/homes/{{username}}/.agor
+              chown -R {{runAsUser}}:{{runAsGroup}} /data/homes/{{username}}
+
+              ln -sf /data/worktrees /data/homes/{{username}}/.agor/worktrees
+              ln -sf /data/repos /data/homes/{{username}}/.agor/repos
+
+              mkdir -p /home-override
+              ln -sf /data/homes/{{username}} /home-override/{{username}}
+
+              echo "Created user {{username}} (UID {{runAsUser}}) with home at /data/homes/{{username}}"
+          volumeMounts:
+            - name: etc-override
+              mountPath: /etc-override
+            - name: home-override
+              mountPath: /home-override
+            - name: data
+              mountPath: /data
+      containers:
+        - name: shell
+          image: "{{shellImage}}"
+          command: ["sleep", "infinity"]
+          securityContext:
+            runAsUser: {{runAsUser}}
+            runAsGroup: {{runAsGroup}}
+            runAsNonRoot: true
+          env:
+            - name: WORKTREE_PATH
+              value: "{{worktreePath}}"
+            - name: DOCKER_HOST
+              value: "{{dockerHost}}"
+            - name: HOME
+              value: "/home/{{username}}"
+            - name: USER
+              value: "{{username}}"
+            - name: LOGNAME
+              value: "{{username}}"
+          workingDir: "{{worktreePath}}"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: home-override
+              mountPath: /home
+            - name: etc-override
+              mountPath: /etc/passwd
+              subPath: passwd
+            - name: etc-override
+              mountPath: /etc/group
+              subPath: group
+          resources:
+            requests:
+              cpu: "{{requestsCpu}}"
+              memory: "{{requestsMemory}}"
+            limits:
+              cpu: "{{limitsCpu}}"
+              memory: "{{limitsMemory}}"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: "{{dataPvc}}"
+        - name: home-override
+          emptyDir: {}
+        - name: etc-override
+          emptyDir: {}

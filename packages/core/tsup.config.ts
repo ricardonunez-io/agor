@@ -59,5 +59,9 @@ export default defineConfig({
     // Copy template files to dist so they're available at runtime
     cpSync('src/templates/agor-system-prompt.md', 'dist/templates/agor-system-prompt.md');
     console.log('✅ Copied agor-system-prompt.md template to dist/');
+
+    // Copy kubernetes YAML templates to dist
+    cpSync('src/kubernetes/templates', 'dist/kubernetes/templates', { recursive: true });
+    console.log('✅ Copied kubernetes templates to dist/');
   },
 });

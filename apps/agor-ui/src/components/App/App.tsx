@@ -36,6 +36,7 @@ import { initializeAudioOnInteraction } from '../../utils/audio';
 import { useThemedMessage } from '../../utils/message';
 import { AppHeader } from '../AppHeader';
 import { CommentsPanel } from '../CommentsPanel';
+import { BuildLogsModal } from '../BuildLogsModal';
 import { EnvironmentLogsModal } from '../EnvironmentLogsModal';
 import { EventStreamPanel } from '../EventStreamPanel';
 import { NewSessionButton } from '../NewSessionButton';
@@ -239,6 +240,7 @@ export const App: React.FC<AppProps> = ({
   const [sessionSettingsId, setSessionSettingsId] = useState<string | null>(null);
   const [worktreeModalWorktreeId, setWorktreeModalWorktreeId] = useState<string | null>(null);
   const [logsModalWorktreeId, setLogsModalWorktreeId] = useState<string | null>(null);
+  const [buildLogsModalWorktreeId, setBuildLogsModalWorktreeId] = useState<string | null>(null);
   const [themeEditorOpen, setThemeEditorOpen] = useState(false);
 
   // Initialize event stream panel state from localStorage (collapsed by default)
@@ -533,6 +535,7 @@ export const App: React.FC<AppProps> = ({
       onStopEnvironment,
       onNukeEnvironment,
       onViewLogs: (worktreeId: string) => setLogsModalWorktreeId(worktreeId),
+      onViewBuildLogs: (worktreeId: string) => setBuildLogsModalWorktreeId(worktreeId),
       onOpenSettings: (sessionId: string) => setSessionSettingsId(sessionId),
       onOpenWorktree: (worktreeId: string) => setWorktreeModalWorktreeId(worktreeId),
       onOpenTerminal: handleOpenTerminal,
@@ -756,6 +759,7 @@ export const App: React.FC<AppProps> = ({
                         onStartEnvironment={onStartEnvironment}
                         onStopEnvironment={onStopEnvironment}
                         onViewLogs={setLogsModalWorktreeId}
+                        onViewBuildLogs={setBuildLogsModalWorktreeId}
                         onNukeEnvironment={onNukeEnvironment}
                         onOpenCommentsPanel={() => setCommentsPanelCollapsed(false)}
                         onCommentHover={setHoveredCommentId}
@@ -962,6 +966,14 @@ export const App: React.FC<AppProps> = ({
               open={!!logsModalWorktreeId}
               onClose={() => setLogsModalWorktreeId(null)}
               worktree={worktreeById.get(logsModalWorktreeId)!}
+              client={client}
+            />
+          )}
+          {buildLogsModalWorktreeId && (
+            <BuildLogsModal
+              open={!!buildLogsModalWorktreeId}
+              onClose={() => setBuildLogsModalWorktreeId(null)}
+              worktree={worktreeById.get(buildLogsModalWorktreeId)!}
               client={client}
             />
           )}

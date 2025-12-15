@@ -2,7 +2,7 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "agor.fullname" . }}
+  name: {{ include "agor.ui.fullname" . }}
   labels:
     {{- include "agor.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}

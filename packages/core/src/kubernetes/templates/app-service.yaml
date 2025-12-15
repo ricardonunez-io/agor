@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{name}}"
+  namespace: "{{namespace}}"
+  labels:
+    app.kubernetes.io/component: worktree-app
+    agor.io/worktree-id: "{{worktreeId}}"
+spec:
+  selector:
+    app.kubernetes.io/name: agor-podman-pod
+    agor.io/worktree-id: "{{worktreeId}}"
+  ports:
+    - name: http
+      port: {{port}}
+      targetPort: {{port}}
+      protocol: TCP

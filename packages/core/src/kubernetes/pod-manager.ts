@@ -9,22 +9,27 @@ import { Writable } from 'node:stream';
 import * as k8s from '@kubernetes/client-node';
 import type { UserID, WorktreeID } from '../types/id.js';
 import {
+  buildAppIngressManifest,
+  buildAppServiceManifest,
   buildPodmanDeploymentManifest,
   buildPodmanServiceManifest,
   buildShellDeploymentManifest,
-} from './pod-manifests';
+} from './pod-manifests.js';
 import {
   DEFAULT_USER_POD_CONFIG,
+  getAppIngressName,
+  getAppServiceName,
   getPodmanPodName,
   getPodmanServiceName,
   getShellPodName,
+  getWorktreeShortId,
   POD_ANNOTATIONS,
   POD_LABEL_VALUES,
   POD_LABELS,
   type PodmanPodInfo,
   type ShellPodInfo,
   type UserPodConfig,
-} from './types';
+} from './types.js';
 
 /**
  * Error thrown when a pod operation fails
@@ -350,85 +355,15 @@ export class PodManager {
     port: number,
     baseDomain: string = 'agor.local'
   ): Promise<string> {
-    const shortId = worktreeId.substring(0, 8);
-    const appServiceName = `app-${shortId}`;
-    const ingressName = `app-${shortId}`;
+    const appServiceName = getAppServiceName(worktreeId);
+    const ingressName = getAppIngressName(worktreeId);
     const hostname = `${worktreeName}.${baseDomain}`;
 
     console.log(`[PodManager] Creating Ingress for ${worktreeName} on port ${port} -> ${hostname}`);
 
-    // Get the podman pod selector to target
-    const podmanDeploymentName = getPodmanPodName(worktreeId);
-
-    // Create Service for the app port (targets podman pod)
-    const serviceManifest: k8s.V1Service = {
-      apiVersion: 'v1',
-      kind: 'Service',
-      metadata: {
-        name: appServiceName,
-        namespace: this.config.namespace,
-        labels: {
-          [POD_LABELS.COMPONENT]: 'worktree-app',
-          [POD_LABELS.WORKTREE_ID]: worktreeId,
-        },
-      },
-      spec: {
-        selector: {
-          // Use APP_NAME (not COMPONENT) - podman pods have app.kubernetes.io/name=agor-podman-pod
-          [POD_LABELS.APP_NAME]: POD_LABEL_VALUES.PODMAN_POD,
-          [POD_LABELS.WORKTREE_ID]: worktreeId,
-        },
-        ports: [
-          {
-            name: 'http',
-            port: port,
-            targetPort: port,
-            protocol: 'TCP',
-          },
-        ],
-      },
-    };
-
-    // Create Ingress with Traefik
-    const ingressManifest: k8s.V1Ingress = {
-      apiVersion: 'networking.k8s.io/v1',
-      kind: 'Ingress',
-      metadata: {
-        name: ingressName,
-        namespace: this.config.namespace,
-        labels: {
-          [POD_LABELS.COMPONENT]: 'worktree-app',
-          [POD_LABELS.WORKTREE_ID]: worktreeId,
-        },
-        annotations: {
-          'traefik.ingress.kubernetes.io/router.entrypoints': 'web',
-        },
-      },
-      spec: {
-        ingressClassName: 'traefik',
-        rules: [
-          {
-            host: hostname,
-            http: {
-              paths: [
-                {
-                  path: '/',
-                  pathType: 'Prefix',
-                  backend: {
-                    service: {
-                      name: appServiceName,
-                      port: {
-                        number: port,
-                      },
-                    },
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    };
+    // Build manifests using YAML templates
+    const serviceManifest = buildAppServiceManifest(worktreeId, port, this.config);
+    const ingressManifest = buildAppIngressManifest(worktreeId, worktreeName, port, this.config, baseDomain);
 
     try {
       // Create or update Service
@@ -476,9 +411,9 @@ export class PodManager {
    * Delete the Ingress and app Service for a worktree
    */
   async deleteWorktreeIngress(worktreeId: WorktreeID): Promise<void> {
-    const shortId = worktreeId.substring(0, 8);
-    const appServiceName = `app-${shortId}`;
-    const ingressName = `app-${shortId}`;
+    const shortId = getWorktreeShortId(worktreeId);
+    const appServiceName = getAppServiceName(worktreeId);
+    const ingressName = getAppIngressName(worktreeId);
 
     console.log(`[PodManager] Deleting Ingress and app Service for worktree ${shortId}`);
 
@@ -538,8 +473,8 @@ export class PodManager {
    * @param podName - The actual pod name (will extract deployment name from it)
    */
   async updateLastActivity(podName: string): Promise<void> {
-    // Pod name format: agor-shell-{worktree}-{user}-{replicaset}-{random}
-    // Deployment name: agor-shell-{worktree}-{user}
+    // Pod name format: wt-{worktree}-shell-{user}-{replicaset}-{random}
+    // Deployment name: wt-{worktree}-shell-{user}
     // Remove the last two hyphen-separated parts to get deployment name
     const parts = podName.split('-');
     if (parts.length >= 6) {
@@ -750,19 +685,283 @@ export class PodManager {
   }
 
   /**
-   * Run garbage collection for all pod types
+   * Garbage collect orphaned Deployments (no corresponding pods)
+   * This catches deployments where pods failed to schedule or crashed
    */
-  async runGC(): Promise<{ shellPodsDeleted: number; podmanPodsDeleted: number }> {
+  async gcOrphanedDeployments(): Promise<number> {
+    const gracePeriodMs = 10 * 60 * 1000; // 10 minute grace period for pods to start
+    const now = Date.now();
+    let deleted = 0;
+
+    try {
+      // List all agor shell deployments
+      const { body: shellDeployments } = await this.appsApi.listNamespacedDeployment(
+        this.config.namespace,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        `${POD_LABELS.APP_NAME}=${POD_LABEL_VALUES.SHELL_POD}`
+      );
+
+      // List all agor podman deployments
+      const { body: podmanDeployments } = await this.appsApi.listNamespacedDeployment(
+        this.config.namespace,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        `${POD_LABELS.APP_NAME}=${POD_LABEL_VALUES.PODMAN_POD}`
+      );
+
+      // Get all running pods to check which deployments have pods
+      const { body: pods } = await this.coreApi.listNamespacedPod(
+        this.config.namespace,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        `${POD_LABELS.APP_NAME} in (${POD_LABEL_VALUES.SHELL_POD},${POD_LABEL_VALUES.PODMAN_POD})`
+      );
+
+      // Build set of deployment names that have running/pending pods
+      const deploymentsWithPods = new Set<string>();
+      for (const pod of pods.items) {
+        const podName = pod.metadata?.name || '';
+        // Extract deployment name from pod name (remove -<replicaset>-<random> suffix)
+        const parts = podName.split('-');
+        if (parts.length >= 3) {
+          const deploymentName = parts.slice(0, -2).join('-');
+          deploymentsWithPods.add(deploymentName);
+        }
+      }
+
+      // GC shell deployments without pods
+      for (const deployment of shellDeployments.items) {
+        const name = deployment.metadata?.name || '';
+        if (deploymentsWithPods.has(name)) continue;
+
+        // Check grace period
+        const createdAt = deployment.metadata?.annotations?.[POD_ANNOTATIONS.CREATED_AT];
+        if (createdAt) {
+          const age = now - new Date(createdAt).getTime();
+          if (age < gracePeriodMs) continue;
+        }
+
+        console.log(`[PodManager] GC: Deleting orphaned shell deployment ${name} (no pods)`);
+        try {
+          await this.appsApi.deleteNamespacedDeployment(name, this.config.namespace);
+          deleted++;
+        } catch (error) {
+          console.error(`Failed to delete orphaned shell deployment ${name}:`, error);
+        }
+      }
+
+      // GC podman deployments without pods
+      for (const deployment of podmanDeployments.items) {
+        const name = deployment.metadata?.name || '';
+        if (deploymentsWithPods.has(name)) continue;
+
+        // Check grace period
+        const createdAt = deployment.metadata?.annotations?.[POD_ANNOTATIONS.CREATED_AT];
+        if (createdAt) {
+          const age = now - new Date(createdAt).getTime();
+          if (age < gracePeriodMs) continue;
+        }
+
+        const worktreeId = deployment.metadata?.labels?.[POD_LABELS.WORKTREE_ID] as WorktreeID;
+        console.log(`[PodManager] GC: Deleting orphaned podman deployment ${name} (no pods)`);
+        try {
+          await this.appsApi.deleteNamespacedDeployment(name, this.config.namespace);
+          // Also clean up associated service
+          const serviceName = getPodmanServiceName(worktreeId);
+          await this.coreApi.deleteNamespacedService(serviceName, this.config.namespace).catch(() => {});
+          deleted++;
+        } catch (error) {
+          console.error(`Failed to delete orphaned podman deployment ${name}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error('[PodManager] GC orphaned deployments error:', error);
+    }
+
+    return deleted;
+  }
+
+  /**
+   * Garbage collect orphaned Services (no corresponding deployment/pods)
+   */
+  async gcOrphanedServices(): Promise<number> {
+    const gracePeriodMs = 10 * 60 * 1000; // 10 minute grace period
+    let deleted = 0;
+
+    try {
+      // List all services with worktree-id label (our services)
+      const { body: services } = await this.coreApi.listNamespacedService(
+        this.config.namespace,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        POD_LABELS.WORKTREE_ID // Any service with this label is ours
+      );
+
+      // Get all deployments to check which services have backing deployments
+      const { body: deployments } = await this.appsApi.listNamespacedDeployment(
+        this.config.namespace,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        `${POD_LABELS.APP_NAME} in (${POD_LABEL_VALUES.SHELL_POD},${POD_LABEL_VALUES.PODMAN_POD})`
+      );
+
+      // Build set of worktree IDs that have active deployments
+      const activeWorktreeIds = new Set<string>();
+      for (const deployment of deployments.items) {
+        const worktreeId = deployment.metadata?.labels?.[POD_LABELS.WORKTREE_ID];
+        if (worktreeId) {
+          activeWorktreeIds.add(worktreeId);
+        }
+      }
+
+      for (const service of services.items) {
+        const name = service.metadata?.name || '';
+        const worktreeId = service.metadata?.labels?.[POD_LABELS.WORKTREE_ID];
+
+        // Skip if there's an active deployment for this worktree
+        if (worktreeId && activeWorktreeIds.has(worktreeId)) continue;
+
+        // Check grace period based on creation time
+        const creationTimestamp = service.metadata?.creationTimestamp;
+        if (creationTimestamp) {
+          const age = Date.now() - new Date(creationTimestamp).getTime();
+          if (age < gracePeriodMs) continue;
+        }
+
+        console.log(`[PodManager] GC: Deleting orphaned service ${name} (no backing deployment)`);
+        try {
+          await this.coreApi.deleteNamespacedService(name, this.config.namespace);
+          deleted++;
+        } catch (error) {
+          console.error(`Failed to delete orphaned service ${name}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error('[PodManager] GC orphaned services error:', error);
+    }
+
+    return deleted;
+  }
+
+  /**
+   * Garbage collect orphaned Ingresses (no corresponding service/deployment)
+   */
+  async gcOrphanedIngresses(): Promise<number> {
+    const gracePeriodMs = 10 * 60 * 1000; // 10 minute grace period
+    let deleted = 0;
+
+    try {
+      // List all ingresses with worktree-id label (our ingresses)
+      const { body: ingresses } = await this.networkingApi.listNamespacedIngress(
+        this.config.namespace,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        POD_LABELS.WORKTREE_ID // Any ingress with this label is ours
+      );
+
+      // Get all services to check which ingresses have backing services
+      const { body: services } = await this.coreApi.listNamespacedService(
+        this.config.namespace,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        POD_LABELS.WORKTREE_ID
+      );
+
+      // Build set of service names
+      const activeServiceNames = new Set<string>();
+      for (const service of services.items) {
+        if (service.metadata?.name) {
+          activeServiceNames.add(service.metadata.name);
+        }
+      }
+
+      for (const ingress of ingresses.items) {
+        const name = ingress.metadata?.name || '';
+
+        // Get the backend service name from ingress rules
+        const backendServiceName = ingress.spec?.rules?.[0]?.http?.paths?.[0]?.backend?.service?.name;
+
+        // Skip if there's an active service for this ingress
+        if (backendServiceName && activeServiceNames.has(backendServiceName)) continue;
+
+        // Check grace period based on creation time
+        const creationTimestamp = ingress.metadata?.creationTimestamp;
+        if (creationTimestamp) {
+          const age = Date.now() - new Date(creationTimestamp).getTime();
+          if (age < gracePeriodMs) continue;
+        }
+
+        console.log(`[PodManager] GC: Deleting orphaned ingress ${name} (no backing service)`);
+        try {
+          await this.networkingApi.deleteNamespacedIngress(name, this.config.namespace);
+          deleted++;
+        } catch (error) {
+          console.error(`Failed to delete orphaned ingress ${name}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error('[PodManager] GC orphaned ingresses error:', error);
+    }
+
+    return deleted;
+  }
+
+  /**
+   * Run garbage collection for all resource types
+   */
+  async runGC(): Promise<{
+    shellPodsDeleted: number;
+    podmanPodsDeleted: number;
+    orphanedDeploymentsDeleted: number;
+    orphanedServicesDeleted: number;
+    orphanedIngressesDeleted: number;
+  }> {
+    // First, GC idle pods (this also cleans up their deployments)
     const shellPodsDeleted = await this.gcIdleShellPods();
     const podmanPodsDeleted = await this.gcOrphanedPodmanPods();
 
-    if (shellPodsDeleted > 0 || podmanPodsDeleted > 0) {
+    // Then, GC orphaned resources (deployments without pods, services without deployments, etc.)
+    const orphanedDeploymentsDeleted = await this.gcOrphanedDeployments();
+    const orphanedServicesDeleted = await this.gcOrphanedServices();
+    const orphanedIngressesDeleted = await this.gcOrphanedIngresses();
+
+    const totalDeleted =
+      shellPodsDeleted +
+      podmanPodsDeleted +
+      orphanedDeploymentsDeleted +
+      orphanedServicesDeleted +
+      orphanedIngressesDeleted;
+
+    if (totalDeleted > 0) {
       console.log(
-        `[PodManager] GC complete: ${shellPodsDeleted} shell pods, ${podmanPodsDeleted} Podman pods deleted`
+        `[PodManager] GC complete: ${shellPodsDeleted} shell pods, ${podmanPodsDeleted} Podman pods, ` +
+          `${orphanedDeploymentsDeleted} orphaned deployments, ${orphanedServicesDeleted} orphaned services, ` +
+          `${orphanedIngressesDeleted} orphaned ingresses deleted`
       );
     }
 
-    return { shellPodsDeleted, podmanPodsDeleted };
+    return {
+      shellPodsDeleted,
+      podmanPodsDeleted,
+      orphanedDeploymentsDeleted,
+      orphanedServicesDeleted,
+      orphanedIngressesDeleted,
+    };
   }
 
   /**
