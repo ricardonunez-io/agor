@@ -75,6 +75,7 @@ spec:
               mountPath: /etc/agor/config.yaml
               subPath: config.yaml
               readOnly: true
+        {{- if not .Values.daemon.skipMigrations }}
         - name: init-db
           image: "{{ .Values.daemon.image.repository }}:{{ .Values.daemon.image.tag }}"
           imagePullPolicy: {{ .Values.daemon.image.pullPolicy }}
@@ -102,6 +103,7 @@ spec:
           volumeMounts:
             - name: home
               mountPath: /home
+        {{- end }}
         {{- if and .Values.daemon.config.daemon.requireAuth (not .Values.daemon.skipAdminBootstrap) }}
         - name: init-admin
           image: "{{ .Values.daemon.image.repository }}:{{ .Values.daemon.image.tag }}"

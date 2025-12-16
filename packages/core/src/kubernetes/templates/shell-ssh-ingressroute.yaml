@@ -1,0 +1,30 @@
+# Traefik TCP IngressRoute for SSH
+# Note: Requires Traefik entrypoint for SSH (e.g., "ssh" on port 2222)
+# and TLS passthrough. Client must wrap SSH in TLS for SNI routing.
+#
+# Example client connection:
+#   ssh -o ProxyCommand="openssl s_client -quiet -connect %h:2222 -servername %h" user@{{hostname}}
+#
+# Or configure in ~/.ssh/config:
+#   Host *.ssh.agor.local
+#     ProxyCommand openssl s_client -quiet -connect %h:2222 -servername %h
+apiVersion: traefik.io/v1alpha1
+kind: IngressRouteTCP
+metadata:
+  name: "{{name}}"
+  namespace: "{{namespace}}"
+  labels:
+    app.kubernetes.io/name: agor-shell-ssh
+    app.kubernetes.io/component: ssh
+    agor.io/worktree-id: "{{worktreeId}}"
+    agor.io/user-id: "{{userId}}"
+spec:
+  entryPoints:
+    - {{sshEntryPoint}}
+  routes:
+    - match: HostSNI(`{{hostname}}`)
+      services:
+        - name: "{{serviceName}}"
+          port: 22
+  tls:
+    passthrough: true

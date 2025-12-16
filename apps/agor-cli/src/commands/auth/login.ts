@@ -4,7 +4,7 @@
  * Prompts for email/password and stores JWT token for future CLI commands
  */
 
-import { createRestClient, isDaemonRunning } from '@agor/core/api';
+import { createRestClient } from '@agor/core/api';
 import { getDaemonUrl } from '@agor/core/config';
 import { Command, Flags } from '@oclif/core';
 import chalk from 'chalk';
@@ -20,6 +20,10 @@ export default class Login extends Command {
   ];
 
   static flags = {
+    url: Flags.string({
+      char: 'u',
+      description: 'Daemon URL (persists for subsequent commands)',
+    }),
     email: Flags.string({
       char: 'e',
       description: 'Email address',
@@ -33,18 +37,28 @@ export default class Login extends Command {
   async run(): Promise<void> {
     const { flags } = await this.parse(Login);
 
-    // Get daemon URL
-    const daemonUrl = await getDaemonUrl();
+    // Get daemon URL (use custom URL if provided)
+    const daemonUrl = flags.url || await getDaemonUrl();
 
-    // Check if daemon is running
-    const running = await isDaemonRunning(daemonUrl);
+    // Check if daemon is running (use longer timeout for remote/custom URLs)
+    // .local domains can take longer to resolve via mDNS
+    const isCustomUrl = !!flags.url;
+    const timeout = isCustomUrl ? 10000 : 1000;
+
+    let running = false;
+    try {
+      const response = await fetch(`${daemonUrl}/health`, { signal: AbortSignal.timeout(timeout) });
+      running = response.ok;
+    } catch {
+      running = false;
+    }
+
     if (!running) {
       this.error(
-        chalk.red('✗ Daemon not running') +
+        chalk.red(`✗ Cannot connect to daemon at ${daemonUrl}`) +
           '\n\n' +
-          chalk.bold('To start the daemon:') +
-          '\n  ' +
-          chalk.cyan('cd apps/agor-daemon && pnpm dev')
+          chalk.dim('Check that the URL is correct and the daemon is running.') +
+          (flags.url ? '' : '\n\n' + chalk.bold('To start the daemon:') + '\n  ' + chalk.cyan('cd apps/agor-daemon && pnpm dev'))
       );
     }
 
@@ -104,7 +118,7 @@ export default class Login extends Command {
       // Calculate token expiry (7 days from now, matching daemon config)
       const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
 
-      // Save token to disk
+      // Save token to disk (include custom URL if provided)
       await saveToken({
         accessToken: authResult.accessToken,
         user: {
@@ -115,6 +129,7 @@ export default class Login extends Command {
           role: authResult.user.role || 'viewer',
         },
         expiresAt,
+        daemonUrl: flags.url, // Store custom URL if provided
       });
 
       this.log('');
@@ -127,6 +142,9 @@ export default class Login extends Command {
         this.log(chalk.dim('Name:'), userName);
       }
       this.log(chalk.dim('Role:'), authResult.user.role || 'viewer');
+      if (flags.url) {
+        this.log(chalk.dim('Daemon:'), chalk.cyan(flags.url));
+      }
       this.log('');
       this.log(chalk.dim('Token saved to ~/.agor/cli-token'));
       this.log(chalk.dim('Token expires in 7 days'));

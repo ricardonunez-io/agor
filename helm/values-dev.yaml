@@ -1,12 +1,12 @@
 # Development values for Agor
 # Usage: helm install agor ./helm/agor -f helm/values-dev.yaml
 
-# Database: PostgreSQL (local docker container via host.docker.internal)
+# Database: PostgreSQL
 database:
   type: postgresql
-  existingSecret: agor-db-credentials-local
+  existingSecret: postgres-credentials
 
-# Use local images (built with docker build)
+# Use ECR images
 daemon:
   # Symlink for path compatibility with local dev (e.g., /home/agorpg -> /home/agor)
   homeSymlink: agorpg
@@ -15,9 +15,9 @@ daemon:
   forceRollout: true
 
   image:
-    repository: agor/daemon
+    repository: public.ecr.aws/a5v0t1w0/agor/daemon
     tag: dev
-    pullPolicy: Never  # Use local image
+    pullPolicy: Always
 
   # Smaller resources for dev
   resources:
@@ -44,7 +44,7 @@ daemon:
       user_pods:
         enabled: true
         shellPod:
-          image: agor/shell:dev
+          image: public.ecr.aws/a5v0t1w0/agor/shell:dev
           resources:
             requests:
               cpu: 50m
@@ -52,8 +52,16 @@ daemon:
             limits:
               cpu: "1"
               memory: 1Gi
+          sshdResources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
         podmanPod:
-          image: agor/podman:dev
+          image: public.ecr.aws/a5v0t1w0/agor/podman:dev
+          initImage: busybox:1.36
           resources:
             requests:
               cpu: 100m
@@ -62,13 +70,16 @@ daemon:
               cpu: "2"
               memory: 3Gi
         storage:
-          dataPvc: agor-data
+          dataPvc: agor-data-nfs
+        appBaseDomain: agor-k8s.sandbox.preset.zone
+        ingressClassName: traefik
+        sshEntryPoint: ssh
 
   # User Pods configuration (for terminal_mode: pod)
   userPods:
     enabled: true
     shellPod:
-      image: agor/shell:dev
+      image: public.ecr.aws/a5v0t1w0/agor/shell:dev
       resources:
         requests:
           cpu: 50m
@@ -76,8 +87,16 @@ daemon:
         limits:
           cpu: "1"
           memory: 1Gi
+      sshdResources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi
     podmanPod:
-      image: agor/podman:dev
+      image: public.ecr.aws/a5v0t1w0/agor/podman:dev
+      initImage: busybox:1.36
       resources:
         requests:
           cpu: 100m
@@ -86,10 +105,16 @@ daemon:
           cpu: "4"
           memory: 6Gi
     storage:
-      dataPvc: agor-data
+      dataPvc: agor-data-nfs
+    appBaseDomain: agor-k8s.sandbox.preset.zone
+    ingressClassName: traefik
+    sshEntryPoint: ssh
 
   # Skip admin bootstrap - using external PostgreSQL
   skipAdminBootstrap: true
+
+  # Skip migrations on startup (run manually when schema changes)
+  skipMigrations: true
 
   # Extra environment variables
   extraEnv:
@@ -99,17 +124,20 @@ daemon:
           name: agor-github-token
           key: token
 
-  # Enable persistence with local PVC (simulating EFS)
+  # Enable persistence with NFS PVCs
   persistence:
     enabled: true
+    storageClass: nfs
+    home:
+      existingClaim: agor-home-nfs
     data:
-      existingClaim: agor-data
+      existingClaim: agor-data-nfs
 
 ui:
   image:
-    repository: agor/ui
+    repository: public.ecr.aws/a5v0t1w0/agor/ui
     tag: dev
-    pullPolicy: Never  # Use local image
+    pullPolicy: Always
 
   resources:
     requests:
@@ -119,7 +147,7 @@ ui:
       cpu: 100m
       memory: 64Mi
 
-# Enable ingress for local development with Traefik (Colima default)
+# Enable ingress
 ingress:
   enabled: true
   className: traefik
@@ -127,7 +155,8 @@ ingress:
     # WebSocket support for Traefik
     traefik.ingress.kubernetes.io/router.middlewares: ""
   hosts:
-    - host: agor.local
+    # Main domain
+    - host: agor-k8s.sandbox.preset.zone
       paths:
         - path: /
           pathType: Prefix
@@ -138,7 +167,6 @@ ingress:
         - path: /socket.io
           pathType: Prefix
           service: daemon
-        # All API service routes
         - path: /users
           pathType: Prefix
           service: daemon

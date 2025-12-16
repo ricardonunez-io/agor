@@ -22,6 +22,7 @@ export {
   buildPodmanDeploymentManifest,
   buildPodmanServiceManifest,
   buildShellDeploymentManifest,
+  buildShellSshServiceManifest,
   type PodmanPodParams,
   type ShellPodParams,
 } from './pod-manifests.js';
@@ -39,6 +40,9 @@ export {
   getPodmanPodName,
   getPodmanServiceName,
   getShellPodName,
+  getShellSshHostname,
+  getShellSshIngressRouteName,
+  getShellSshServiceName,
   getUserShortId,
   getWorktreeShortId,
   // Labels and annotations

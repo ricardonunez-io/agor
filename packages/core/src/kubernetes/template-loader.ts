@@ -76,6 +76,10 @@ export interface ShellDeploymentParams {
   requestsMemory: string;
   limitsCpu: string;
   limitsMemory: string;
+  sshdRequestsCpu: string;
+  sshdRequestsMemory: string;
+  sshdLimitsCpu: string;
+  sshdLimitsMemory: string;
   createdAt: string;
 }
 
@@ -89,6 +93,7 @@ export interface PodmanDeploymentParams {
   worktreeId: string;
   worktreePath: string;
   podmanImage: string;
+  initImage: string;
   dataPvc: string;
   requestsCpu: string;
   requestsMemory: string;
@@ -129,10 +134,64 @@ export interface AppIngressParams {
   hostname: string;
   serviceName: string;
   port: number;
+  ingressClassName: string;
 }
 
 export function loadAppIngress(params: AppIngressParams): V1Ingress {
   return renderTemplate<V1Ingress>('app-ingress', params);
+}
+
+export interface ShellSshServiceParams {
+  name: string;
+  namespace: string;
+  worktreeId: string;
+  userId: string;
+}
+
+export function loadShellSshService(params: ShellSshServiceParams): V1Service {
+  return renderTemplate<V1Service>('shell-ssh-service', params);
+}
+
+/**
+ * Traefik IngressRouteTCP for SSH
+ * Note: This is a Traefik CRD, not a standard K8s resource
+ */
+export interface ShellSshIngressRouteParams {
+  name: string;
+  namespace: string;
+  worktreeId: string;
+  userId: string;
+  hostname: string;
+  serviceName: string;
+  sshEntryPoint: string;
+}
+
+// IngressRouteTCP is a Traefik CRD - define minimal type
+export interface IngressRouteTCP {
+  apiVersion: string;
+  kind: string;
+  metadata: {
+    name: string;
+    namespace: string;
+    labels?: Record<string, string>;
+  };
+  spec: {
+    entryPoints: string[];
+    routes: Array<{
+      match: string;
+      services: Array<{
+        name: string;
+        port: number;
+      }>;
+    }>;
+    tls?: {
+      passthrough?: boolean;
+    };
+  };
+}
+
+export function loadShellSshIngressRoute(params: ShellSshIngressRouteParams): IngressRouteTCP {
+  return renderTemplate<IngressRouteTCP>('shell-ssh-ingressroute', params);
 }
 
 /**

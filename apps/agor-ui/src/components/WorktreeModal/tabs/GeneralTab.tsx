@@ -280,7 +280,6 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
           >
             Archive/Delete Worktree
           </Button>
-          {/* TODO: Add "Open in Terminal" button once terminal integration is ready */}
         </Space>
         <ArchiveDeleteWorktreeModal
           open={archiveDeleteModalOpen}

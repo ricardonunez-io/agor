@@ -13,6 +13,7 @@ import {
   loadPodmanDeployment,
   loadPodmanService,
   loadShellDeployment,
+  loadShellSshService,
 } from './template-loader.js';
 import {
   getAppIngressName,
@@ -21,6 +22,7 @@ import {
   getPodmanPodName,
   getPodmanServiceName,
   getShellPodName,
+  getShellSshServiceName,
   type UserPodConfig,
 } from './types.js';
 
@@ -52,6 +54,11 @@ export function buildShellDeploymentManifest(params: ShellPodParams): V1Deployme
   const username = unixUsername ?? 'agor';
   const now = new Date().toISOString();
 
+  const sshdResources = config.shellPod.sshdResources ?? {
+    requests: { cpu: '10m', memory: '32Mi' },
+    limits: { cpu: '100m', memory: '64Mi' },
+  };
+
   return loadShellDeployment({
     name: getShellPodName(worktreeId, userId),
     namespace: config.namespace,
@@ -68,6 +75,10 @@ export function buildShellDeploymentManifest(params: ShellPodParams): V1Deployme
     requestsMemory: config.shellPod.resources.requests.memory,
     limitsCpu: config.shellPod.resources.limits.cpu,
     limitsMemory: config.shellPod.resources.limits.memory,
+    sshdRequestsCpu: sshdResources.requests.cpu,
+    sshdRequestsMemory: sshdResources.requests.memory,
+    sshdLimitsCpu: sshdResources.limits.cpu,
+    sshdLimitsMemory: sshdResources.limits.memory,
     createdAt: now,
   });
 }
@@ -85,6 +96,7 @@ export function buildPodmanDeploymentManifest(params: PodmanPodParams): V1Deploy
     worktreeId,
     worktreePath,
     podmanImage: config.podmanPod.image,
+    initImage: config.podmanPod.initImage ?? 'busybox:1.36',
     dataPvc: config.storage.dataPvc,
     requestsCpu: config.podmanPod.resources.requests.cpu,
     requestsMemory: config.podmanPod.resources.requests.memory,
@@ -132,9 +144,10 @@ export function buildAppIngressManifest(
   worktreeName: string,
   port: number,
   config: UserPodConfig,
-  baseDomain: string = 'agor.local'
+  baseDomain?: string
 ): V1Ingress {
-  const hostname = `${worktreeName}.${baseDomain}`;
+  const domain = baseDomain || config.appBaseDomain || 'agor.local';
+  const hostname = `${worktreeName}.${domain}`;
 
   return loadAppIngress({
     name: getAppIngressName(worktreeId),
@@ -143,5 +156,23 @@ export function buildAppIngressManifest(
     hostname,
     serviceName: getAppServiceName(worktreeId),
     port,
+    ingressClassName: config.ingressClassName || 'traefik',
+  });
+}
+
+/**
+ * Build shell SSH service manifest using YAML template
+ * This NodePort service exposes SSH port 22 for shell pods
+ */
+export function buildShellSshServiceManifest(
+  worktreeId: WorktreeID,
+  userId: UserID,
+  config: UserPodConfig
+): V1Service {
+  return loadShellSshService({
+    name: getShellSshServiceName(worktreeId, userId),
+    namespace: config.namespace,
+    worktreeId,
+    userId,
   });
 }

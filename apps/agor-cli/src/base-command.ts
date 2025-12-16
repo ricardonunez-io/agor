@@ -5,7 +5,7 @@
  */
 
 import type { AgorClient } from '@agor/core/api';
-import { createRestClient, isDaemonRunning } from '@agor/core/api';
+import { createRestClient } from '@agor/core/api';
 import { getDaemonUrl } from '@agor/core/config';
 import { Command } from '@oclif/core';
 import chalk from 'chalk';
@@ -20,28 +20,34 @@ export abstract class BaseCommand extends Command {
   /**
    * Connect to daemon (checks if running first)
    *
+   * Uses stored daemon URL from login if available, otherwise falls back to config.
+   *
    * @returns Feathers client instance
    */
   protected async connectToDaemon(): Promise<AgorClient> {
-    // Get daemon URL from config
-    this.daemonUrl = await getDaemonUrl();
+    // Check if we have a stored auth with custom daemon URL
+    const storedAuth = await loadToken();
 
-    // Check if daemon is running (fast fail with 1s timeout)
-    const running = await isDaemonRunning(this.daemonUrl);
+    // Get daemon URL: prefer stored URL from login, then config
+    const isCustomUrl = !!storedAuth?.daemonUrl;
+    this.daemonUrl = storedAuth?.daemonUrl || await getDaemonUrl();
+
+    // Check if daemon is running (use longer timeout for custom URLs - .local domains need more time)
+    const timeout = isCustomUrl ? 10000 : 1000;
+    let running = false;
+    try {
+      const response = await fetch(`${this.daemonUrl}/health`, { signal: AbortSignal.timeout(timeout) });
+      running = response.ok;
+    } catch {
+      running = false;
+    }
 
     if (!running) {
       this.log(
-        chalk.red('✗ Daemon not running') +
+        chalk.red(`✗ Cannot connect to daemon at ${this.daemonUrl}`) +
           '\n\n' +
-          chalk.bold('To start the daemon:') +
-          '\n  ' +
-          chalk.cyan('cd apps/agor-daemon && pnpm dev') +
-          '\n\n' +
-          chalk.bold('To configure daemon URL:') +
-          '\n  ' +
-          chalk.cyan('agor config set daemon.url <url>') +
-          '\n  ' +
-          chalk.gray(`Current: ${this.daemonUrl}`)
+          chalk.dim('Check that the URL is correct and the daemon is running.') +
+          (isCustomUrl ? '' : '\n\n' + chalk.bold('To start the daemon:') + '\n  ' + chalk.cyan('cd apps/agor-daemon && pnpm dev'))
       );
       this.exit(1);
     }
@@ -49,9 +55,7 @@ export abstract class BaseCommand extends Command {
     // Create REST-only client (prevents hanging processes)
     const client = await createRestClient(this.daemonUrl);
 
-    // Load stored authentication token
-    const storedAuth = await loadToken();
-
+    // Use already-loaded stored auth (from URL check above)
     if (storedAuth) {
       try {
         // Authenticate with stored JWT token

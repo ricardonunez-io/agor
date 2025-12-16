@@ -14,6 +14,7 @@ import {
   buildPodmanDeploymentManifest,
   buildPodmanServiceManifest,
   buildShellDeploymentManifest,
+  buildShellSshServiceManifest,
 } from './pod-manifests.js';
 import {
   DEFAULT_USER_POD_CONFIG,
@@ -22,6 +23,7 @@ import {
   getPodmanPodName,
   getPodmanServiceName,
   getShellPodName,
+  getShellSshServiceName,
   getWorktreeShortId,
   POD_ANNOTATIONS,
   POD_LABEL_VALUES,
@@ -240,6 +242,32 @@ export class PodManager {
         manifest.metadata?.name
       );
     }
+
+    // Create SSH service for the shell pod
+    await this.createShellSshService(worktreeId, userId);
+  }
+
+  /**
+   * Create SSH service for shell pod (NodePort to expose SSH)
+   */
+  private async createShellSshService(worktreeId: WorktreeID, userId: UserID): Promise<void> {
+    const manifest = buildShellSshServiceManifest(worktreeId, userId, this.config);
+    const serviceName = manifest.metadata?.name;
+
+    console.log(`[PodManager] Creating shell SSH service: ${serviceName}`);
+
+    try {
+      await this.coreApi.createNamespacedService(this.config.namespace, manifest);
+    } catch (error: unknown) {
+      const e = error as { statusCode?: number; body?: { message?: string } };
+      // Ignore if service already exists
+      if (e.statusCode !== 409) {
+        throw new PodManagerError(
+          `Failed to create shell SSH service: ${e.body?.message || String(error)}`,
+          e.statusCode
+        );
+      }
+    }
   }
 
   /**
@@ -290,12 +318,13 @@ export class PodManager {
   }
 
   /**
-   * Delete shell deployment
+   * Delete shell deployment and SSH service
    */
   async deleteShellPod(worktreeId: WorktreeID, userId: UserID): Promise<void> {
     const deploymentName = getShellPodName(worktreeId, userId);
+    const sshServiceName = getShellSshServiceName(worktreeId, userId);
 
-    console.log(`[PodManager] Deleting shell deployment: ${deploymentName}`);
+    console.log(`[PodManager] Deleting shell deployment and SSH service: ${deploymentName}`);
 
     try {
       await this.appsApi.deleteNamespacedDeployment(deploymentName, this.config.namespace);
@@ -308,6 +337,16 @@ export class PodManager {
           e.statusCode,
           deploymentName
         );
+      }
+    }
+
+    // Delete SSH service
+    try {
+      await this.coreApi.deleteNamespacedService(sshServiceName, this.config.namespace);
+    } catch (error: unknown) {
+      const e = error as { statusCode?: number };
+      if (e.statusCode !== 404) {
+        console.error(`Failed to delete shell SSH service ${sshServiceName}:`, error);
       }
     }
   }
@@ -353,11 +392,12 @@ export class PodManager {
     worktreeId: WorktreeID,
     worktreeName: string,
     port: number,
-    baseDomain: string = 'agor.local'
+    baseDomain?: string
   ): Promise<string> {
     const appServiceName = getAppServiceName(worktreeId);
     const ingressName = getAppIngressName(worktreeId);
-    const hostname = `${worktreeName}.${baseDomain}`;
+    const domain = baseDomain || this.config.appBaseDomain || 'agor.local';
+    const hostname = `${worktreeName}.${domain}`;
 
     console.log(`[PodManager] Creating Ingress for ${worktreeName} on port ${port} -> ${hostname}`);
 
@@ -606,6 +646,40 @@ export class PodManager {
         status: (pod.status?.phase as PodmanPodInfo['status']) || 'Unknown',
       };
     });
+  }
+
+  /**
+   * Get SSH connection info for a shell pod
+   * Returns the NodePort for SSH connection
+   */
+  async getShellSshInfo(
+    worktreeId: WorktreeID,
+    userId: UserID
+  ): Promise<{ serviceName: string; nodePort: number | null } | null> {
+    const serviceName = getShellSshServiceName(worktreeId, userId);
+
+    try {
+      const { body: service } = await this.coreApi.readNamespacedService(
+        serviceName,
+        this.config.namespace
+      );
+
+      // Find the SSH port's NodePort
+      const sshPort = service.spec?.ports?.find((p) => p.name === 'ssh' || p.port === 22);
+      const nodePort = sshPort?.nodePort ?? null;
+
+      return { serviceName, nodePort };
+    } catch (error: unknown) {
+      const e = error as { statusCode?: number };
+      if (e.statusCode === 404) {
+        return null;
+      }
+      throw new PodManagerError(
+        `Failed to get SSH service info: ${error instanceof Error ? error.message : String(error)}`,
+        e.statusCode,
+        serviceName
+      );
+    }
   }
 
   /**

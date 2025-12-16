@@ -19,6 +19,8 @@ RUN apt-get update && apt-get install -y \
     curl \
     wget \
     ca-certificates \
+    # SSH server (for sshd sidecar container)
+    openssh-server \
     # Shell utilities
     bash \
     bash-completion \
@@ -30,37 +32,39 @@ RUN apt-get update && apt-get install -y \
     htop \
     # Build essentials (for some docker-compose projects)
     make \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    # Create sshd privilege separation directory
+    && mkdir -p /run/sshd
 
-# Install Zellij from GitHub releases
+# Install Zellij from GitHub releases (optional - may fail in restricted networks)
 ARG TARGETARCH
 RUN ARCH=$(case "${TARGETARCH}" in \
         "amd64") echo "x86_64" ;; \
         "arm64") echo "aarch64" ;; \
         *) echo "x86_64" ;; \
     esac) && \
-    curl -fsSL "https://github.com/zellij-org/zellij/releases/latest/download/zellij-${ARCH}-unknown-linux-musl.tar.gz" \
+    (curl -fsSL --connect-timeout 30 "https://github.com/zellij-org/zellij/releases/latest/download/zellij-${ARCH}-unknown-linux-musl.tar.gz" \
     | tar -xz -C /usr/local/bin && \
-    chmod +x /usr/local/bin/zellij
+    chmod +x /usr/local/bin/zellij) || echo "Warning: Failed to install zellij (network issue?)"
 
-# Install docker-compose v2 (standalone)
+# Install docker-compose v2 (standalone, optional)
 RUN ARCH=$(case "${TARGETARCH}" in \
         "amd64") echo "x86_64" ;; \
         "arm64") echo "aarch64" ;; \
         *) echo "x86_64" ;; \
     esac) && \
-    curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${ARCH}" \
+    (curl -fsSL --connect-timeout 30 "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${ARCH}" \
     -o /usr/local/bin/docker-compose && \
-    chmod +x /usr/local/bin/docker-compose
+    chmod +x /usr/local/bin/docker-compose) || echo "Warning: Failed to install docker-compose (network issue?)"
 
 # Create agor user with uid 1000
 RUN groupadd -g 1000 agor && \
     useradd -u 1000 -g 1000 -m -s /bin/bash agor
 
-# Setup .agor directory with symlinks to /data (mounted at runtime)
-RUN mkdir -p /home/agor/.agor && \
-    ln -s /data/worktrees /home/agor/.agor/worktrees && \
-    ln -s /data/repos /home/agor/.agor/repos
+# Note: Shell pods use dynamic users created by init container
+# Symlinks are created at runtime in /data/homes/<username>/.agor/
+RUN mkdir -p /home/agor/.agor
 
 # Setup home directory and config files
 RUN mkdir -p /home/agor/.config/zellij && \

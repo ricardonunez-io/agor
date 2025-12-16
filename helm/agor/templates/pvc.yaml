@@ -1,4 +1,6 @@
 {{- if and .Values.daemon.enabled .Values.daemon.persistence.enabled }}
+{{- $storageClass := .Values.daemon.persistence.storageClass | default .Values.global.storageClass }}
+{{- if not .Values.daemon.persistence.home.existingClaim }}
 ---
 # Home directory PVC (~/.agor for SQLite db, config)
 apiVersion: v1
@@ -9,13 +11,14 @@ metadata:
     {{- include "agor.daemon.labels" . | nindent 4 }}
 spec:
   accessModes:
-    - {{ .Values.daemon.persistence.home.accessMode | default "ReadWriteOnce" }}
-  {{- if .Values.global.storageClass }}
-  storageClassName: {{ .Values.global.storageClass }}
+    - {{ .Values.daemon.persistence.home.accessMode | default "ReadWriteMany" }}
+  {{- if $storageClass }}
+  storageClassName: {{ $storageClass }}
   {{- end }}
   resources:
     requests:
-      storage: {{ .Values.daemon.persistence.home.size | default "1Gi" }}
+      storage: {{ .Values.daemon.persistence.home.size | default "5Gi" }}
+{{- end }}
 {{- if not .Values.daemon.persistence.data.existingClaim }}
 ---
 # Data PVC (worktrees + repos) - only create if not using existingClaim
@@ -27,12 +30,12 @@ metadata:
     {{- include "agor.daemon.labels" . | nindent 4 }}
 spec:
   accessModes:
-    - {{ .Values.daemon.persistence.data.accessMode | default "ReadWriteOnce" }}
-  {{- if .Values.global.storageClass }}
-  storageClassName: {{ .Values.global.storageClass }}
+    - {{ .Values.daemon.persistence.data.accessMode | default "ReadWriteMany" }}
+  {{- if $storageClass }}
+  storageClassName: {{ $storageClass }}
   {{- end }}
   resources:
     requests:
-      storage: {{ .Values.daemon.persistence.data.size | default "10Gi" }}
+      storage: {{ .Values.daemon.persistence.data.size | default "50Gi" }}
 {{- end }}
 {{- end }}

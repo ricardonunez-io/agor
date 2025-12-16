@@ -42,9 +42,9 @@ daemon:
   enabled: true
 
   image:
-    repository: agor/daemon
+    repository: public.ecr.aws/a5v0t1w0/agor/daemon
     tag: "latest"
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
 
   replicaCount: 1
 
@@ -101,7 +101,7 @@ daemon:
 
     # Shell pod configuration (one per user per worktree)
     shellPod:
-      image: agor/shell:latest
+      image: public.ecr.aws/a5v0t1w0/agor/shell:latest
       resources:
         requests:
           cpu: 50m
@@ -109,10 +109,20 @@ daemon:
         limits:
           cpu: "1"
           memory: 1Gi
+      # SSH sidecar container resources
+      sshdResources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi
 
     # Podman pod configuration (one per worktree, shared by users)
     podmanPod:
-      image: quay.io/podman/stable
+      image: public.ecr.aws/a5v0t1w0/agor/podman:latest
+      # Init container image for setup tasks
+      initImage: busybox:1.36
       resources:
         requests:
           cpu: 100m
@@ -130,6 +140,15 @@ daemon:
     storage:
       dataPvc: agor-data
 
+    # Base domain for worktree app ingresses (e.g., "agor.local" -> "myapp.agor.local")
+    appBaseDomain: agor.local
+
+    # Ingress class name for worktree app ingresses
+    ingressClassName: traefik
+
+    # Traefik entrypoint name for SSH routing
+    sshEntryPoint: ssh
+
   # Skip auto-creating admin user on startup
   # Set to true when using external database with pre-seeded users
   skipAdminBootstrap: false
@@ -137,15 +156,18 @@ daemon:
   # Persistence for daemon storage
   persistence:
     enabled: true
+    # Storage class for PVCs (nfs recommended for user pods RWX support)
+    storageClass: nfs
     # Home directory (~/.agor for SQLite db, config)
     home:
-      size: 1Gi
-      accessMode: ReadWriteOnce
-    # Data storage (worktrees + repos) - use existingClaim for EFS
+      size: 5Gi
+      accessMode: ReadWriteMany
+      # existingClaim: agor-home-nfs
+    # Data storage (worktrees + repos)
     data:
-      size: 10Gi
-      accessMode: ReadWriteOnce
-      # existingClaim: agor-data  # Use pre-existing PVC (e.g., EFS)
+      size: 50Gi
+      accessMode: ReadWriteMany
+      # existingClaim: agor-data-nfs
 
   # Pod annotations
   podAnnotations: {}
@@ -180,9 +202,9 @@ ui:
   enabled: true
 
   image:
-    repository: agor/ui
+    repository: public.ecr.aws/a5v0t1w0/agor/ui
     tag: "latest"
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
 
   replicaCount: 1
 

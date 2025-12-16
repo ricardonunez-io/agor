@@ -6,10 +6,8 @@ metadata:
   labels:
     app.kubernetes.io/component: worktree-app
     agor.io/worktree-id: "{{worktreeId}}"
-  annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: web
 spec:
-  ingressClassName: traefik
+  ingressClassName: "{{ingressClassName}}"
   rules:
     - host: "{{hostname}}"
       http:

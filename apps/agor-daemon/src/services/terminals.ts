@@ -307,6 +307,9 @@ function buildUserPodConfig(
       };
       idleTimeoutMinutes?: { shell?: number; podman?: number };
       storage?: { dataPvc?: string };
+      appBaseDomain?: string;
+      ingressClassName?: string;
+      sshEntryPoint?: string;
     };
   },
   namespace: string
@@ -365,7 +368,64 @@ function buildUserPodConfig(
     storage: {
       dataPvc: userPods.storage?.dataPvc ?? DEFAULT_USER_POD_CONFIG.storage.dataPvc,
     },
+    appBaseDomain: userPods.appBaseDomain,
+    ingressClassName: userPods.ingressClassName,
+    sshEntryPoint: userPods.sshEntryPoint,
   };
+}
+
+/**
+ * Allocate a unique UID for a user in pod mode
+ *
+ * Uses the configured unix_uid_range to find the next available UID.
+ * This is a simplified version that only needs database access (no sudo).
+ */
+async function allocateUidForPodUser(
+  usersRepo: UsersRepository,
+  uidRange: { min: number; max: number }
+): Promise<number> {
+  const allUsers = await usersRepo.findAll();
+  const usedUids = new Set(
+    allUsers
+      .filter((u): u is typeof u & { unix_uid: number } => u.unix_uid !== undefined && u.unix_uid !== null)
+      .map((u) => u.unix_uid)
+  );
+
+  for (let uid = uidRange.min; uid <= uidRange.max; uid++) {
+    if (!usedUids.has(uid)) {
+      return uid;
+    }
+  }
+
+  throw new Error(
+    `No available UIDs in range ${uidRange.min}-${uidRange.max}. ` +
+      'Consider expanding the UID range or cleaning up unused users.'
+  );
+}
+
+/**
+ * Generate a Unix username from user email
+ *
+ * Takes the local part of email (before @) and replaces unsupported
+ * characters with underscores. Unix usernames typically allow:
+ * lowercase letters, digits, underscores, and hyphens.
+ */
+function generateUnixUsername(email: string): string {
+  // Get local part (before @)
+  const localPart = email.split('@')[0] || email;
+
+  // Replace unsupported characters with underscore
+  // Keep: a-z, 0-9, _, -
+  // Replace: . and anything else
+  let username = localPart.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+
+  // Ensure it starts with a letter (Unix requirement)
+  if (!/^[a-z]/.test(username)) {
+    username = 'u' + username;
+  }
+
+  // Truncate to 32 chars (common Unix limit)
+  return username.substring(0, 32);
 }
 
 /**
@@ -533,11 +593,41 @@ export class TerminalsService {
     // Get user's UID and username for consistent file ownership on EFS/NFS
     const usersRepo = new UsersRepository(this.db);
     const user = await usersRepo.findById(resolvedUserId);
-    const userUid = user?.unix_uid;
-    const unixUsername = user?.unix_username;
+    if (!user) {
+      throw new Error(`User ${resolvedUserId} not found`);
+    }
+
+    let userUid = user.unix_uid;
+    let unixUsername = user.unix_username;
+
+    // Allocate UID and username if not already set
+    if (!userUid || !unixUsername) {
+      const config = await loadConfig();
+      const configRange = config.execution?.unix_uid_range;
+      const uidRange = {
+        min: configRange?.min ?? 10000,
+        max: configRange?.max ?? 60000,
+      };
+
+      if (!userUid) {
+        userUid = await allocateUidForPodUser(usersRepo, uidRange);
+        console.log(`[Pod Mode] Allocated UID ${userUid} for user ${resolvedUserId.substring(0, 8)}`);
+      }
+
+      if (!unixUsername) {
+        unixUsername = generateUnixUsername(user.email);
+        console.log(`[Pod Mode] Generated username ${unixUsername} for user ${user.email}`);
+      }
+
+      // Update user in database
+      await usersRepo.update(resolvedUserId, {
+        unix_uid: userUid,
+        unix_username: unixUsername,
+      });
+    }
 
     console.log(
-      `🚀 [Pod Mode] Creating shell pod for user ${unixUsername ?? resolvedUserId.substring(0, 8)} (UID: ${userUid ?? 'default'}) in worktree ${worktreeName}`
+      `🚀 [Pod Mode] Creating shell pod for user ${unixUsername} (UID: ${userUid}) in worktree ${worktreeName}`
     );
 
     // Ensure shell pod exists (creates Podman pod first if needed)
@@ -1232,5 +1322,249 @@ export class TerminalsService {
       }
     }
     this.sessions.clear();
+  }
+
+  /**
+   * Register SSH public key for a user
+   * Adds the public key to the user's authorized_keys file on the PVC
+   *
+   * In pod mode: Uses exec to add the key to authorized_keys
+   * In daemon mode: Not supported (no SSH access)
+   *
+   * @param publicKey - SSH public key (e.g., "ssh-ed25519 AAAA... user@host")
+   * @param params - Authenticated request params (user must be logged in)
+   * @returns Object with success status and SSH connection info
+   */
+  async registerSshKey(
+    publicKey: string,
+    worktreeId: WorktreeID,
+    params: AuthenticatedParams
+  ): Promise<{
+    success: boolean;
+    message: string;
+    sshInfo?: {
+      serviceName: string;
+      nodePort: number | null;
+    };
+  }> {
+    // Validate public key format (basic check)
+    const keyPattern = /^(ssh-rsa|ssh-ed25519|ecdsa-sha2-\S+|ssh-dss)\s+\S+/;
+    if (!keyPattern.test(publicKey.trim())) {
+      return {
+        success: false,
+        message: 'Invalid SSH public key format. Expected format: ssh-ed25519 AAAA... or similar',
+      };
+    }
+
+    // Check terminal mode
+    if (this.terminalMode !== 'pod') {
+      return {
+        success: false,
+        message: 'SSH access is only available in pod mode',
+      };
+    }
+
+    if (!this.podManager) {
+      return {
+        success: false,
+        message: 'Pod manager not initialized',
+      };
+    }
+
+    const userId = params?.user?.user_id as UserID | undefined;
+    if (!userId) {
+      return {
+        success: false,
+        message: 'Authentication required',
+      };
+    }
+
+    // Get user's Unix username for the authorized_keys path
+    const usersRepo = new UsersRepository(this.db);
+    const user = await usersRepo.findById(userId);
+    if (!user) {
+      return {
+        success: false,
+        message: 'User not found',
+      };
+    }
+
+    let userUid = user.unix_uid;
+    let unixUsername = user.unix_username;
+
+    // Allocate UID and username if not already set
+    if (!userUid || !unixUsername) {
+      const config = await loadConfig();
+      const configRange = config.execution?.unix_uid_range;
+      const uidRange = {
+        min: configRange?.min ?? 10000,
+        max: configRange?.max ?? 60000,
+      };
+
+      if (!userUid) {
+        userUid = await allocateUidForPodUser(usersRepo, uidRange);
+        console.log(`[SSH] Allocated UID ${userUid} for user ${userId.substring(0, 8)}`);
+      }
+
+      if (!unixUsername) {
+        unixUsername = generateUnixUsername(user.email);
+        console.log(`[SSH] Generated username ${unixUsername} for user ${user.email}`);
+      }
+
+      // Update user in database
+      await usersRepo.update(userId, {
+        unix_uid: userUid,
+        unix_username: unixUsername,
+      });
+    }
+
+    // Validate worktree exists
+    const worktreeRepo = new WorktreeRepository(this.db);
+    const worktree = await worktreeRepo.findById(worktreeId);
+    if (!worktree) {
+      return {
+        success: false,
+        message: `Worktree ${worktreeId} not found`,
+      };
+    }
+
+    // Ensure shell pod exists for this user+worktree
+    let podName: string;
+    try {
+      podName = await this.podManager.ensureShellPod(
+        worktreeId,
+        userId,
+        worktree.path,
+        userUid,
+        unixUsername
+      );
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to ensure shell pod: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+
+    // Add key to authorized_keys via exec
+    // The init container creates /data/homes/<username>/.ssh/authorized_keys
+    const authorizedKeysPath = `/data/homes/${unixUsername}/.ssh/authorized_keys`;
+
+    // Build command to add key if not already present (idempotent)
+    // Using grep to check if key already exists, then append if not
+    const escapedKey = publicKey.trim().replace(/'/g, "'\\''");
+    const addKeyCommand = `grep -qF '${escapedKey}' '${authorizedKeysPath}' 2>/dev/null || echo '${escapedKey}' >> '${authorizedKeysPath}'`;
+
+    console.log(`[SSH] Adding public key for user ${unixUsername} in pod ${podName}`);
+
+    try {
+      // Use exec to run the command in the shell container
+      const exec = this.podManager.getExec();
+      const namespace = this.podManager.getNamespace();
+
+      let stdout = '';
+      let stderr = '';
+
+      const stdoutStream = new Writable({
+        write(chunk: Buffer, _encoding: string, callback: () => void) {
+          stdout += chunk.toString();
+          callback();
+        },
+      });
+
+      const stderrStream = new Writable({
+        write(chunk: Buffer, _encoding: string, callback: () => void) {
+          stderr += chunk.toString();
+          callback();
+        },
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        exec
+          .exec(
+            namespace,
+            podName,
+            'shell', // container name
+            ['sh', '-c', addKeyCommand],
+            stdoutStream,
+            stderrStream,
+            null, // no stdin
+            false, // no tty
+            (status) => {
+              if (status.status === 'Success') {
+                resolve();
+              } else {
+                reject(new Error(`Command failed: ${stderr || 'Unknown error'}`));
+              }
+            }
+          )
+          .catch(reject);
+      });
+
+      console.log(`[SSH] Successfully added public key for user ${user.unix_username}`);
+
+      // Get SSH service info for connection
+      const sshInfo = await this.podManager.getShellSshInfo(worktreeId, userId);
+
+      return {
+        success: true,
+        message: 'SSH public key registered successfully',
+        sshInfo: sshInfo || undefined,
+      };
+    } catch (error) {
+      console.error(`[SSH] Failed to add public key:`, error);
+      return {
+        success: false,
+        message: `Failed to register SSH key: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  /**
+   * Get SSH connection info for a user's shell pod
+   */
+  async getSshInfo(
+    worktreeId: WorktreeID,
+    params: AuthenticatedParams
+  ): Promise<{
+    available: boolean;
+    serviceName?: string;
+    nodePort?: number | null;
+    message?: string;
+  }> {
+    if (this.terminalMode !== 'pod') {
+      return {
+        available: false,
+        message: 'SSH access is only available in pod mode',
+      };
+    }
+
+    if (!this.podManager) {
+      return {
+        available: false,
+        message: 'Pod manager not initialized',
+      };
+    }
+
+    const userId = params?.user?.user_id as UserID | undefined;
+    if (!userId) {
+      return {
+        available: false,
+        message: 'Authentication required',
+      };
+    }
+
+    const sshInfo = await this.podManager.getShellSshInfo(worktreeId, userId);
+    if (!sshInfo) {
+      return {
+        available: false,
+        message: 'No SSH service found for this worktree. Start a terminal first.',
+      };
+    }
+
+    return {
+      available: true,
+      serviceName: sshInfo.serviceName,
+      nodePort: sshInfo.nodePort,
+    };
   }
 }

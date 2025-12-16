@@ -20,6 +20,11 @@ export interface ShellPodConfig {
     requests: { cpu: string; memory: string };
     limits: { cpu: string; memory: string };
   };
+  /** SSH sidecar container resources */
+  sshdResources?: {
+    requests: { cpu: string; memory: string };
+    limits: { cpu: string; memory: string };
+  };
 }
 
 /**
@@ -27,6 +32,8 @@ export interface ShellPodConfig {
  */
 export interface PodmanPodConfig {
   image: string;
+  /** Init container image (default: busybox:1.36) */
+  initImage?: string;
   resources: {
     requests: { cpu: string; memory: string };
     limits: { cpu: string; memory: string };
@@ -49,6 +56,12 @@ export interface UserPodConfig {
     /** Single PVC for all data (worktrees + repos as subdirectories) */
     dataPvc: string;
   };
+  /** Base domain for worktree app ingresses (e.g., "agor.local" -> "myapp.agor.local") */
+  appBaseDomain?: string;
+  /** Ingress class name for app ingresses (default: "traefik") */
+  ingressClassName?: string;
+  /** Traefik entrypoint name for SSH routing (default: "ssh") */
+  sshEntryPoint?: string;
 }
 
 /**
@@ -63,9 +76,14 @@ export const DEFAULT_USER_POD_CONFIG: UserPodConfig = {
       requests: { cpu: '50m', memory: '128Mi' },
       limits: { cpu: '1', memory: '1Gi' },
     },
+    sshdResources: {
+      requests: { cpu: '10m', memory: '32Mi' },
+      limits: { cpu: '100m', memory: '64Mi' },
+    },
   },
   podmanPod: {
     image: 'quay.io/podman/stable',
+    initImage: 'busybox:1.36',
     resources: {
       requests: { cpu: '100m', memory: '256Mi' },
       limits: { cpu: '4', memory: '8Gi' },
@@ -78,6 +96,8 @@ export const DEFAULT_USER_POD_CONFIG: UserPodConfig = {
   storage: {
     dataPvc: 'agor-data',
   },
+  ingressClassName: 'traefik',
+  sshEntryPoint: 'ssh',
 };
 
 /**
@@ -208,6 +228,30 @@ export function getAppServiceName(worktreeId: WorktreeID): string {
  */
 export function getAppIngressName(worktreeId: WorktreeID): string {
   return `wt-${getWorktreeShortId(worktreeId)}-ingress`;
+}
+
+/**
+ * Generate shell SSH service name
+ * Format: wt-{worktreeId}-shell-{userId}-ssh
+ */
+export function getShellSshServiceName(worktreeId: WorktreeID, userId: UserID): string {
+  return `wt-${getWorktreeShortId(worktreeId)}-shell-${getUserShortId(userId)}-ssh`;
+}
+
+/**
+ * Generate shell SSH ingress route name
+ * Format: wt-{worktreeId}-shell-{userId}-ssh-route
+ */
+export function getShellSshIngressRouteName(worktreeId: WorktreeID, userId: UserID): string {
+  return `wt-${getWorktreeShortId(worktreeId)}-shell-${getUserShortId(userId)}-ssh-route`;
+}
+
+/**
+ * Generate shell SSH hostname for Traefik routing
+ * Format: ssh-{worktreeId}-{userId}.ssh.{domain}
+ */
+export function getShellSshHostname(worktreeId: WorktreeID, userId: UserID, domain: string): string {
+  return `ssh-${getWorktreeShortId(worktreeId)}-${getUserShortId(userId)}.ssh.${domain}`;
 }
 
 /**

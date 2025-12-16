@@ -117,11 +117,9 @@ RUN chmod +x /app/executor/bin/agor-executor 2>/dev/null || true && \
     # Create symlink so daemon can find cli.js at expected path
     ln -sf /app/executor/dist/cli.js /app/executor/cli.js
 
-# Create agor home directory with symlinks to /data (mounted at runtime)
+# Create agor home directory (symlinks to /data created by init container at runtime)
 RUN mkdir -p /home/agor/.agor && \
-    ln -s /data/worktrees /home/agor/.agor/worktrees && \
-    ln -s /data/repos /home/agor/.agor/repos && \
-    chown -h agor:agor /home/agor/.agor /home/agor/.agor/worktrees /home/agor/.agor/repos
+    chown -R agor:agor /home/agor/.agor
 
 # Set environment
 ENV NODE_ENV=production

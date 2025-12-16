@@ -7,11 +7,12 @@ import {
   FileTextOutlined,
   FireOutlined,
   GlobalOutlined,
+  KeyOutlined,
   PlayCircleOutlined,
   StopOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
-import { Button, Space, Spin, Tag, Tooltip, theme } from 'antd';
+import { Button, Space, Spin, Tag, Tooltip, message, theme } from 'antd';
 import { getEnvironmentState } from '../../utils/environmentState';
 
 interface EnvironmentPillProps {
@@ -333,6 +334,26 @@ export function EnvironmentPill({
                 />
               </Tooltip>
             )}
+            <Tooltip title="Copy SSH command">
+              <Button
+                type="text"
+                size="small"
+                icon={<KeyOutlined />}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  const shortId = worktree.worktree_id.substring(0, 8);
+                  const sshCommand = `agor worktree ssh ${shortId}`;
+                  navigator.clipboard.writeText(sshCommand);
+                  message.success('SSH command copied to clipboard');
+                }}
+                style={{
+                  height: 22,
+                  width: 22,
+                  minWidth: 22,
+                  padding: 0,
+                }}
+              />
+            </Tooltip>
             {onNukeEnvironment && worktree.nuke_command && (
               <Tooltip title="Nuke environment (destructive - removes all data and volumes)">
                 <Button

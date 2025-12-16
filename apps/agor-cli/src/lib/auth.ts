@@ -20,6 +20,8 @@ export interface StoredAuth {
     role: string;
   };
   expiresAt: number;
+  /** Daemon URL used during login (if custom URL was specified) */
+  daemonUrl?: string;
 }
 
 /**

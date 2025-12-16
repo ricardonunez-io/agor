@@ -22,8 +22,8 @@ NC='\033[0m'
 
 # Default values
 TAG="${TAG:-dev}"
-REGISTRY="${REGISTRY:-}"
-VITE_DAEMON_URL="${VITE_DAEMON_URL:-http://agor.local}"
+REGISTRY="${REGISTRY:-public.ecr.aws/a5v0t1w0}"
+VITE_DAEMON_URL="${VITE_DAEMON_URL:-http://agor-k8s.sandbox.preset.zone}"
 PUSH=false
 DEPLOY=false
 CLUSTER_TYPE=""
@@ -81,6 +81,7 @@ echo ""
 # Build daemon
 echo -e "${YELLOW}Building daemon image...${NC}"
 docker build \
+    --platform linux/amd64 \
     -t "$DAEMON_IMAGE" \
     -f "$SCRIPT_DIR/docker/Dockerfile.daemon" \
     "$PROJECT_ROOT"
@@ -89,6 +90,7 @@ echo -e "${GREEN}✓ Daemon image built${NC}"
 # Build UI
 echo -e "${YELLOW}Building UI image...${NC}"
 docker build \
+    --platform linux/amd64 \
     --build-arg VITE_DAEMON_URL="$VITE_DAEMON_URL" \
     -t "$UI_IMAGE" \
     -f "$SCRIPT_DIR/docker/Dockerfile.ui" \
@@ -98,6 +100,7 @@ echo -e "${GREEN}✓ UI image built${NC}"
 # Build shell pod image (for terminal_mode: pod)
 echo -e "${YELLOW}Building shell pod image...${NC}"
 docker build \
+    --platform linux/amd64 \
     -t "$SHELL_IMAGE" \
     -f "$SCRIPT_DIR/docker/Dockerfile.shell" \
     "$SCRIPT_DIR/docker"
@@ -106,6 +109,7 @@ echo -e "${GREEN}✓ Shell image built${NC}"
 # Build podman pod image (for docker-compose environments)
 echo -e "${YELLOW}Building podman pod image...${NC}"
 docker build \
+    --platform linux/amd64 \
     -t "$PODMAN_IMAGE" \
     -f "$SCRIPT_DIR/docker/Dockerfile.podman" \
     "$SCRIPT_DIR/docker"
@@ -114,6 +118,20 @@ echo -e "${GREEN}✓ Podman image built${NC}"
 # Push if requested
 if $PUSH; then
     echo -e "${YELLOW}Pushing images to registry...${NC}"
+
+    # Login to ECR if using ECR registry
+    if [[ "$REGISTRY" == *"ecr.aws"* ]]; then
+        echo -e "${YELLOW}Logging into ECR...${NC}"
+        if [[ "$REGISTRY" == *"public.ecr.aws"* ]]; then
+            # Public ECR login
+            aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
+        else
+            # Private ECR login
+            REGION=$(echo "$REGISTRY" | sed -n 's/.*\.\([^.]*\)\.amazonaws\.com.*/\1/p')
+            aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY"
+        fi
+    fi
+
     docker push "$DAEMON_IMAGE"
     docker push "$UI_IMAGE"
     docker push "$SHELL_IMAGE"

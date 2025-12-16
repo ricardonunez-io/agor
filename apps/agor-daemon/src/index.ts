@@ -4125,6 +4125,55 @@ async function main() {
   // Note: Sessions are no longer directly on boards (worktree-only architecture).
   // Sessions are accessed through worktree cards. No cleanup needed on session deletion.
 
+  // ============================================
+  // SSH Access Routes (Pod mode only)
+  // ============================================
+
+  // POST /terminals/ssh/register - Register SSH public key for a user
+  // This adds the user's public key to their authorized_keys file on the PVC
+  registerAuthenticatedRoute(
+    app,
+    '/terminals/ssh/register',
+    {
+      async create(
+        data: { publicKey: string; worktreeId: string },
+        params: RouteParams
+      ) {
+        if (!data.publicKey) throw new Error('publicKey is required');
+        if (!data.worktreeId) throw new Error('worktreeId is required');
+        return terminalsService.registerSshKey(
+          data.publicKey,
+          data.worktreeId as import('@agor/core/types').WorktreeID,
+          params as AuthenticatedParams
+        );
+      },
+    },
+    {
+      create: { role: 'member', action: 'register SSH key' },
+    },
+    requireAuth
+  );
+
+  // GET /terminals/ssh/:worktreeId/info - Get SSH connection info for a worktree
+  registerAuthenticatedRoute(
+    app,
+    '/terminals/ssh/:worktreeId/info',
+    {
+      async find(params: RouteParams & { route?: { worktreeId?: string } }) {
+        const worktreeId = params.route?.worktreeId;
+        if (!worktreeId) throw new Error('worktreeId is required');
+        return terminalsService.getSshInfo(
+          worktreeId as import('@agor/core/types').WorktreeID,
+          params as AuthenticatedParams
+        );
+      },
+    },
+    {
+      find: { role: 'member', action: 'get SSH info' },
+    },
+    requireAuth
+  );
+
   // Health check endpoint
   // SECURITY: Minimal public endpoint for uptime monitoring
   // Authenticated users can get detailed info, public users get basic status only
