@@ -136,10 +136,11 @@ export class WorktreeRepository implements BaseRepository<Worktree, Partial<Work
     }
 
     // Short ID match (prefix) - just use the id directly as a prefix since it's already short
+    // Use LOWER() for case-insensitive matching (PostgreSQL LIKE is case-sensitive)
     const prefix = id.replace(/-/g, '').toLowerCase();
     const matches = await select(this.db)
       .from(worktrees)
-      .where(like(worktrees.worktree_id, `${prefix}%`))
+      .where(sql`LOWER(${worktrees.worktree_id}) LIKE ${prefix + '%'}`)
       .limit(2); // Fetch 2 to detect ambiguity
 
     if (matches.length === 0) return null;

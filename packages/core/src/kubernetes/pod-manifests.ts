@@ -28,6 +28,7 @@ import {
 
 export interface ShellPodParams {
   worktreeId: WorktreeID;
+  worktreeName: string;
   userId: UserID;
   worktreePath: string;
   config: UserPodConfig;
@@ -47,7 +48,7 @@ export interface PodmanPodParams {
  * Build shell deployment manifest using YAML template
  */
 export function buildShellDeploymentManifest(params: ShellPodParams): V1Deployment {
-  const { worktreeId, userId, worktreePath, config, userUid, unixUsername } = params;
+  const { worktreeId, worktreeName, userId, worktreePath, config, userUid, unixUsername } = params;
 
   const runAsUser = userUid ?? 1000;
   const runAsGroup = userUid ?? 1000;
@@ -63,6 +64,7 @@ export function buildShellDeploymentManifest(params: ShellPodParams): V1Deployme
     name: getShellPodName(worktreeId, userId),
     namespace: config.namespace,
     worktreeId,
+    worktreeName,
     userId,
     username,
     runAsUser,

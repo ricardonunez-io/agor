@@ -540,9 +540,9 @@ const WorktreeCardComponent = ({
                 icon={<CodeOutlined />}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onOpenTerminal([`cd ${worktree.path}`], worktree.worktree_id);
+                  onOpenTerminal([], worktree.worktree_id);
                 }}
-                title="Open terminal in worktree directory"
+                title="Open terminal"
               />
             )}
             {onOpenSettings && (

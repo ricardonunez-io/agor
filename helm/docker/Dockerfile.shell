@@ -58,6 +58,15 @@ RUN ARCH=$(case "${TARGETARCH}" in \
     -o /usr/local/bin/docker-compose && \
     chmod +x /usr/local/bin/docker-compose) || echo "Warning: Failed to install docker-compose (network issue?)"
 
+# Install Node.js 22 LTS (required for Claude Code)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Claude Code globally
+RUN npm install -g @anthropic-ai/claude-code
+
 # Create agor user with uid 1000
 RUN groupadd -g 1000 agor && \
     useradd -u 1000 -g 1000 -m -s /bin/bash agor

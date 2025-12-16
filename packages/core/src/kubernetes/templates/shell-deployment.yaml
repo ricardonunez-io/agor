@@ -32,6 +32,7 @@ spec:
         agor.io/created-at: "{{createdAt}}"
         agor.io/last-activity: "{{createdAt}}"
     spec:
+      hostname: "{{worktreeName}}"
       serviceAccountName: agor-shell-pod
       securityContext:
         fsGroup: {{runAsGroup}}
@@ -142,7 +143,7 @@ spec:
               value: "{{username}}"
             - name: LOGNAME
               value: "{{username}}"
-          workingDir: "{{worktreePath}}"
+          workingDir: "/home/{{username}}"
           volumeMounts:
             - name: data
               mountPath: /data

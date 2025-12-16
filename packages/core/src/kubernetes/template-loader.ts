@@ -64,6 +64,7 @@ export interface ShellDeploymentParams {
   name: string;
   namespace: string;
   worktreeId: string;
+  worktreeName: string;
   userId: string;
   username: string;
   runAsUser: number;

@@ -116,11 +116,13 @@ export class PodManager {
    * Creates Podman deployment first if needed (shared for worktree)
    * Returns the actual pod name (not deployment name) for exec
    *
+   * @param worktreeName - Worktree name (used as pod hostname)
    * @param userUid - Unix UID for consistent file ownership on EFS/NFS
    * @param unixUsername - Unix username for /etc/passwd entry
    */
   async ensureShellPod(
     worktreeId: WorktreeID,
+    worktreeName: string,
     userId: UserID,
     worktreePath: string,
     userUid?: number,
@@ -154,7 +156,7 @@ export class PodManager {
       const e = error as { statusCode?: number };
       if (e.statusCode === 404) {
         // Create shell deployment
-        await this.createShellDeployment(worktreeId, userId, worktreePath, userUid, unixUsername);
+        await this.createShellDeployment(worktreeId, worktreeName, userId, worktreePath, userUid, unixUsername);
         await this.waitForDeployment(deploymentName);
       } else {
         throw new PodManagerError(
@@ -214,6 +216,7 @@ export class PodManager {
    */
   private async createShellDeployment(
     worktreeId: WorktreeID,
+    worktreeName: string,
     userId: UserID,
     worktreePath: string,
     userUid?: number,
@@ -221,6 +224,7 @@ export class PodManager {
   ): Promise<void> {
     const manifest = buildShellDeploymentManifest({
       worktreeId,
+      worktreeName,
       userId,
       worktreePath,
       config: this.config,

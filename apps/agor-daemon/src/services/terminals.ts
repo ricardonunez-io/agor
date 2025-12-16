@@ -633,6 +633,7 @@ export class TerminalsService {
     // Ensure shell pod exists (creates Podman pod first if needed)
     const podName = await this.podManager.ensureShellPod(
       data.worktreeId,
+      worktreeName,
       resolvedUserId,
       cwd,
       userUid,
@@ -1231,7 +1232,7 @@ export class TerminalsService {
   /**
    * Send input to terminal
    */
-  async patch(id: string, data: { input?: string; resize?: ResizeTerminalData }): Promise<void> {
+  async patch(id: string, data: { input?: string; resize?: ResizeTerminalData }): Promise<{ id: string }> {
     const session = this.sessions.get(id);
     if (!session) {
       throw new Error(`Terminal ${id} not found`);
@@ -1269,6 +1270,8 @@ export class TerminalsService {
         }
       }
     }
+
+    return { id };
   }
 
   /**
@@ -1433,6 +1436,7 @@ export class TerminalsService {
     try {
       podName = await this.podManager.ensureShellPod(
         worktreeId,
+        worktree.name,
         userId,
         worktree.path,
         userUid,

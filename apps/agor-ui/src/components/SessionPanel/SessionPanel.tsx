@@ -750,11 +750,11 @@ const SessionPanel: React.FC<SessionPanelProps> = ({
           </Space>
           <Space size={4}>
             {onOpenTerminal && worktree && (
-              <Tooltip title="Open terminal in worktree directory">
+              <Tooltip title="Open terminal">
                 <Button
                   type="text"
                   icon={<CodeOutlined />}
-                  onClick={() => onOpenTerminal([`cd ${worktree.path}`], worktree.worktree_id)}
+                  onClick={() => onOpenTerminal([], worktree.worktree_id)}
                 />
               </Tooltip>
             )}
