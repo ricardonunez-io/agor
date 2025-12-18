@@ -469,17 +469,19 @@ export class TerminalsService {
 
       console.log('\x1b[36m✅ Pod mode enabled\x1b[0m - terminals run in isolated Kubernetes pods');
 
+      // TODO: Re-enable GC after tuning idle timeouts
+      // GC was killing sessions prematurely - disabled temporarily
       // Start GC interval (every 5 minutes)
-      setInterval(
-        async () => {
-          try {
-            await this.podManager?.runGC();
-          } catch (error) {
-            console.error('[Terminals] Pod GC error:', error);
-          }
-        },
-        5 * 60 * 1000
-      );
+      // setInterval(
+      //   async () => {
+      //     try {
+      //       await this.podManager?.runGC();
+      //     } catch (error) {
+      //       console.error('[Terminals] Pod GC error:', error);
+      //     }
+      //   },
+      //   5 * 60 * 1000
+      // );
     } else {
       // Daemon mode - verify Zellij is available
       if (!isZellijAvailable()) {
@@ -630,6 +632,9 @@ export class TerminalsService {
       `🚀 [Pod Mode] Creating shell pod for user ${unixUsername} (UID: ${userUid}) in worktree ${worktreeName}`
     );
 
+    // Fetch user's API keys for injection into pod (ANTHROPIC_API_KEY, etc.)
+    const userApiKeys = await resolveUserEnvironment(resolvedUserId, this.db);
+
     // Ensure shell pod exists (creates Podman pod first if needed)
     const podName = await this.podManager.ensureShellPod(
       data.worktreeId,
@@ -637,7 +642,8 @@ export class TerminalsService {
       resolvedUserId,
       cwd,
       userUid,
-      unixUsername
+      unixUsername,
+      userApiKeys
     );
 
     console.log(`✅ [Pod Mode] Shell pod ready: ${podName}`);
@@ -1431,6 +1437,9 @@ export class TerminalsService {
       };
     }
 
+    // Fetch user's API keys for injection into pod
+    const userApiKeys = await resolveUserEnvironment(userId, this.db);
+
     // Ensure shell pod exists for this user+worktree
     let podName: string;
     try {
@@ -1440,7 +1449,8 @@ export class TerminalsService {
         userId,
         worktree.path,
         userUid,
-        unixUsername
+        unixUsername,
+        userApiKeys
       );
     } catch (error) {
       return {

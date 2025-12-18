@@ -231,9 +231,17 @@ export class UsersRepository implements BaseRepository<User, Partial<User>> {
   async update(id: string, updates: Partial<User>): Promise<User> {
     const fullId = await this.resolveId(id);
 
-    // Get current user
+    // Get current user (public API, excludes password)
     const current = await this.findById(fullId);
     if (!current) {
+      throw new EntityNotFoundError('User', id);
+    }
+
+    // CRITICAL: Get raw row to preserve password field
+    // The User type excludes password for security, but we must preserve it during updates.
+    // Without this, any update (e.g., unix_uid from terminal creation) would wipe the password.
+    const rawRow = await this.getRawRow(fullId);
+    if (!rawRow) {
       throw new EntityNotFoundError('User', id);
     }
 
@@ -247,8 +255,8 @@ export class UsersRepository implements BaseRepository<User, Partial<User>> {
       }
     }
 
-    // Merge updates
-    const merged = { ...current, ...updates };
+    // Merge updates, preserving existing password from raw row
+    const merged = { ...current, ...updates, password: rawRow.password };
     const insertData = this.userToInsert(merged);
 
     // Update database

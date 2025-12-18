@@ -261,3 +261,11 @@ export function getDockerHost(worktreeId: WorktreeID, namespace: string): string
   const serviceName = getPodmanServiceName(worktreeId);
   return `tcp://${serviceName}.${namespace}.svc:2375`;
 }
+
+/**
+ * Generate user secret name for API keys
+ * Format: agor-user-{userId}-keys
+ */
+export function getUserSecretName(userId: UserID): string {
+  return `agor-user-${getUserShortId(userId)}-keys`;
+}

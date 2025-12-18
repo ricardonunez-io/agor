@@ -33,6 +33,8 @@ RUN pnpm --filter @agor/core build
 ARG VITE_DAEMON_URL=""
 ENV VITE_DAEMON_URL=$VITE_DAEMON_URL
 ENV NODE_ENV=docker
+# Limit Node.js memory to prevent OOM during build
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 RUN pnpm --filter agor-ui build
 
 # ============================================

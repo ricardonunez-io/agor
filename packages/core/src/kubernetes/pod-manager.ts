@@ -24,6 +24,7 @@ import {
   getPodmanServiceName,
   getShellPodName,
   getShellSshServiceName,
+  getUserSecretName,
   getWorktreeShortId,
   POD_ANNOTATIONS,
   POD_LABEL_VALUES,
@@ -119,6 +120,7 @@ export class PodManager {
    * @param worktreeName - Worktree name (used as pod hostname)
    * @param userUid - Unix UID for consistent file ownership on EFS/NFS
    * @param unixUsername - Unix username for /etc/passwd entry
+   * @param apiKeys - User's API keys (ANTHROPIC_API_KEY, etc.) to inject as Secret
    */
   async ensureShellPod(
     worktreeId: WorktreeID,
@@ -126,12 +128,18 @@ export class PodManager {
     userId: UserID,
     worktreePath: string,
     userUid?: number,
-    unixUsername?: string
+    unixUsername?: string,
+    apiKeys?: Record<string, string>
   ): Promise<string> {
     const deploymentName = getShellPodName(worktreeId, userId);
 
     // Ensure Podman deployment exists first (shared for worktree)
     await this.ensurePodmanPod(worktreeId, worktreePath);
+
+    // Create/update user secret with API keys (if provided)
+    if (apiKeys && Object.keys(apiKeys).length > 0) {
+      await this.ensureUserSecret(userId, apiKeys);
+    }
 
     try {
       const { body: deployment } = await this.appsApi.readNamespacedDeployment(
@@ -268,6 +276,55 @@ export class PodManager {
       if (e.statusCode !== 409) {
         throw new PodManagerError(
           `Failed to create shell SSH service: ${e.body?.message || String(error)}`,
+          e.statusCode
+        );
+      }
+    }
+  }
+
+  /**
+   * Create or update user secret with API keys
+   * Secret is referenced by shell pods via envFrom
+   */
+  private async ensureUserSecret(userId: UserID, apiKeys: Record<string, string>): Promise<void> {
+    const secretName = getUserSecretName(userId);
+
+    // Convert string values to base64 for Kubernetes Secret
+    const secretData: Record<string, string> = {};
+    for (const [key, value] of Object.entries(apiKeys)) {
+      secretData[key] = Buffer.from(value).toString('base64');
+    }
+
+    const manifest = {
+      apiVersion: 'v1',
+      kind: 'Secret',
+      metadata: {
+        name: secretName,
+        namespace: this.config.namespace,
+        labels: {
+          'app.kubernetes.io/name': 'agor-user-secret',
+          'agor.io/user-id': userId,
+        },
+      },
+      type: 'Opaque',
+      data: secretData,
+    };
+
+    console.log(`[PodManager] Ensuring user secret: ${secretName} (${Object.keys(apiKeys).length} keys)`);
+
+    try {
+      // Try to create first
+      await this.coreApi.createNamespacedSecret(this.config.namespace, manifest);
+      console.log(`[PodManager] Created user secret: ${secretName}`);
+    } catch (error: unknown) {
+      const e = error as { statusCode?: number; body?: { message?: string } };
+      if (e.statusCode === 409) {
+        // Already exists, update it
+        await this.coreApi.replaceNamespacedSecret(secretName, this.config.namespace, manifest);
+        console.log(`[PodManager] Updated user secret: ${secretName}`);
+      } else {
+        throw new PodManagerError(
+          `Failed to create user secret: ${e.body?.message || String(error)}`,
           e.statusCode
         );
       }

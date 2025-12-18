@@ -9,11 +9,18 @@
  * - Daemon must be running
  */
 
-import { Args } from '@oclif/core';
+import { createClient } from '@agor/core/api';
+import { getDaemonUrl } from '@agor/core/config';
+import { Args, Command } from '@oclif/core';
 import chalk from 'chalk';
-import { BaseCommand } from '../../base-command';
+import { loadToken } from '../../lib/auth';
 
-export default class WorktreeShell extends BaseCommand {
+// Check if ID looks like a full UUID (36 chars with dashes)
+function isFullUuid(id: string): boolean {
+  return id.length === 36 && id.includes('-');
+}
+
+export default class WorktreeShell extends Command {
   static description = 'Open interactive shell in a worktree';
 
   static examples = [
@@ -31,22 +38,94 @@ export default class WorktreeShell extends BaseCommand {
   async run(): Promise<void> {
     const { args } = await this.parse(WorktreeShell);
 
-    // Connect to daemon (uses stored URL from login)
-    const client = await this.connectToDaemon();
+    // Get daemon URL and stored auth
+    const storedAuth = await loadToken();
+    const daemonUrl = storedAuth?.daemonUrl || await getDaemonUrl();
 
-    this.log(chalk.dim(`Connected to daemon at ${this.daemonUrl}`));
+    // Create Socket.io client (required for real-time terminal events)
+    const client = createClient(daemonUrl, true, {
+      verbose: true,
+      reconnectionAttempts: 3,
+    });
+
+    // Wait for socket connection
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error(`Cannot connect to daemon at ${daemonUrl}`));
+      }, 10000);
+
+      client.io.on('connect', () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+
+      client.io.on('connect_error', (err: Error) => {
+        clearTimeout(timeout);
+        reject(new Error(`Connection failed: ${err.message}`));
+      });
+    });
+
+    // Authenticate with stored JWT token
+    if (storedAuth?.accessToken) {
+      try {
+        await client.authenticate({
+          strategy: 'jwt',
+          accessToken: storedAuth.accessToken,
+        });
+      } catch {
+        client.io.close();
+        this.error(
+          chalk.red('✗ Authentication failed') +
+            '\n\n' +
+            chalk.dim('Your session has expired. Please login again:') +
+            '\n  ' +
+            chalk.cyan('agor login')
+        );
+      }
+    } else {
+      client.io.close();
+      this.error(
+        chalk.red('✗ Not logged in') +
+          '\n\n' +
+          chalk.dim('Please login first:') +
+          '\n  ' +
+          chalk.cyan('agor login')
+      );
+    }
+
+    this.log(chalk.dim(`Connected to daemon at ${daemonUrl}`));
 
     try {
-      // Get worktree info
+      // Get worktree info - supports both full UUID and short ID
       const worktreesService = client.service('worktrees');
-      let worktree;
+      let worktree: { worktree_id: string; name: string } | undefined;
       try {
-        worktree = await worktreesService.get(args.worktreeId);
+        if (isFullUuid(args.worktreeId)) {
+          // Full UUID - use get() directly
+          worktree = await worktreesService.get(args.worktreeId) as { worktree_id: string; name: string };
+        } else {
+          // Short ID - fetch worktrees and filter by prefix
+          const result = await worktreesService.find({
+            query: { $limit: 1000 },
+          }) as { data: { worktree_id: string; name: string }[] };
+
+          const shortId = args.worktreeId.toLowerCase();
+          const matches = result.data.filter(w =>
+            w.worktree_id.toLowerCase().startsWith(shortId)
+          );
+
+          if (matches.length === 0) {
+            throw new Error('No worktree found matching this ID');
+          }
+          if (matches.length > 1) {
+            throw new Error(`Ambiguous ID - multiple worktrees match: ${matches.map(w => w.worktree_id.substring(0, 8)).join(', ')}`);
+          }
+          worktree = matches[0];
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        await this.cleanupClient(client);
+        client.io.close();
         this.error(`Worktree not found: ${args.worktreeId}\n${chalk.dim(`Error: ${errorMessage}`)}`);
-        return;
       }
 
       this.log(chalk.bold.cyan(`Opening shell in worktree: ${worktree.name}`));
@@ -62,7 +141,7 @@ export default class WorktreeShell extends BaseCommand {
         }) as { terminalId: string; cwd: string };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        await this.cleanupClient(client);
+        client.io.close();
         this.error(`Failed to create terminal: ${errorMessage}`);
         return;
       }
@@ -98,7 +177,7 @@ export default class WorktreeShell extends BaseCommand {
             process.stdin.setRawMode(false);
           }
 
-          await this.cleanupClient(client);
+          client.io.close();
           process.exit(exitCode);
         }
       });
@@ -140,7 +219,7 @@ export default class WorktreeShell extends BaseCommand {
       if (process.stdin.isTTY) {
         process.stdin.setRawMode(false);
       }
-      await this.cleanupClient(client);
+      client.io.close();
       this.error(
         `Shell connection failed: ${error instanceof Error ? error.message : String(error)}`
       );

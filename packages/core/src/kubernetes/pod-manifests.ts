@@ -23,6 +23,7 @@ import {
   getPodmanServiceName,
   getShellPodName,
   getShellSshServiceName,
+  getUserSecretName,
   type UserPodConfig,
 } from './types.js';
 
@@ -82,6 +83,7 @@ export function buildShellDeploymentManifest(params: ShellPodParams): V1Deployme
     sshdLimitsCpu: sshdResources.limits.cpu,
     sshdLimitsMemory: sshdResources.limits.memory,
     createdAt: now,
+    userSecretName: getUserSecretName(userId),
   });
 }
 

@@ -54,11 +54,11 @@ daemon:
               memory: 1Gi
           sshdResources:
             requests:
-              cpu: 10m
-              memory: 32Mi
+              cpu: 50m
+              memory: 256Mi
             limits:
-              cpu: 100m
-              memory: 64Mi
+              cpu: 500m
+              memory: 512Mi
         podmanPod:
           image: public.ecr.aws/a5v0t1w0/agor/podman:dev
           initImage: busybox:1.36
@@ -89,11 +89,11 @@ daemon:
           memory: 1Gi
       sshdResources:
         requests:
-          cpu: 10m
-          memory: 32Mi
+          cpu: 50m
+          memory: 256Mi
         limits:
-          cpu: 100m
-          memory: 64Mi
+          cpu: 500m
+          memory: 512Mi
     podmanPod:
       image: public.ecr.aws/a5v0t1w0/agor/podman:dev
       initImage: busybox:1.36

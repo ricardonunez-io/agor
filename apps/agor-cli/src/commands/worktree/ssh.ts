@@ -24,6 +24,11 @@ const SSH_DIR = join(homedir(), '.agor', 'ssh');
 const PRIVATE_KEY_PATH = join(SSH_DIR, 'agor-key');
 const PUBLIC_KEY_PATH = join(SSH_DIR, 'agor-key.pub');
 
+// Check if ID looks like a full UUID (36 chars with dashes)
+function isFullUuid(id: string): boolean {
+  return id.length === 36 && id.includes('-');
+}
+
 export default class WorktreeSsh extends BaseCommand {
   static description = 'SSH into a worktree shell pod';
 
@@ -124,7 +129,7 @@ export default class WorktreeSsh extends BaseCommand {
    * Register public key with the daemon
    */
   private async registerSshKey(
-    client: Awaited<ReturnType<typeof this.connectToDaemon>>,
+    accessToken: string,
     publicKey: string,
     worktreeId: string
   ): Promise<{
@@ -137,8 +142,7 @@ export default class WorktreeSsh extends BaseCommand {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // Get the access token from the authenticated client
-        'Authorization': `Bearer ${(await client.get('authentication'))?.accessToken}`,
+        'Authorization': `Bearer ${accessToken}`,
       },
       body: JSON.stringify({ publicKey, worktreeId }),
     });
@@ -159,7 +163,7 @@ export default class WorktreeSsh extends BaseCommand {
    * Get SSH connection info from daemon
    */
   private async getSshInfo(
-    client: Awaited<ReturnType<typeof this.connectToDaemon>>,
+    accessToken: string,
     worktreeId: string
   ): Promise<{
     available: boolean;
@@ -170,7 +174,7 @@ export default class WorktreeSsh extends BaseCommand {
     const response = await fetch(`${this.daemonUrl}/terminals/ssh/${worktreeId}/info`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${(await client.get('authentication'))?.accessToken}`,
+        'Authorization': `Bearer ${accessToken}`,
       },
     });
 
@@ -243,25 +247,53 @@ export default class WorktreeSsh extends BaseCommand {
       // Ensure we have an SSH key
       const { publicKey, privateKeyPath } = await this.ensureSshKey(flags['generate-key']);
 
-      // Get worktree info to get the user's unix_username
+      // Get worktree info - supports both full UUID and short ID
       const worktreesService = client.service('worktrees');
-      let worktree;
+      let worktree: { worktree_id: string; name: string } | undefined;
       try {
-        worktree = await worktreesService.get(args.worktreeId);
+        if (isFullUuid(args.worktreeId)) {
+          // Full UUID - use get() directly
+          worktree = await worktreesService.get(args.worktreeId) as { worktree_id: string; name: string };
+        } else {
+          // Short ID - fetch worktrees and filter by prefix
+          const result = await worktreesService.find({
+            query: { $limit: 1000 },
+          }) as { data: { worktree_id: string; name: string }[] };
+
+          const shortId = args.worktreeId.toLowerCase();
+          const matches = result.data.filter(w =>
+            w.worktree_id.toLowerCase().startsWith(shortId)
+          );
+
+          if (matches.length === 0) {
+            throw new Error('No worktree found matching this ID');
+          }
+          if (matches.length > 1) {
+            throw new Error(`Ambiguous ID - multiple worktrees match: ${matches.map(w => w.worktree_id.substring(0, 8)).join(', ')}`);
+          }
+          worktree = matches[0];
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         await this.cleanupClient(client);
         this.error(`Worktree not found: ${args.worktreeId}\n${chalk.dim(`Error: ${errorMessage}`)}`);
-        return; // TypeScript control flow - this.error() throws but TS doesn't know
       }
 
       this.log('');
       this.log(chalk.bold.cyan(`Connecting to worktree: ${worktree.name}`));
       this.log('');
 
+      // Get access token once and reuse it for all API calls
+      const auth = await client.get('authentication');
+      const accessToken = auth?.accessToken;
+      if (!accessToken) {
+        await this.cleanupClient(client);
+        this.error('Failed to get access token. Please login again.');
+      }
+
       // Register SSH key with daemon (idempotent - won't duplicate if already registered)
       this.log(chalk.dim('Registering SSH key...'));
-      const registerResult = await this.registerSshKey(client, publicKey, args.worktreeId);
+      const registerResult = await this.registerSshKey(accessToken, publicKey, worktree.worktree_id);
 
       if (!registerResult.success) {
         await this.cleanupClient(client);
@@ -280,7 +312,7 @@ export default class WorktreeSsh extends BaseCommand {
 
       if (!nodePort) {
         // Try to get SSH info from daemon
-        const sshInfo = await this.getSshInfo(client, args.worktreeId);
+        const sshInfo = await this.getSshInfo(accessToken, worktree.worktree_id);
         if (!sshInfo.available) {
           await this.cleanupClient(client);
           this.error(sshInfo.message || 'SSH not available for this worktree');
@@ -293,25 +325,18 @@ export default class WorktreeSsh extends BaseCommand {
         this.error('Could not determine SSH port. Please specify with --port');
       }
 
-      // Default host is localhost (for local development/port-forward) or cluster node
+      // Default host is the daemon's hostname (extracted from daemon URL)
       if (!sshHost) {
-        // Try to detect if we're running inside the cluster or outside
-        // For now, default to localhost (assumes port-forward or NodePort access)
-        sshHost = 'localhost';
+        try {
+          const daemonHostname = new URL(this.daemonUrl || 'http://localhost').hostname;
+          sshHost = daemonHostname;
+        } catch {
+          sshHost = 'localhost';
+        }
       }
 
-      // Get the user's Unix username from their profile
-      const usersService = client.service('users');
-      const auth = await client.get('authentication');
-      const userId = auth?.user?.user_id;
-
-      if (!userId) {
-        await this.cleanupClient(client);
-        this.error('Could not determine user ID. Please ensure you are logged in.');
-      }
-
-      const user = await usersService.get(userId);
-      const unixUsername = user?.unix_username;
+      // Get the user's Unix username from the JWT payload (already in auth.user)
+      const unixUsername = auth?.user?.unix_username as string | undefined;
 
       if (!unixUsername) {
         await this.cleanupClient(client);

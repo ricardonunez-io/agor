@@ -113,6 +113,45 @@ spec:
               SSHD_CONFIG
               chmod 644 /etc-override/sshd_config
 
+              # Create profile.d directory for SSH environment variables
+              mkdir -p /etc-override/profile.d
+              cat > /etc-override/profile.d/agor-env.sh << 'AGOR_ENV'
+              # Agor environment variables for shell/SSH sessions
+              # Clean: Only set essential vars + user API keys
+
+              # Unset Kubernetes-injected service discovery variables
+              unset KUBERNETES_SERVICE_HOST KUBERNETES_SERVICE_PORT KUBERNETES_PORT
+              for var in $(env | grep -E '^(AGOR_|KUBERNETES_|.*_SERVICE_HOST|.*_SERVICE_PORT|.*_PORT_[0-9])' | cut -d= -f1); do
+                unset "$var" 2>/dev/null
+              done
+
+              # Set only the variables users need
+              export WORKTREE_PATH="{{worktreePath}}"
+              export DOCKER_HOST="{{dockerHost}}"
+
+              # Load user API keys from secret mount (each key is a file)
+              if [ -d /run/secrets/user-keys ]; then
+                for keyfile in /run/secrets/user-keys/*; do
+                  if [ -f "$keyfile" ]; then
+                    keyname=$(basename "$keyfile")
+                    export "$keyname"="$(cat "$keyfile")"
+                  fi
+                done
+              fi
+              AGOR_ENV
+              chmod 644 /etc-override/profile.d/agor-env.sh
+
+              # Add to user's bashrc to source profile.d scripts
+              cat >> /data/homes/{{username}}/.bashrc << 'BASHRC'
+              # Source Agor environment
+              if [ -d /etc/profile.d ]; then
+                for f in /etc/profile.d/agor-*.sh; do
+                  [ -r "$f" ] && . "$f"
+                done
+              fi
+              BASHRC
+              chown {{runAsUser}}:{{runAsGroup}} /data/homes/{{username}}/.bashrc
+
               echo "Created user {{username}} (UID {{runAsUser}}) with SSH support"
           volumeMounts:
             - name: etc-override
@@ -143,6 +182,10 @@ spec:
               value: "{{username}}"
             - name: LOGNAME
               value: "{{username}}"
+          envFrom:
+            - secretRef:
+                name: "{{userSecretName}}"
+                optional: true
           workingDir: "/home/{{username}}"
           volumeMounts:
             - name: data
@@ -155,6 +198,12 @@ spec:
             - name: etc-override
               mountPath: /etc/group
               subPath: group
+            - name: etc-override
+              mountPath: /etc/profile.d
+              subPath: profile.d
+            - name: user-keys
+              mountPath: /run/secrets/user-keys
+              readOnly: true
           resources:
             requests:
               cpu: "{{requestsCpu}}"
@@ -205,6 +254,12 @@ spec:
             - name: ssh-host-keys
               mountPath: /etc/ssh/ssh_host_ed25519_key.pub
               subPath: ssh_host_ed25519_key.pub
+            - name: etc-override
+              mountPath: /etc/profile.d
+              subPath: profile.d
+            - name: user-keys
+              mountPath: /run/secrets/user-keys
+              readOnly: true
           resources:
             requests:
               cpu: "{{sshdRequestsCpu}}"
@@ -222,3 +277,7 @@ spec:
           emptyDir: {}
         - name: ssh-host-keys
           emptyDir: {}
+        - name: user-keys
+          secret:
+            secretName: "{{userSecretName}}"
+            optional: true

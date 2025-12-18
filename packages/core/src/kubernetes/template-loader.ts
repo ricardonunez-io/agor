@@ -82,6 +82,8 @@ export interface ShellDeploymentParams {
   sshdLimitsCpu: string;
   sshdLimitsMemory: string;
   createdAt: string;
+  /** Kubernetes Secret name containing user's API keys (ANTHROPIC_API_KEY, etc.) */
+  userSecretName: string;
 }
 
 export function loadShellDeployment(params: ShellDeploymentParams): V1Deployment {

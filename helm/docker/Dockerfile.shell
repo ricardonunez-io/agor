@@ -1,124 +1,100 @@
 # Agor Shell Pod Dockerfile
-# Lightweight image for isolated terminal sessions
+# Minimal image for isolated terminal sessions
 #
 # Contains:
 # - Zellij (terminal multiplexer)
-# - Docker CLI (for DOCKER_HOST to Podman pod)
-# - Git (for version control)
-# - Common dev tools
+# - Docker CLI (standalone binary, connects to DOCKER_HOST)
+# - Claude Code (AI agent)
+# - Git, vi, basic tools
 
 FROM debian:bookworm-slim
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
-    # Docker CLI (uses DOCKER_HOST to connect to Podman pod)
-    docker.io \
+ARG TARGETARCH
+
+# Install minimal runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     # Version control
     git \
-    # Networking tools
+    # Networking (for downloads and debugging)
     curl \
-    wget \
     ca-certificates \
-    # SSH server (for sshd sidecar container)
+    # SSH server (for sshd sidecar)
     openssh-server \
-    # Shell utilities
+    # Shell
     bash \
-    bash-completion \
-    less \
+    # Editor
     vim-tiny \
+    # Basic tools
     jq \
-    # Process management
     procps \
-    htop \
-    # Build essentials (for some docker-compose projects)
-    make \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
-    # Create sshd privilege separation directory
     && mkdir -p /run/sshd
 
-# Install Zellij from GitHub releases (optional - may fail in restricted networks)
-ARG TARGETARCH
+# Install Docker CLI only (standalone binary, ~50MB vs ~300MB for docker.io)
 RUN ARCH=$(case "${TARGETARCH}" in \
         "amd64") echo "x86_64" ;; \
         "arm64") echo "aarch64" ;; \
         *) echo "x86_64" ;; \
     esac) && \
-    (curl -fsSL --connect-timeout 30 "https://github.com/zellij-org/zellij/releases/latest/download/zellij-${ARCH}-unknown-linux-musl.tar.gz" \
-    | tar -xz -C /usr/local/bin && \
-    chmod +x /usr/local/bin/zellij) || echo "Warning: Failed to install zellij (network issue?)"
+    curl -fsSL "https://download.docker.com/linux/static/stable/${ARCH}/docker-24.0.7.tgz" \
+    | tar -xz --strip-components=1 -C /usr/local/bin docker/docker && \
+    chmod +x /usr/local/bin/docker
 
-# Install docker-compose v2 (standalone, optional)
+# Install docker-compose v2 (standalone)
 RUN ARCH=$(case "${TARGETARCH}" in \
         "amd64") echo "x86_64" ;; \
         "arm64") echo "aarch64" ;; \
         *) echo "x86_64" ;; \
     esac) && \
-    (curl -fsSL --connect-timeout 30 "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${ARCH}" \
+    curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${ARCH}" \
     -o /usr/local/bin/docker-compose && \
-    chmod +x /usr/local/bin/docker-compose) || echo "Warning: Failed to install docker-compose (network issue?)"
+    chmod +x /usr/local/bin/docker-compose
 
-# Install Node.js 22 LTS (required for Claude Code)
+# Install Zellij (terminal multiplexer)
+RUN ARCH=$(case "${TARGETARCH}" in \
+        "amd64") echo "x86_64" ;; \
+        "arm64") echo "aarch64" ;; \
+        *) echo "x86_64" ;; \
+    esac) && \
+    curl -fsSL "https://github.com/zellij-org/zellij/releases/latest/download/zellij-${ARCH}-unknown-linux-musl.tar.gz" \
+    | tar -xz -C /usr/local/bin && \
+    chmod +x /usr/local/bin/zellij
+
+# Install Node.js 22 LTS (required for Claude Code) - minimal install
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y nodejs && \
+    apt-get install -y --no-install-recommends nodejs && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    npm cache clean --force
 
-# Install Claude Code globally
-RUN npm install -g @anthropic-ai/claude-code
+# Install Claude Code
+RUN npm install -g @anthropic-ai/claude-code && \
+    npm cache clean --force
 
-# Create agor user with uid 1000
+# Create default user (init container creates actual users)
 RUN groupadd -g 1000 agor && \
-    useradd -u 1000 -g 1000 -m -s /bin/bash agor
+    useradd -u 1000 -g 1000 -m -s /bin/bash agor && \
+    mkdir -p /home/agor/.agor /home/agor/.config/zellij
 
-# Note: Shell pods use dynamic users created by init container
-# Symlinks are created at runtime in /data/homes/<username>/.agor/
-RUN mkdir -p /home/agor/.agor
-
-# Setup home directory and config files
-RUN mkdir -p /home/agor/.config/zellij && \
-    # Default Zellij config (simple layout)
-    echo '// Agor shell pod Zellij config' > /home/agor/.config/zellij/config.kdl && \
-    echo 'default_shell "bash"' >> /home/agor/.config/zellij/config.kdl && \
-    echo 'pane_frames false' >> /home/agor/.config/zellij/config.kdl && \
-    echo 'theme "default"' >> /home/agor/.config/zellij/config.kdl && \
-    # Bash profile for nicer terminal experience
-    echo '# Agor shell pod bashrc' > /home/agor/.bashrc && \
-    echo "export PS1='\\[\\033[01;32m\\]\\u@agor\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\$ '" >> /home/agor/.bashrc && \
-    echo 'export EDITOR=vim' >> /home/agor/.bashrc && \
-    echo '' >> /home/agor/.bashrc && \
-    echo '# Docker aliases (works via DOCKER_HOST)' >> /home/agor/.bashrc && \
-    echo "alias d='docker'" >> /home/agor/.bashrc && \
-    echo "alias dc='docker-compose'" >> /home/agor/.bashrc && \
-    echo "alias dps='docker ps'" >> /home/agor/.bashrc && \
-    echo "alias dlogs='docker logs -f'" >> /home/agor/.bashrc && \
-    echo '' >> /home/agor/.bashrc && \
-    echo '# Git aliases' >> /home/agor/.bashrc && \
-    echo "alias gs='git status'" >> /home/agor/.bashrc && \
-    echo "alias gd='git diff'" >> /home/agor/.bashrc && \
-    echo "alias gl='git log --oneline -10'" >> /home/agor/.bashrc && \
-    echo '' >> /home/agor/.bashrc && \
-    echo '# Source bash completion' >> /home/agor/.bashrc && \
-    echo 'if [ -f /etc/bash_completion ]; then' >> /home/agor/.bashrc && \
-    echo '    . /etc/bash_completion' >> /home/agor/.bashrc && \
-    echo 'fi' >> /home/agor/.bashrc && \
-    echo '' >> /home/agor/.bashrc && \
-    echo '# Show DOCKER_HOST on login' >> /home/agor/.bashrc && \
-    echo 'if [ -n "$DOCKER_HOST" ]; then' >> /home/agor/.bashrc && \
-    echo '    echo "DOCKER_HOST: $DOCKER_HOST"' >> /home/agor/.bashrc && \
-    echo 'fi' >> /home/agor/.bashrc && \
-    echo '' >> /home/agor/.bashrc && \
-    echo 'cd "${WORKTREE_PATH:-$HOME}"' >> /home/agor/.bashrc && \
+# Minimal bashrc
+RUN echo 'export PS1="\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "' > /home/agor/.bashrc && \
+    echo 'export EDITOR=vi' >> /home/agor/.bashrc && \
+    echo 'alias vi=vim.tiny' >> /home/agor/.bashrc && \
+    echo 'alias d=docker' >> /home/agor/.bashrc && \
+    echo 'alias dc=docker-compose' >> /home/agor/.bashrc && \
     chown -R agor:agor /home/agor
 
-# Set environment
+# Minimal Zellij config
+RUN echo 'default_shell "bash"' > /home/agor/.config/zellij/config.kdl && \
+    echo 'pane_frames false' >> /home/agor/.config/zellij/config.kdl && \
+    chown -R agor:agor /home/agor/.config
+
 ENV HOME=/home/agor
 ENV USER=agor
 ENV SHELL=/bin/bash
 
-# Switch to non-root user
 USER agor
 WORKDIR /home/agor
 
-# Default command (overridden by K8s)
 CMD ["sleep", "infinity"]
