@@ -97,6 +97,9 @@ export function getDefaultConfig(): AgorConfig {
       allowAnonymous: true, // Default: Allow anonymous access (local mode)
       requireAuth: false, // Default: Do not require authentication
       mcpEnabled: true, // Default: Enable built-in MCP server
+      maxUploadSize: 100 * 1024 * 1024, // 100MB max file upload size
+      maxUploadFiles: 10, // Max 10 files per upload request
+      bodyLimit: '100mb', // Max JSON/URL-encoded body size
     },
     ui: {
       port: 5173,

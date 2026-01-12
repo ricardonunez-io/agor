@@ -129,19 +129,34 @@ export function createUploadStorage(
 }
 
 /**
+ * Upload middleware options (from config)
+ */
+export interface UploadMiddlewareOptions {
+  /** Maximum file size in bytes (default: 100MB) */
+  maxUploadSize?: number;
+  /** Maximum number of files per request (default: 10) */
+  maxUploadFiles?: number;
+}
+
+/**
  * Create configured multer instance
  */
 export function createUploadMiddleware(
   sessionRepo: SessionRepository,
-  worktreeRepo: WorktreeRepository
+  worktreeRepo: WorktreeRepository,
+  options: UploadMiddlewareOptions = {}
 ) {
   const storage = createUploadStorage(sessionRepo, worktreeRepo);
+
+  // Default to 100MB if not specified
+  const maxUploadSize = options.maxUploadSize ?? 100 * 1024 * 1024;
+  const maxUploadFiles = options.maxUploadFiles ?? 10;
 
   return multer({
     storage,
     limits: {
-      fileSize: 50 * 1024 * 1024, // 50MB max file size
-      files: 10, // Max 10 files per request
+      fileSize: maxUploadSize,
+      files: maxUploadFiles,
     },
     // No file filter - accept all types (multimodal-ready)
   });

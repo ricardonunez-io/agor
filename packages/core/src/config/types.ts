@@ -86,6 +86,18 @@ export interface AgorDaemonSettings {
   /** Instance description (markdown supported).
    * Displayed as a popover around the instance label Tag. */
   instanceDescription?: string;
+
+  /** Maximum file upload size in bytes (default: 104857600 = 100MB).
+   * Applied to multer file uploads. */
+  maxUploadSize?: number;
+
+  /** Maximum number of files per upload request (default: 10) */
+  maxUploadFiles?: number;
+
+  /** Maximum JSON/URL-encoded body size (default: '100mb').
+   * Applied to express.json() and express.urlencoded() parsers.
+   * Accepts bytes number or string like '10mb', '100kb'. */
+  bodyLimit?: string;
 }
 
 /**

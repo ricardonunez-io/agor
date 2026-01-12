@@ -374,8 +374,10 @@ async function main() {
   );
 
   // Parse JSON with size limits (security: prevent DoS via large payloads)
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  // Default: 100mb, configurable via daemon.bodyLimit
+  const bodyLimit = config.daemon?.bodyLimit ?? '100mb';
+  app.use(express.json({ limit: bodyLimit }));
+  app.use(express.urlencoded({ extended: true, limit: bodyLimit }));
 
   // Serve static UI files in production BEFORE compression middleware
   // This ensures pre-compressed .br files are served directly
@@ -3184,7 +3186,10 @@ async function main() {
   // This uses Express middleware directly because multer needs to process files before Feathers
   const sessionRepo = new SessionRepository(db);
   const worktreeRepo = new WorktreeRepository(db);
-  const uploadMiddleware = createUploadMiddleware(sessionRepo, worktreeRepo);
+  const uploadMiddleware = createUploadMiddleware(sessionRepo, worktreeRepo, {
+    maxUploadSize: config.daemon?.maxUploadSize,
+    maxUploadFiles: config.daemon?.maxUploadFiles,
+  });
 
   // Debug logging only in development
   const DEBUG_UPLOAD = process.env.NODE_ENV !== 'production';
