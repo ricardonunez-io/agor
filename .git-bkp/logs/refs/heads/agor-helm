@@ -1,3 +1,0 @@
-0000000000000000000000000000000000000000 3d3bd3001f2ae0fdd8e646dae1aa779600781569 Jose Garcia <jose.garcia@preset.io> 1765108132 -0300	branch: Created from HEAD
-3d3bd3001f2ae0fdd8e646dae1aa779600781569 96fc61d0b08b1e72df4548968cb28bc155a1b615 Jose Garcia <jose.garcia@preset.io> 1765128165 -0300	commit: added helm chart deployments - 1st draft
-96fc61d0b08b1e72df4548968cb28bc155a1b615 96fc61d0b08b1e72df4548968cb28bc155a1b615 Jose Garcia <jose.garcia@preset.io> 1765128317 -0300	Branch: renamed refs/heads/argo-in-pods to refs/heads/agor-helm

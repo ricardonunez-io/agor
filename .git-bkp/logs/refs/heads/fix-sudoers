@@ -1,2 +1,0 @@
-0000000000000000000000000000000000000000 282ce48629db95b0c7e0a043cfa70866890ff6d6 Jose Garcia <jose.garcia@preset.io> 1764795358 -0300	branch: Created from HEAD
-282ce48629db95b0c7e0a043cfa70866890ff6d6 2170e4562e0da6d6836c9827ee4795d4a8dfd7e8 Jose Garcia <jose.garcia@preset.io> 1764795513 -0300	commit: feat(security): add sudoers configuration for RBAC Unix isolation
