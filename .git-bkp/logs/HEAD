@@ -1,0 +1,35 @@
+0000000000000000000000000000000000000000 cffe65fbf2a7b254faf87ff3996204df157e4d8f Jose Garcia <jose.garcia@preset.io> 1763483679 -0300	clone: from https://github.com/preset-io/agor.git
+cffe65fbf2a7b254faf87ff3996204df157e4d8f cffe65fbf2a7b254faf87ff3996204df157e4d8f Jose Garcia <jose.garcia@preset.io> 1763483765 -0300	checkout: moving from main to k8s-deployment
+cffe65fbf2a7b254faf87ff3996204df157e4d8f 38ebb551aed54d03d4999833a249bd8e69205f65 Jose Garcia <jose.garcia@preset.io> 1764793510 -0300	commit: draft
+38ebb551aed54d03d4999833a249bd8e69205f65 cffe65fbf2a7b254faf87ff3996204df157e4d8f Jose Garcia <jose.garcia@preset.io> 1764793752 -0300	checkout: moving from k8s-deployment to main
+cffe65fbf2a7b254faf87ff3996204df157e4d8f 282ce48629db95b0c7e0a043cfa70866890ff6d6 Jose Garcia <jose.garcia@preset.io> 1764793755 -0300	pull: Fast-forward
+282ce48629db95b0c7e0a043cfa70866890ff6d6 282ce48629db95b0c7e0a043cfa70866890ff6d6 Jose Garcia <jose.garcia@preset.io> 1764795358 -0300	checkout: moving from main to fix-sudoers
+282ce48629db95b0c7e0a043cfa70866890ff6d6 2170e4562e0da6d6836c9827ee4795d4a8dfd7e8 Jose Garcia <jose.garcia@preset.io> 1764795513 -0300	commit: feat(security): add sudoers configuration for RBAC Unix isolation
+2170e4562e0da6d6836c9827ee4795d4a8dfd7e8 282ce48629db95b0c7e0a043cfa70866890ff6d6 Jose Garcia <jose.garcia@preset.io> 1764965893 -0300	checkout: moving from fix-sudoers to main
+282ce48629db95b0c7e0a043cfa70866890ff6d6 3f3bfb932dc8be1aad38e17056015bfc07c951db Jose Garcia <jose.garcia@preset.io> 1764965896 -0300	pull: Fast-forward
+3f3bfb932dc8be1aad38e17056015bfc07c951db 3f3bfb932dc8be1aad38e17056015bfc07c951db Jose Garcia <jose.garcia@preset.io> 1764966680 -0300	checkout: moving from main to unix-sync
+3f3bfb932dc8be1aad38e17056015bfc07c951db 5ef59ffa98bcc6826a8cfa1a86822b0fdd79594c Jose Garcia <jose.garcia@preset.io> 1764969882 -0300	commit: feat(cli): add `agor user sync-unix` command
+5ef59ffa98bcc6826a8cfa1a86822b0fdd79594c 5ef59ffa98bcc6826a8cfa1a86822b0fdd79594c Jose Garcia <jose.garcia@preset.io> 1765012963 -0300	checkout: moving from unix-sync to test-command
+5ef59ffa98bcc6826a8cfa1a86822b0fdd79594c 2d50dc302f487054d38da8b9356e5c3d711fd20c Jose Garcia <jose.garcia@preset.io> 1765013004 -0300	commit: test user sync
+2d50dc302f487054d38da8b9356e5c3d711fd20c 5ef59ffa98bcc6826a8cfa1a86822b0fdd79594c Jose Garcia <jose.garcia@preset.io> 1765013057 -0300	checkout: moving from test-command to unix-sync
+5ef59ffa98bcc6826a8cfa1a86822b0fdd79594c 1f0b6d9afcc10901066a932b431afd2bb4cf48f4 Jose Garcia <jose.garcia@preset.io> 1765013064 -0300	pull: Fast-forward
+1f0b6d9afcc10901066a932b431afd2bb4cf48f4 3f3bfb932dc8be1aad38e17056015bfc07c951db Jose Garcia <jose.garcia@preset.io> 1765108088 -0300	checkout: moving from unix-sync to main
+3f3bfb932dc8be1aad38e17056015bfc07c951db 3d3bd3001f2ae0fdd8e646dae1aa779600781569 Jose Garcia <jose.garcia@preset.io> 1765108091 -0300	pull: Fast-forward
+3d3bd3001f2ae0fdd8e646dae1aa779600781569 3d3bd3001f2ae0fdd8e646dae1aa779600781569 Jose Garcia <jose.garcia@preset.io> 1765108132 -0300	checkout: moving from main to argo-in-pods
+3d3bd3001f2ae0fdd8e646dae1aa779600781569 96fc61d0b08b1e72df4548968cb28bc155a1b615 Jose Garcia <jose.garcia@preset.io> 1765128165 -0300	commit: added helm chart deployments - 1st draft
+96fc61d0b08b1e72df4548968cb28bc155a1b615 0000000000000000000000000000000000000000 Jose Garcia <jose.garcia@preset.io> 1765128317 -0300	Branch: renamed refs/heads/argo-in-pods to refs/heads/agor-helm
+0000000000000000000000000000000000000000 96fc61d0b08b1e72df4548968cb28bc155a1b615 Jose Garcia <jose.garcia@preset.io> 1765128317 -0300	Branch: renamed refs/heads/argo-in-pods to refs/heads/agor-helm
+96fc61d0b08b1e72df4548968cb28bc155a1b615 96fc61d0b08b1e72df4548968cb28bc155a1b615 Jose Garcia <jose.garcia@preset.io> 1765128330 -0300	checkout: moving from agor-helm to agor-in-pods
+96fc61d0b08b1e72df4548968cb28bc155a1b615 63eda11ec454c3ed3f3e7697455ffbf61c9d219d Jose Garcia <jose.garcia@preset.io> 1765132798 -0300	commit: chore: update lockfile for kubernetes client
+63eda11ec454c3ed3f3e7697455ffbf61c9d219d 7708fb7e3049a2a881cc35d83dea15d7d5e7e776 Jose Garcia <jose.garcia@preset.io> 1765653148 -0300	commit: feat(kubernetes): add isolated terminal pods with Zellij support
+7708fb7e3049a2a881cc35d83dea15d7d5e7e776 362ed4fb8394279cb5ce80bb7afd57a1dd5d78c1 Jose Garcia <jose.garcia@preset.io> 1765755770 -0300	commit: added k8s capabilities - draft
+362ed4fb8394279cb5ce80bb7afd57a1dd5d78c1 d527ce94cd8e86d46766b9b3e7596be0f02cefd9 Jose Garcia <jose.garcia@preset.io> 1765756731 -0300	commit: added k8s capabilities - draft
+d527ce94cd8e86d46766b9b3e7596be0f02cefd9 12a3aa4e31c9c8542abb4e650165c4f90f3bfd19 Jose Garcia <jose.garcia@preset.io> 1765807982 -0300	commit: worktree in containers - v1beta
+12a3aa4e31c9c8542abb4e650165c4f90f3bfd19 88979ce89370a52cfe58f1aa3505e64e24925963 Jose Garcia <jose.garcia@preset.io> 1765808555 -0300	commit: pre agor ssh attempt
+88979ce89370a52cfe58f1aa3505e64e24925963 f30b693fe24c52a90203f0747981da2ae6c55276 Jose Garcia <jose.garcia@preset.io> 1765892480 -0300	commit: pre agor ssh attempt
+f30b693fe24c52a90203f0747981da2ae6c55276 bc733903f94baa8eade75f4c64f1ffa82da9590a Jose Garcia <jose.garcia@preset.io> 1765910722 -0300	commit: pre claude agents
+bc733903f94baa8eade75f4c64f1ffa82da9590a 4138dd799a3319f6c11841bf9d23b41f72b685ca Jose Garcia <jose.garcia@preset.io> 1766102263 -0300	commit: missing sshd memory increase
+4138dd799a3319f6c11841bf9d23b41f72b685ca 1c62a0c71baf1a3052a704851cb4993acb7003cd Jose Garcia <jose.garcia@preset.io> 1768830293 -0300	commit: added pods and ssh/connect
+1c62a0c71baf1a3052a704851cb4993acb7003cd 3d3bd3001f2ae0fdd8e646dae1aa779600781569 Jose Garcia <jose.garcia@preset.io> 1768830316 -0300	checkout: moving from agor-in-pods to main
+3d3bd3001f2ae0fdd8e646dae1aa779600781569 82901a26bcef792eda2cdf7f759b862590eb0103 Jose Garcia <jose.garcia@preset.io> 1768830319 -0300	pull: Fast-forward
+82901a26bcef792eda2cdf7f759b862590eb0103 82901a26bcef792eda2cdf7f759b862590eb0103 Jose Garcia <jose.garcia@preset.io> 1769028446 -0300	checkout: moving from main to isolation

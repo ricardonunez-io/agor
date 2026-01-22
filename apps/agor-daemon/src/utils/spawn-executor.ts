@@ -72,6 +72,29 @@ export interface ExecutorTemplateVariables {
 }
 
 /**
+ * Options for container execution mode
+ */
+export interface ContainerExecutionOptions {
+  /** Container name to exec into */
+  containerName: string;
+
+  /** Unix username inside container (use containerUid for UID-based execution) */
+  containerUser?: string;
+
+  /** Unix UID to run as inside container (preferred over containerUser for permission matching) */
+  containerUid?: number;
+
+  /** Unix GID to run as inside container */
+  containerGid?: number;
+
+  /** Working directory inside container */
+  containerCwd?: string;
+
+  /** Container runtime to use (docker or podman) */
+  runtime?: 'docker' | 'podman';
+}
+
+/**
  * Options for spawning executor
  */
 export interface SpawnExecutorOptions {
@@ -103,6 +126,13 @@ export interface SpawnExecutorOptions {
    * Used when executorCommandTemplate is provided.
    */
   templateVariables?: ExecutorTemplateVariables;
+
+  /**
+   * Container execution options for worktree container isolation.
+   * When provided, spawns executor inside the specified container via docker exec.
+   * Takes precedence over local spawning but not over executorCommandTemplate.
+   */
+  containerExecution?: ContainerExecutionOptions;
 
   /**
    * Callback when executor process exits.
@@ -214,9 +244,14 @@ export function spawnExecutor(
   payload: Record<string, unknown>,
   options: SpawnExecutorOptions = {}
 ): void {
-  const { executorCommandTemplate, templateVariables, logPrefix = '[Executor]' } = options;
+  const {
+    executorCommandTemplate,
+    templateVariables,
+    containerExecution,
+    logPrefix = '[Executor]',
+  } = options;
 
-  // Decide execution mode: templated or local
+  // Decide execution mode: templated > container > local
   if (executorCommandTemplate) {
     spawnExecutorWithTemplate(payload, {
       ...options,
@@ -228,6 +263,8 @@ export function spawnExecutor(
       },
       logPrefix,
     });
+  } else if (containerExecution) {
+    spawnExecutorInContainer(payload, options);
   } else {
     spawnExecutorLocal(payload, options);
   }
@@ -310,6 +347,116 @@ function spawnExecutorLocal(payload: Record<string, unknown>, options: SpawnExec
       console.error(`${logPrefix} Executor exited with code ${code}`);
     }
     // Call onExit callback if provided (for cleanup)
+    options.onExit?.(code);
+  });
+
+  // Write JSON payload to stdin and close it
+  executorProcess.stdin?.write(JSON.stringify(payload));
+  executorProcess.stdin?.end();
+}
+
+/**
+ * Spawn executor inside a worktree container via docker exec.
+ *
+ * Used when container_isolation is enabled. The executor runs inside
+ * the worktree's container, providing OS-level isolation.
+ *
+ * @example
+ * ```
+ * docker exec -i -u alice -e DAEMON_URL=http://host:3030 -w /workspace \
+ *   agor-wt-abc123 node /usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js --stdin
+ * ```
+ */
+function spawnExecutorInContainer(
+  payload: Record<string, unknown>,
+  options: SpawnExecutorOptions
+): void {
+  const { containerExecution, env = process.env as Record<string, string>, logPrefix = '[Executor]' } = options;
+
+  if (!containerExecution) {
+    throw new Error('containerExecution options required for container spawn');
+  }
+
+  const { containerName, containerUser, containerUid, containerGid, containerCwd = '/workspace', runtime = 'docker' } = containerExecution;
+
+  // For container execution, use host.docker.internal to reach the host
+  // This works on Docker for Mac/Windows. On Linux, may need host network or actual IP.
+  const hostDaemonUrl = getDaemonUrl().replace('localhost', 'host.docker.internal').replace('127.0.0.1', 'host.docker.internal');
+
+  // Build docker exec command
+  const dockerArgs: string[] = ['exec', '-i'];
+
+  // Add user flag - prefer UID over username for permission matching
+  if (containerUid !== undefined) {
+    // Use UID:GID format for precise permission matching
+    const userSpec = containerGid !== undefined ? `${containerUid}:${containerGid}` : String(containerUid);
+    dockerArgs.push('-u', userSpec);
+  } else if (containerUser) {
+    dockerArgs.push('-u', containerUser);
+  }
+
+  // Add essential environment variables
+  const envVars: Record<string, string> = {
+    DAEMON_URL: hostDaemonUrl,
+    TERM: 'xterm-256color',
+    // Set HOME to workspace when using UID (no guaranteed home dir in container)
+    HOME: containerUid !== undefined ? containerCwd : (containerUser ? `/home/${containerUser}` : '/workspace'),
+  };
+
+  // Add API keys if present
+  if (env.ANTHROPIC_API_KEY) {
+    envVars.ANTHROPIC_API_KEY = env.ANTHROPIC_API_KEY;
+  }
+  if (env.OPENAI_API_KEY) {
+    envVars.OPENAI_API_KEY = env.OPENAI_API_KEY;
+  }
+  if (env.GOOGLE_API_KEY) {
+    envVars.GOOGLE_API_KEY = env.GOOGLE_API_KEY;
+  }
+  if (env.GEMINI_API_KEY) {
+    envVars.GEMINI_API_KEY = env.GEMINI_API_KEY;
+  }
+
+  // Add environment variables to docker command
+  for (const [key, value] of Object.entries(envVars)) {
+    dockerArgs.push('-e', `${key}=${value}`);
+  }
+
+  // Add working directory
+  dockerArgs.push('-w', containerCwd);
+
+  // Add container name
+  dockerArgs.push(containerName);
+
+  // Executor path inside container (installed in image via Dockerfile.workspace)
+  const containerExecutorPath = '/usr/local/lib/node_modules/@agor/executor/dist/cli.js';
+
+  // Add node command to run executor
+  dockerArgs.push('node', containerExecutorPath, '--stdin');
+
+  console.log(`${logPrefix} Container execution mode: ${runtime} exec ${containerName}`);
+  console.log(`${logPrefix} User: ${containerUser || 'root'}`);
+  console.log(`${logPrefix} Working directory: ${containerCwd}`);
+  console.log(`${logPrefix} Command: ${payload.command}`);
+  console.log(`${logPrefix} Full command: ${runtime} ${dockerArgs.join(' ')}`);
+
+  const executorProcess = spawn(runtime, dockerArgs, {
+    stdio: ['pipe', 'inherit', 'inherit'],
+    detached: false,
+  });
+
+  // Log if process fails to spawn
+  executorProcess.on('error', (error) => {
+    console.error(`${logPrefix} Container spawn error:`, error.message);
+  });
+
+  // Log when process exits and call onExit callback
+  executorProcess.on('exit', (code) => {
+    if (code === 0) {
+      console.log(`${logPrefix} Container executor completed successfully`);
+    } else {
+      console.error(`${logPrefix} Container executor exited with code ${code}`);
+    }
     options.onExit?.(code);
   });
 

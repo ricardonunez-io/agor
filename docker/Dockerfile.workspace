@@ -1,0 +1,261 @@
+# Dockerfile for Agor Workspace Containers
+#
+# This image is used for worktree isolation - each worktree gets its own container.
+# Includes SSH server, Podman (for docker-compose compatibility), Zellij, and AI coding agents.
+#
+# Build:
+#   docker build -t agor/workspace:latest -f docker/Dockerfile.workspace .
+#
+# Usage (managed by WorktreeContainersService):
+#   docker run -d --name agor-wt-abc123 \
+#     -v /path/to/worktree:/workspace:rw \
+#     -p 2223:22 \
+#     agor/workspace:latest
+#
+# See: context/explorations/isolated-terminal-containers.md
+
+FROM ubuntu:24.04
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ============================================================================
+# System Packages
+# ============================================================================
+RUN apt-get update && apt-get install -y \
+    # Shell & terminal
+    bash \
+    zsh \
+    tmux \
+    # SSH server
+    openssh-server \
+    # Development tools
+    git \
+    curl \
+    wget \
+    vim \
+    nano \
+    less \
+    tree \
+    jq \
+    htop \
+    procps \
+    lsof \
+    net-tools \
+    # Build essentials
+    build-essential \
+    # Python (for podman-compose)
+    python3 \
+    python3-pip \
+    python3-venv \
+    # Container runtime (Podman - our custom docker wrapper handles CLI compat)
+    podman \
+    fuse-overlayfs \
+    slirp4netns \
+    uidmap \
+    # Networking tools
+    iputils-ping \
+    dnsutils \
+    ca-certificates \
+    # Misc
+    sudo \
+    locales \
+    acl \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================================
+# Locale Configuration
+# ============================================================================
+RUN locale-gen en_US.UTF-8
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+# ============================================================================
+# SSH Server Configuration
+# ============================================================================
+RUN mkdir -p /run/sshd && \
+    # Disable root login
+    sed -i 's/#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
+    # Enable pubkey auth
+    sed -i 's/#PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
+    # Disable password auth (pubkey only for security)
+    sed -i 's/#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && \
+    # Generate host keys
+    ssh-keygen -A
+
+# ============================================================================
+# Node.js Installation (for executor and AI coding agents)
+# ============================================================================
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# ============================================================================
+# Zellij Installation (terminal multiplexer)
+# ============================================================================
+RUN ZELLIJ_VERSION=0.43.1 && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        curl -L "https://github.com/zellij-org/zellij/releases/download/v${ZELLIJ_VERSION}/zellij-x86_64-unknown-linux-musl.tar.gz" | \
+        tar -xz -C /usr/local/bin; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        curl -L "https://github.com/zellij-org/zellij/releases/download/v${ZELLIJ_VERSION}/zellij-aarch64-unknown-linux-musl.tar.gz" | \
+        tar -xz -C /usr/local/bin; \
+    fi && \
+    chmod +x /usr/local/bin/zellij
+
+# ============================================================================
+# GitHub CLI Installation
+# ============================================================================
+RUN curl -fsSL "$(curl -s https://api.github.com/repos/cli/cli/releases/latest | grep 'browser_download_url.*linux_amd64.tar.gz"' | cut -d'"' -f4)" | \
+    tar -xz -C /tmp && \
+    mv /tmp/gh_*/bin/gh /usr/local/bin/ && \
+    rm -rf /tmp/gh_*
+
+# ============================================================================
+# AI Coding Agents Installation
+# ============================================================================
+RUN npm install -g \
+    pnpm@9.15.1 \
+    @anthropic-ai/claude-code@2.0.55 \
+    @google/gemini-cli@0.18.4 \
+    @openai/codex@0.69.0 \
+    opencode-ai@latest
+
+# ============================================================================
+# Agor Executor Installation (for terminal PTY handling)
+# ============================================================================
+# Install from pre-built tarballs (created by: docker/build-executor-tarballs.sh)
+# Extract manually to avoid npm registry lookups for workspace deps
+COPY docker/agor-core.tgz docker/agor-executor.tgz /tmp/
+
+# Extract both packages
+RUN mkdir -p /usr/local/lib/node_modules/@agor && \
+    cd /usr/local/lib/node_modules/@agor && \
+    tar -xzf /tmp/agor-core.tgz && mv package core && \
+    tar -xzf /tmp/agor-executor.tgz && mv package executor && \
+    rm /tmp/agor-*.tgz
+
+# Install @agor/core dependencies
+RUN cd /usr/local/lib/node_modules/@agor/core && \
+    npm install --omit=dev --ignore-scripts
+
+# Install @agor/executor dependencies
+# First create node_modules/@agor/core symlink so npm finds it locally
+RUN cd /usr/local/lib/node_modules/@agor/executor && \
+    mkdir -p node_modules/@agor && \
+    ln -sf /usr/local/lib/node_modules/@agor/core node_modules/@agor/core && \
+    npm install --omit=dev && \
+    ln -sf /usr/local/lib/node_modules/@agor/executor/dist/cli.js /usr/local/bin/agor-executor && \
+    chmod +x /usr/local/bin/agor-executor
+
+# ============================================================================
+# Podman-Compose Installation (for docker-compose compatibility)
+# ============================================================================
+# Install Docker Compose v2 standalone (works with Podman via DOCKER_HOST)
+# This provides full Docker Compose v2 syntax compatibility
+RUN COMPOSE_VERSION=v2.24.5 && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then ARCH="x86_64"; \
+    elif [ "$ARCH" = "aarch64" ]; then ARCH="aarch64"; fi && \
+    curl -L "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-${ARCH}" -o /usr/local/bin/docker-compose && \
+    chmod +x /usr/local/bin/docker-compose
+
+# ============================================================================
+# Podman Configuration
+# ============================================================================
+# Configure Podman for rootless operation with Docker Hub as default registry
+# Also disable cgroup controllers that aren't available in nested containers
+RUN mkdir -p /etc/containers && \
+    echo 'unqualified-search-registries = ["docker.io"]' >> /etc/containers/registries.conf && \
+    # Configure containers.conf for nested container environment
+    echo '[containers]' > /etc/containers/containers.conf && \
+    echo '# Disable pids limit - cgroup pids controller not available in nested containers' >> /etc/containers/containers.conf && \
+    echo 'pids_limit = 0' >> /etc/containers/containers.conf && \
+    echo '' >> /etc/containers/containers.conf && \
+    echo '[engine]' >> /etc/containers/containers.conf && \
+    echo '# Use cgroupfs instead of systemd for nested container compatibility' >> /etc/containers/containers.conf && \
+    echo 'cgroup_manager = "cgroupfs"' >> /etc/containers/containers.conf && \
+    echo '# Disable events logger to avoid issues in nested environments' >> /etc/containers/containers.conf && \
+    echo 'events_logger = "file"' >> /etc/containers/containers.conf
+
+# Configure subuid/subgid for rootless Podman (will be extended per-user)
+RUN echo "root:100000:65536" >> /etc/subuid && \
+    echo "root:100000:65536" >> /etc/subgid
+
+# ============================================================================
+# Default Non-Root User
+# ============================================================================
+# Create a default 'developer' user for container execution
+# This user owns /workspace and is used when no specific unix_username is set
+RUN useradd -m -s /bin/bash developer && \
+    mkdir -p /home/developer/.config/zellij && \
+    mkdir -p /home/developer/.config/containers && \
+    chown -R developer:developer /home/developer && \
+    # Configure subuid/subgid for developer user (rootless Podman)
+    echo "developer:100000:65536" >> /etc/subuid && \
+    echo "developer:100000:65536" >> /etc/subgid
+
+# ============================================================================
+# Podman Access for All Users
+# ============================================================================
+# Allow all users to run podman and docker-compose via sudo (without password)
+# This is safe because the container itself is isolated
+RUN echo "ALL ALL=(root) NOPASSWD: /usr/bin/podman, /usr/local/bin/docker-compose" >> /etc/sudoers.d/podman-access && \
+    chmod 440 /etc/sudoers.d/podman-access
+
+# Create docker wrapper that handles both regular commands and compose
+# This allows users to run 'docker ps', 'docker compose up', etc and see all containers
+RUN echo '#!/bin/bash\n\
+if [ "$1" = "compose" ]; then\n\
+  shift\n\
+  exec sudo sh -c "DOCKER_HOST=unix:///run/podman/podman.sock /usr/local/bin/docker-compose \\"\$@\\"" -- "$@"\n\
+else\n\
+  exec sudo /usr/bin/podman "$@"\n\
+fi' > /usr/local/bin/docker && \
+    chmod +x /usr/local/bin/docker
+
+# ============================================================================
+# Podman Socket Setup
+# ============================================================================
+# Use system-wide Podman socket (runs as root inside container, which is isolated)
+# This avoids rootless Podman complexity inside containers
+RUN mkdir -p /run/podman && \
+    echo '#!/bin/bash\n\
+# Start system Podman socket if not running\n\
+if [ ! -S /run/podman/podman.sock ]; then\n\
+  podman system service --time=0 unix:///run/podman/podman.sock &\n\
+  sleep 1\n\
+fi\n\
+export DOCKER_HOST=unix:///run/podman/podman.sock\n\
+exec "$@"\n' > /usr/local/bin/with-podman && \
+    chmod +x /usr/local/bin/with-podman
+
+# Set default DOCKER_HOST for all users
+ENV DOCKER_HOST=unix:///run/podman/podman.sock
+
+# ============================================================================
+# Zellij Configuration
+# ============================================================================
+COPY docker/zellij-config.kdl /etc/skel/.config/zellij/config.kdl
+RUN mkdir -p /etc/skel/.config/zellij && \
+    cp /etc/skel/.config/zellij/config.kdl /home/developer/.config/zellij/ && \
+    chown -R developer:developer /home/developer/.config
+
+# ============================================================================
+# Working Directory
+# ============================================================================
+WORKDIR /workspace
+
+# ============================================================================
+# Expose SSH Port
+# ============================================================================
+EXPOSE 22
+
+# ============================================================================
+# Entrypoint
+# ============================================================================
+# Start SSH daemon, Podman socket, and keep container running
+# The container is intended to be long-lived (until worktree is deleted)
+# chmod 666 allows all users to access Podman socket (container is isolated anyway)
+CMD ["/bin/bash", "-c", "/usr/sbin/sshd && podman system service --time=0 unix:///run/podman/podman.sock & sleep 1 && chmod 666 /run/podman/podman.sock && exec sleep infinity"]

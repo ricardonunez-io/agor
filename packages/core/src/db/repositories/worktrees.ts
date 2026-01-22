@@ -55,6 +55,10 @@ export class WorktreeRepository implements BaseRepository<Worktree, Partial<Work
       others_can: row.others_can ?? undefined,
       others_fs_access: row.others_fs_access ?? undefined,
       unix_group: row.unix_group ?? undefined,
+      // Container isolation fields
+      container_name: row.container_name ?? undefined,
+      container_status: row.container_status ?? undefined,
+      ssh_port: row.ssh_port ?? undefined,
       ...row.data,
     };
   }
@@ -98,6 +102,10 @@ export class WorktreeRepository implements BaseRepository<Worktree, Partial<Work
       others_can: worktree.others_can ?? null,
       others_fs_access: worktree.others_fs_access ?? null,
       unix_group: worktree.unix_group ?? null,
+      // Container isolation fields
+      container_name: worktree.container_name ?? null,
+      container_status: worktree.container_status ?? null,
+      ssh_port: worktree.ssh_port ?? null,
       data: {
         path: worktree.path!,
         base_ref: worktree.base_ref,

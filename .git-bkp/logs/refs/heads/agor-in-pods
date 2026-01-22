@@ -1,0 +1,11 @@
+0000000000000000000000000000000000000000 96fc61d0b08b1e72df4548968cb28bc155a1b615 Jose Garcia <jose.garcia@preset.io> 1765128330 -0300	branch: Created from HEAD
+96fc61d0b08b1e72df4548968cb28bc155a1b615 63eda11ec454c3ed3f3e7697455ffbf61c9d219d Jose Garcia <jose.garcia@preset.io> 1765132798 -0300	commit: chore: update lockfile for kubernetes client
+63eda11ec454c3ed3f3e7697455ffbf61c9d219d 7708fb7e3049a2a881cc35d83dea15d7d5e7e776 Jose Garcia <jose.garcia@preset.io> 1765653148 -0300	commit: feat(kubernetes): add isolated terminal pods with Zellij support
+7708fb7e3049a2a881cc35d83dea15d7d5e7e776 362ed4fb8394279cb5ce80bb7afd57a1dd5d78c1 Jose Garcia <jose.garcia@preset.io> 1765755770 -0300	commit: added k8s capabilities - draft
+362ed4fb8394279cb5ce80bb7afd57a1dd5d78c1 d527ce94cd8e86d46766b9b3e7596be0f02cefd9 Jose Garcia <jose.garcia@preset.io> 1765756731 -0300	commit: added k8s capabilities - draft
+d527ce94cd8e86d46766b9b3e7596be0f02cefd9 12a3aa4e31c9c8542abb4e650165c4f90f3bfd19 Jose Garcia <jose.garcia@preset.io> 1765807982 -0300	commit: worktree in containers - v1beta
+12a3aa4e31c9c8542abb4e650165c4f90f3bfd19 88979ce89370a52cfe58f1aa3505e64e24925963 Jose Garcia <jose.garcia@preset.io> 1765808555 -0300	commit: pre agor ssh attempt
+88979ce89370a52cfe58f1aa3505e64e24925963 f30b693fe24c52a90203f0747981da2ae6c55276 Jose Garcia <jose.garcia@preset.io> 1765892480 -0300	commit: pre agor ssh attempt
+f30b693fe24c52a90203f0747981da2ae6c55276 bc733903f94baa8eade75f4c64f1ffa82da9590a Jose Garcia <jose.garcia@preset.io> 1765910722 -0300	commit: pre claude agents
+bc733903f94baa8eade75f4c64f1ffa82da9590a 4138dd799a3319f6c11841bf9d23b41f72b685ca Jose Garcia <jose.garcia@preset.io> 1766102263 -0300	commit: missing sshd memory increase
+4138dd799a3319f6c11841bf9d23b41f72b685ca 1c62a0c71baf1a3052a704851cb4993acb7003cd Jose Garcia <jose.garcia@preset.io> 1768830293 -0300	commit: added pods and ssh/connect

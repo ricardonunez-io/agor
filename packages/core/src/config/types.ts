@@ -172,6 +172,55 @@ export interface AgorCodexSettings {
 }
 
 /**
+ * Container isolation settings
+ */
+export interface AgorContainerSettings {
+  /** Base image for worktree containers (default: 'agor/workspace:latest') */
+  image?: string;
+
+  /** Container runtime (default: 'docker') */
+  runtime?: 'docker' | 'podman';
+
+  /** Restart policy (default: 'unless-stopped') */
+  restart_policy?: 'no' | 'always' | 'unless-stopped' | 'on-failure';
+
+  /** Resource limits (optional) */
+  resources?: {
+    /** Memory limit (e.g., '4g', '2048m') */
+    memory?: string;
+    /** CPU limit (e.g., '2', '1.5') */
+    cpus?: string;
+  };
+
+  /** Additional volumes to mount (optional) */
+  extra_volumes?: Array<{
+    source: string;
+    target: string;
+    mode?: 'ro' | 'rw';
+  }>;
+
+  /** Additional environment variables (optional) */
+  extra_env?: Record<string, string>;
+}
+
+/**
+ * SSH settings for container access
+ */
+export interface AgorSSHSettings {
+  /** Enable SSH access to containers (default: true) */
+  enabled?: boolean;
+
+  /** Base port for SSH (worktree gets base_port + unique_id, default: 2222) */
+  base_port?: number;
+
+  /** Host to display in SSH connection strings (defaults to daemon host) */
+  host?: string;
+
+  /** Auto-refresh keys from GitHub (interval in hours, 0 = disabled, default: 24) */
+  key_refresh_interval?: number;
+}
+
+/**
  * Execution settings
  */
 export interface AgorExecutionSettings {
@@ -183,6 +232,15 @@ export interface AgorExecutionSettings {
 
   /** Enable worktree RBAC and ownership system (default: false). When enabled, enforces permission checks and Unix group isolation. */
   worktree_rbac?: boolean;
+
+  /** Enable container isolation per worktree (default: false). When enabled, each worktree gets its own Docker container. */
+  container_isolation?: boolean;
+
+  /** Container settings (only used when container_isolation is enabled) */
+  containers?: AgorContainerSettings;
+
+  /** SSH settings (only used when container_isolation is enabled) */
+  ssh?: AgorSSHSettings;
 
   /** Session token expiration in ms (default: 86400000 = 24 hours) */
   session_token_expiration_ms?: number;

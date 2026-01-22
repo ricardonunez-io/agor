@@ -146,17 +146,32 @@ export async function handleZellijAttach(
     let actualHome = '/tmp'; // Fallback
     let userShell = '/bin/bash'; // Fallback
     try {
-      const passwdEntry = execSync(`getent passwd $(whoami)`, { encoding: 'utf-8' }).trim();
-      const fields = passwdEntry.split(':');
-      // passwd format: name:password:uid:gid:gecos:home:shell
-      if (fields.length >= 6 && fields[5]) {
-        actualHome = fields[5];
-      }
-      if (fields.length >= 7 && fields[6]) {
-        userShell = fields[6];
+      // Try getent first (Linux), fall back to dscl (macOS) or env vars
+      const os = await import('node:os');
+      const platform = os.platform();
+
+      if (platform === 'darwin') {
+        // macOS: use environment variables or os.homedir()
+        actualHome = process.env.HOME || os.homedir() || '/tmp';
+        userShell = process.env.SHELL || '/bin/zsh';
+      } else {
+        // Linux: use getent passwd
+        const passwdEntry = execSync(`getent passwd $(whoami)`, { encoding: 'utf-8' }).trim();
+        const fields = passwdEntry.split(':');
+        // passwd format: name:password:uid:gid:gecos:home:shell
+        if (fields.length >= 6 && fields[5]) {
+          actualHome = fields[5];
+        }
+        if (fields.length >= 7 && fields[6]) {
+          userShell = fields[6];
+        }
       }
     } catch (err) {
       console.error(`[zellij.attach] Failed to get user info from passwd:`, err);
+      // Fall back to environment variables
+      const os = await import('node:os');
+      actualHome = process.env.HOME || os.homedir() || '/tmp';
+      userShell = process.env.SHELL || '/bin/bash';
     }
     console.log(`[zellij.attach] User home: ${actualHome}, shell: ${userShell}`);
 
@@ -452,7 +467,8 @@ async function handleTabAction(action: string, tabName: string, cwd?: string): P
 
     if (action === 'create') {
       // Create new tab with specified name and cwd
-      actionArgs = ['new-tab', '--name', tabName];
+      // Note: Zellij 0.40+ requires --layout for new-tab
+      actionArgs = ['new-tab', '--layout', 'default', '--name', tabName];
       if (cwd) {
         actionArgs.push('--cwd', cwd);
       }

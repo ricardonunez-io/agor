@@ -9,8 +9,8 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { createUserProcessEnvironment, ENVIRONMENT, PAGINATION } from '@agor/core/config';
-import { type Database, WorktreeRepository } from '@agor/core/db';
+import { type AgorConfig, createUserProcessEnvironment, ENVIRONMENT, PAGINATION } from '@agor/core/config';
+import { type Database, WorktreeRepository, UsersRepository } from '@agor/core/db';
 import type { Application } from '@agor/core/feathers';
 import type {
   AuthenticatedParams,
@@ -24,6 +24,7 @@ import type {
 } from '@agor/core/types';
 import { getNextRunTime, validateCron } from '@agor/core/utils/cron';
 import { DrizzleService } from '../adapters/drizzle';
+import { deriveUnixUsername, ensureContainerUser } from '../utils/container-user.js';
 import { getDaemonUrl, spawnExecutor } from '../utils/spawn-executor.js';
 
 /**
@@ -54,6 +55,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
   private worktreeRepo: WorktreeRepository;
   private db: Database;
   private app: Application;
+  private config: AgorConfig;
   private processes = new Map<WorktreeID, ManagedProcess>();
   // Cache board-objects service reference (lazy-loaded to avoid circular deps)
   private boardObjectsService?: {
@@ -62,7 +64,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     remove: (id: string) => Promise<unknown>;
   };
 
-  constructor(db: Database, app: Application) {
+  constructor(db: Database, app: Application, config: AgorConfig) {
     const worktreeRepo = new WorktreeRepository(db);
     super(worktreeRepo, {
       id: 'worktree_id',
@@ -76,6 +78,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     this.worktreeRepo = worktreeRepo;
     this.db = db;
     this.app = app;
+    this.config = config;
   }
 
   /**
@@ -606,6 +609,50 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       throw new Error('Environment is already running');
     }
 
+    // Check container isolation
+    const containersService = (this.app as any).worktreeContainersService;
+    const containerIsolationEnabled = this.config.execution?.container_isolation === true;
+    let containerName: string | undefined;
+    let containerRunning = false;
+
+    if (containerIsolationEnabled && containersService) {
+      // Derive container name from worktree ID
+      containerName = containersService.generateContainerName(worktree.worktree_id);
+
+      // Check if container exists and is running
+      containerRunning = await containersService.isContainerRunning(containerName);
+      const containerExists = containerRunning || await containersService.containerExists(containerName);
+
+      // Create container if it doesn't exist
+      if (!containerExists) {
+        console.log(`[Worktrees] Creating container on-demand for worktree ${worktree.name}`);
+        try {
+          const repo = await this.app.service('repos').get(worktree.repo_id);
+          const sshPort = containersService.calculateSSHPort(worktree.worktree_unique_id);
+          await containersService.createContainer({
+            worktreeId: worktree.worktree_id,
+            worktreePath: worktree.path,
+            repoPath: repo.local_path,
+            sshPort,
+          });
+          containerRunning = true;
+        } catch (error) {
+          console.error(`[Worktrees] Failed to create container:`, error);
+          // Continue without container - environment will run on host
+          containerName = undefined;
+        }
+      } else if (!containerRunning) {
+        // Container exists but is stopped - start it
+        try {
+          await containersService.ensureContainerRunning(worktree.worktree_id);
+          containerRunning = true;
+        } catch (error) {
+          console.error(`[Worktrees] Failed to start container:`, error);
+          containerName = undefined;
+        }
+      }
+    }
+
     // Set status to 'starting'
     await this.updateEnvironment(
       id,
@@ -618,7 +665,8 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
 
     try {
       // Use static start_command (initialized from template at worktree creation)
-      const command = worktree.start_command;
+      // Already validated above that start_command exists
+      const command = worktree.start_command!;
 
       console.log(`🚀 Starting environment for worktree ${worktree.name}: ${command}`);
 
@@ -638,15 +686,52 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
 
       // Execute command and wait for it to complete
       // The command should start services and return (e.g., docker-compose up -d)
-      await new Promise<void>((resolve, reject) => {
-        const childProcess = spawn(command, {
-          cwd: worktree.path,
-          shell: true,
-          stdio: 'inherit', // Show output directly in daemon logs
-          env, // Pass clean environment without Agor-internal variables
-        });
+      // If container isolation is enabled, run inside the worktree's container
+      const useContainerExecution = containerName && containerRunning;
+      const runtime = this.config.execution?.containers?.runtime || 'docker';
 
-        childProcess.on('exit', (code) => {
+      // Get user's UID for container execution
+      let containerUid: number | undefined;
+      if (useContainerExecution && worktree.created_by) {
+        try {
+          const usersRepo = new UsersRepository(this.db);
+          const user = await usersRepo.findById(worktree.created_by);
+          containerUid = user?.unix_uid;
+        } catch (error) {
+          console.warn(`[Worktrees] Failed to get user UID for container execution:`, error);
+        }
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        let childProcess;
+
+        if (useContainerExecution) {
+          // Run command inside the worktree container
+          // Podman socket is started at container boot, DOCKER_HOST is set via ENV
+          // Run as root inside container - container is isolated so this is safe
+          // This ensures Podman containers are visible to all users (same namespace)
+          console.log(`[Worktrees] Running start command inside container ${containerName}`);
+          const dockerArgs = [
+            'exec',
+            '-w', '/workspace',
+            containerName!,
+            'sh', '-c', command,
+          ];
+          childProcess = spawn(runtime, dockerArgs, {
+            stdio: ['inherit', 'inherit', 'inherit'] as const,
+            env, // Pass environment (used by docker client, not passed into container)
+          });
+        } else {
+          // Run command on host
+          childProcess = spawn(command, {
+            cwd: worktree.path,
+            shell: true,
+            stdio: ['inherit', 'inherit', 'inherit'] as const,
+            env,
+          });
+        }
+
+        childProcess.on('exit', (code: number | null) => {
           if (code === 0) {
             console.log(`✅ Start command completed successfully for ${worktree.name}`);
             resolve();
@@ -720,14 +805,60 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
         // Create clean environment for user process (filters Agor-internal vars like NODE_ENV)
         const env = await createUserProcessEnvironment(worktree.created_by, this.db);
 
+        // Check container isolation
+        const containersService = (this.app as any).worktreeContainersService;
+        const containerIsolationEnabled = this.config.execution?.container_isolation === true;
+        let containerName: string | undefined;
+        let containerRunning = false;
+
+        if (containerIsolationEnabled && containersService) {
+          containerName = containersService.generateContainerName(worktree.worktree_id);
+          containerRunning = await containersService.isContainerRunning(containerName);
+        }
+
+        const useContainerExecution = containerName && containerRunning;
+        const runtime = this.config.execution?.containers?.runtime || 'docker';
+
+        // Get user's UID for container execution
+        let containerUid: number | undefined;
+        if (useContainerExecution && worktree.created_by) {
+          try {
+            const usersRepo = new UsersRepository(this.db);
+            const user = await usersRepo.findById(worktree.created_by);
+            containerUid = user?.unix_uid;
+          } catch (error) {
+            console.warn(`[Worktrees] Failed to get user UID for container execution:`, error);
+          }
+        }
+
         // Execute down command
         await new Promise<void>((resolve, reject) => {
-          const stopProcess = spawn(command, {
-            cwd: worktree.path,
-            shell: true,
-            stdio: 'inherit',
-            env, // Pass clean environment without Agor-internal variables
-          });
+          let stopProcess;
+
+          if (useContainerExecution) {
+            // Run command inside the worktree container
+            // Podman socket is started at container boot, DOCKER_HOST is set via ENV
+            // Run as root inside container - container is isolated so this is safe
+            console.log(`[Worktrees] Running stop command inside container ${containerName}`);
+            const dockerArgs = [
+              'exec',
+              '-w', '/workspace',
+              containerName!,
+              'sh', '-c', command,
+            ];
+            stopProcess = spawn(runtime, dockerArgs, {
+              stdio: 'inherit',
+              env,
+            });
+          } else {
+            // Run command on host
+            stopProcess = spawn(command, {
+              cwd: worktree.path,
+              shell: true,
+              stdio: 'inherit',
+              env,
+            });
+          }
 
           stopProcess.on('exit', (code) => {
             if (code === 0) {
@@ -936,24 +1067,86 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     const previousHealthStatus = worktree.environment_instance?.last_health_check?.status;
 
     try {
-      // Perform HTTP health check with timeout
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), ENVIRONMENT.HEALTH_CHECK_TIMEOUT_MS);
+      let isHealthy: boolean;
+      let statusMessage: string;
 
-      const response = await fetch(healthUrl, {
-        signal: controller.signal,
-        method: 'GET',
-      });
+      // Check if worktree has a running container - health checks must run inside container
+      // because Podman networks are isolated from the host
+      const containersService = (this.app as any).worktreeContainersService;
+      const containerIsolationEnabled = this.config.execution?.container_isolation === true;
+      let containerName: string | undefined;
+      let containerRunning = false;
 
-      clearTimeout(timeout);
+      if (containerIsolationEnabled && containersService) {
+        containerName = containersService.generateContainerName(worktree.worktree_id);
+        containerRunning = await containersService.isContainerRunning(containerName);
+      }
 
-      const isHealthy = response.ok;
+      if (containerName && containerRunning) {
+        // Use docker exec to run curl inside the container
+        const runtime = this.config.execution?.containers?.runtime || 'docker';
+        const result = await new Promise<{ ok: boolean; message: string }>((resolve) => {
+          const timeoutMs = ENVIRONMENT.HEALTH_CHECK_TIMEOUT_MS;
+          const curlProcess = spawn(runtime, [
+            'exec',
+            containerName!,
+            'curl',
+            '-sf',
+            '--max-time', String(Math.floor(timeoutMs / 1000)),
+            '-o', '/dev/null',
+            '-w', '%{http_code}',
+            healthUrl,
+          ]);
+
+          let stdout = '';
+          let stderr = '';
+          const timeout = setTimeout(() => {
+            curlProcess.kill();
+            resolve({ ok: false, message: 'Timeout' });
+          }, timeoutMs + 1000);
+
+          curlProcess.stdout?.on('data', (data) => { stdout += data.toString(); });
+          curlProcess.stderr?.on('data', (data) => { stderr += data.toString(); });
+
+          curlProcess.on('close', (code) => {
+            clearTimeout(timeout);
+            const httpCode = parseInt(stdout.trim(), 10);
+            if (code === 0 && httpCode >= 200 && httpCode < 400) {
+              resolve({ ok: true, message: `HTTP ${httpCode}` });
+            } else {
+              resolve({ ok: false, message: httpCode ? `HTTP ${httpCode}` : (stderr.trim() || `Exit code ${code}`) });
+            }
+          });
+
+          curlProcess.on('error', (err) => {
+            clearTimeout(timeout);
+            resolve({ ok: false, message: err.message });
+          });
+        });
+
+        isHealthy = result.ok;
+        statusMessage = result.message;
+      } else {
+        // No container - perform health check directly from host
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), ENVIRONMENT.HEALTH_CHECK_TIMEOUT_MS);
+
+        const response = await fetch(healthUrl, {
+          signal: controller.signal,
+          method: 'GET',
+        });
+
+        clearTimeout(timeout);
+        isHealthy = response.ok;
+        statusMessage = `HTTP ${response.status}${!response.ok ? ' ' + response.statusText : ''}`;
+      }
+
       const newHealthStatus = isHealthy ? 'healthy' : 'unhealthy';
 
       // Only log if health status changed
       if (previousHealthStatus !== newHealthStatus) {
         console.log(
-          `🏥 Health status changed for ${worktree.name}: ${previousHealthStatus || 'unknown'} → ${newHealthStatus} (HTTP ${response.status})`
+          `🏥 Health status changed for ${worktree.name}: ${previousHealthStatus || 'unknown'} → ${newHealthStatus} (${statusMessage})`
         );
       }
 
@@ -973,9 +1166,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
           last_health_check: {
             timestamp: new Date().toISOString(),
             status: newHealthStatus,
-            message: isHealthy
-              ? `HTTP ${response.status}`
-              : `HTTP ${response.status} ${response.statusText}`,
+            message: statusMessage,
           },
         },
         params
@@ -1147,6 +1338,6 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
 /**
  * Service factory function
  */
-export function createWorktreesService(db: Database, app: Application): WorktreesService {
-  return new WorktreesService(db, app);
+export function createWorktreesService(db: Database, app: Application, config: AgorConfig): WorktreesService {
+  return new WorktreesService(db, app, config);
 }

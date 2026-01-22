@@ -434,6 +434,13 @@ export const worktrees = sqliteTable(
       .$type<'none' | 'read' | 'write'>()
       .default('read'),
 
+    // Container isolation (isolated-terminal-containers.md)
+    container_name: text('container_name'), // e.g., 'agor-wt-abc123'
+    container_status: text('container_status', {
+      enum: ['creating', 'running', 'stopped', 'removing', 'error'],
+    }).$type<'creating' | 'running' | 'stopped' | 'removing' | 'error'>(),
+    ssh_port: integer('ssh_port'), // Allocated SSH port (base_port + unique_id)
+
     // JSON blob for everything else
     data: t
       .json<unknown>('data')
@@ -567,6 +574,13 @@ export const users = sqliteTable(
 
     // Unix username for process impersonation (optional, app-enforced uniqueness)
     unix_username: text('unix_username'),
+
+    // Unix UID/GID for container user mapping (optional)
+    unix_uid: integer('unix_uid'),
+    unix_gid: integer('unix_gid'),
+
+    // GitHub username for SSH key fetching (optional)
+    github_username: text('github_username'),
 
     // Onboarding state
     onboarding_completed: t.bool('onboarding_completed').notNull().default(false),

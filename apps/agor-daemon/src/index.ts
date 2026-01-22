@@ -85,6 +85,8 @@ import type {
   Task,
   TaskID,
   User,
+  UserID,
+  WorktreeID,
 } from '@agor/core/types';
 import { SessionStatus, TaskStatus } from '@agor/core/types';
 import { NotFoundError } from '@agor/core/utils/errors';
@@ -96,6 +98,7 @@ import {
   getDaemonUrl,
   spawnExecutorFireAndForget,
 } from './utils/spawn-executor.js';
+import { deriveUnixUsername, ensureContainerUser } from './utils/container-user.js';
 
 // ============================================================================
 // GLOBAL ERROR HANDLERS
@@ -182,6 +185,10 @@ import { createTasksService } from './services/tasks';
 import { TerminalsService } from './services/terminals';
 import { createUsersService } from './services/users';
 import { setupWorktreeOwnersService } from './services/worktree-owners.js';
+import {
+  createWorktreeContainersService,
+  type WorktreeContainersService,
+} from './services/worktree-containers';
 import { createWorktreesService } from './services/worktrees';
 import { AnonymousStrategy } from './strategies/anonymous';
 import {
@@ -533,15 +540,25 @@ async function main() {
     // 3. Environment variables
     // The executor will let SDKs handle OAuth if no key is found.
 
-    // Get worktree path
+    // Get worktree path and check for container isolation
     let cwd = process.cwd();
+    let worktreeForExecution: import('@agor/core/types').Worktree | null = null;
     if (session.worktree_id) {
       try {
-        const worktree = await app.service('worktrees').get(session.worktree_id, params);
-        cwd = worktree.path;
+        const wt = await app.service('worktrees').get(session.worktree_id, params);
+        worktreeForExecution = wt;
+        cwd = wt.path;
       } catch (error) {
         console.warn(`Could not get worktree path for ${session.worktree_id}:`, error);
       }
+    }
+
+    // Determine if container execution should be used
+    let useContainerExecution = false;
+    let containerNameForExecution: string | undefined;
+    if (containerIsolationEnabled && worktreeForExecution && worktreeContainersService) {
+      containerNameForExecution = worktreeContainersService.generateContainerName(worktreeForExecution.worktree_id);
+      useContainerExecution = await worktreeContainersService.isContainerRunning(containerNameForExecution);
     }
 
     // Spawn executor process with Feathers/WebSocket mode
@@ -687,29 +704,107 @@ async function main() {
       },
     };
 
-    // Build spawn command - handles impersonation via sudo -u when executorUnixUser is set
-    const { cmd, args } = buildSpawnArgs('node', [executorPath, '--stdin'], {
-      asUser: executorUnixUser || undefined,
-      env: executorUnixUser ? executorEnv : undefined, // Only inject env when impersonating
-    });
+    // Spawn executor - use container execution if available, otherwise local
+    let executorProcess: import('node:child_process').ChildProcess;
 
-    if (executorUnixUser) {
-      console.log(`[Daemon] Spawning executor as user: ${executorUnixUser}`);
-      console.log(`[Daemon] DAEMON_URL: ${executorEnv.DAEMON_URL}`);
-      console.log(
-        `[Daemon] Env vars (${Object.keys(executorEnv).length}): ${Object.keys(executorEnv).join(', ')}`
-      );
-      console.log(`[Daemon] Full command: ${cmd} ${args.join(' ')}`);
+    if (useContainerExecution && worktreeForExecution && containerNameForExecution) {
+      // Container execution mode: spawn via docker exec
+      const containerRuntime = config.execution?.containers?.runtime || 'docker';
+      const containerName = containerNameForExecution;
+
+      // Derive container username: prefer unix_username, then derive from session creator
+      let containerUser = sessionUnixUser || 'developer';
+      if (!sessionUnixUser && session.created_by) {
+        // Try to get user info to derive username
+        try {
+          const userInfo = await usersRepository.findById(session.created_by);
+          if (userInfo?.unix_username) {
+            containerUser = userInfo.unix_username;
+          } else if (userInfo?.email) {
+            containerUser = deriveUnixUsername(userInfo.email);
+          }
+        } catch (error) {
+          console.warn(`[Daemon] Failed to get user info for container username derivation:`, error);
+        }
+      }
+
+      // Ensure user exists in container before spawning executor
+      const { execSync } = await import('node:child_process');
+      const createUserCmd = ensureContainerUser(containerUser);
+      console.log(`[Daemon] Ensuring user '${containerUser}' exists in container ${containerName}`);
+      try {
+        execSync(`${containerRuntime} exec ${containerName} sh -c "${createUserCmd}"`, {
+          stdio: 'inherit',
+          timeout: 10000,
+        });
+      } catch (error) {
+        console.warn(`[Daemon] Failed to create user in container (may already exist):`, error);
+      }
+
+      // Build docker exec command
+      const dockerArgs: string[] = ['exec', '-i'];
+
+      // Add user flag
+      dockerArgs.push('-u', containerUser);
+
+      // Add environment variables
+      dockerArgs.push('-e', `DAEMON_URL=${executorEnv.DAEMON_URL}`);
+      dockerArgs.push('-e', 'TERM=xterm-256color');
+      if (executorEnv.ANTHROPIC_API_KEY) {
+        dockerArgs.push('-e', `ANTHROPIC_API_KEY=${executorEnv.ANTHROPIC_API_KEY}`);
+      }
+      if (executorEnv.OPENAI_API_KEY) {
+        dockerArgs.push('-e', `OPENAI_API_KEY=${executorEnv.OPENAI_API_KEY}`);
+      }
+      if (executorEnv.GOOGLE_API_KEY) {
+        dockerArgs.push('-e', `GOOGLE_API_KEY=${executorEnv.GOOGLE_API_KEY}`);
+      }
+
+      // Working directory inside container
+      dockerArgs.push('-w', '/workspace');
+
+      // Container name
+      dockerArgs.push(containerName);
+
+      // Executor path inside container (installed globally via Dockerfile.workspace)
+      const containerExecutorPath = '/usr/local/lib/node_modules/@agor/executor/dist/cli.js';
+      dockerArgs.push('node', containerExecutorPath, '--stdin');
+
+      // Update cwd in payload for container execution
+      executorPayload.params.cwd = '/workspace';
+
+      console.log(`[Daemon] Container execution mode: ${containerRuntime} exec ${containerName}`);
+      console.log(`[Daemon] Container user: ${containerUser || 'root'}`);
+      console.log(`[Daemon] Full command: ${containerRuntime} ${dockerArgs.join(' ')}`);
+
+      executorProcess = spawn(containerRuntime, dockerArgs, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
     } else {
-      console.log(`[Daemon] Spawning executor as current user (no impersonation)`);
-    }
+      // Local execution mode: spawn directly on host
+      // Build spawn command - handles impersonation via sudo -u when executorUnixUser is set
+      const { cmd, args } = buildSpawnArgs('node', [executorPath, '--stdin'], {
+        asUser: executorUnixUser || undefined,
+        env: executorUnixUser ? executorEnv : undefined, // Only inject env when impersonating
+      });
 
-    // Spawn executor with --stdin mode, pipe JSON payload via stdin
-    const executorProcess = spawn(cmd, args, {
-      cwd,
-      env: executorUnixUser ? undefined : executorEnv, // When impersonating, env is in the command
-      stdio: ['pipe', 'pipe', 'pipe'], // Enable stdin for JSON payload
-    });
+      if (executorUnixUser) {
+        console.log(`[Daemon] Spawning executor as user: ${executorUnixUser}`);
+        console.log(`[Daemon] DAEMON_URL: ${executorEnv.DAEMON_URL}`);
+        console.log(
+          `[Daemon] Env vars (${Object.keys(executorEnv).length}): ${Object.keys(executorEnv).join(', ')}`
+        );
+        console.log(`[Daemon] Full command: ${cmd} ${args.join(' ')}`);
+      } else {
+        console.log(`[Daemon] Spawning executor as current user (no impersonation)`);
+      }
+
+      executorProcess = spawn(cmd, args, {
+        cwd,
+        env: executorUnixUser ? undefined : executorEnv, // When impersonating, env is in the command
+        stdio: ['pipe', 'pipe', 'pipe'], // Enable stdin for JSON payload
+      });
+    }
 
     // Write JSON payload to stdin
     executorProcess.stdin?.write(JSON.stringify(executorPayload));
@@ -869,7 +964,7 @@ async function main() {
 
   // Register worktrees service first (repos service needs to access it)
   // NOTE: Pass app instance for environment management (needs to access repos service)
-  app.use('/worktrees', createWorktreesService(db, app));
+  app.use('/worktrees', createWorktreesService(db, app, config));
 
   // Feature flag: Worktree RBAC (default: false)
   const worktreeRbacEnabled = config.execution?.worktree_rbac === true;
@@ -895,6 +990,87 @@ async function main() {
   if (worktreeRbacEnabled) {
     const daemonUser = config.daemon?.unix_user || 'agor';
     console.log(`[Unix Integration] Executor-based sync enabled (daemon user: ${daemonUser})`);
+  }
+
+  // Feature flag: Container isolation (default: false)
+  const containerIsolationEnabled = config.execution?.container_isolation === true;
+  console.log(`[Containers] Container isolation ${containerIsolationEnabled ? 'Enabled' : 'Disabled'}`);
+
+  // Initialize container service if enabled
+  let worktreeContainersService: WorktreeContainersService | undefined;
+  if (containerIsolationEnabled) {
+    const worktreeRepo = new WorktreeRepository(db);
+    const usersRepo = new UsersRepository(db);
+    worktreeContainersService = createWorktreeContainersService(
+      db,
+      app,
+      config,
+      worktreeRepo,
+      usersRepo
+    );
+    // Store on app for access from other services (terminals, worktrees)
+    (app as any).worktreeContainersService = worktreeContainersService;
+    console.log(`[Containers] WorktreeContainersService initialized`);
+
+    // Register SSH connection info endpoint
+    // GET /worktrees/:id/ssh-info - Returns SSH connection info for a worktree
+    app.use('/worktrees/:id/ssh-info', {
+      async find(params?: AuthenticatedParams & { route?: { id: string } }) {
+        if (!worktreeContainersService) {
+          throw new Error('Container isolation is not enabled');
+        }
+
+        const worktreeId = params?.route?.id as WorktreeID;
+        if (!worktreeId) {
+          throw new Error('Worktree ID is required');
+        }
+
+        const userId = params?.user?.user_id as UserID;
+        if (!userId) {
+          throw new Error('Authentication required');
+        }
+
+        return await worktreeContainersService.getSSHConnectionInfo(worktreeId, userId);
+      },
+    });
+
+    // Register SSH key refresh endpoint
+    // POST /worktrees/:id/ssh-refresh - Refresh SSH keys from GitHub
+    app.use('/worktrees/:id/ssh-refresh', {
+      async create(_data: unknown, params?: AuthenticatedParams & { route?: { id: string } }) {
+        if (!worktreeContainersService) {
+          throw new Error('Container isolation is not enabled');
+        }
+
+        const worktreeId = params?.route?.id as WorktreeID;
+        if (!worktreeId) {
+          throw new Error('Worktree ID is required');
+        }
+
+        const userId = params?.user?.user_id as UserID;
+        if (!userId) {
+          throw new Error('Authentication required');
+        }
+
+        await worktreeContainersService.refreshUserSSHKeys(worktreeId, userId);
+        return { success: true, message: 'SSH keys refreshed from GitHub' };
+      },
+    });
+
+    // Add hooks for SSH endpoints
+    app.service('worktrees/:id/ssh-info').hooks({
+      before: {
+        find: [requireAuth, requireMinimumRole('member', 'get SSH info')],
+      },
+    });
+
+    app.service('worktrees/:id/ssh-refresh').hooks({
+      before: {
+        create: [requireAuth, requireMinimumRole('member', 'refresh SSH keys')],
+      },
+    });
+
+    console.log(`[Containers] SSH endpoints registered`);
   }
 
   // Register repos service (accesses worktrees via app.service('worktrees'))
@@ -1791,6 +1967,55 @@ async function main() {
               },
             ]
           : []),
+        // Container Isolation: Create container when worktree filesystem_status becomes 'ready'
+        ...(containerIsolationEnabled && worktreeContainersService
+          ? [
+              async (context: HookContext) => {
+                const patchData = context.data as Partial<import('@agor/core/types').Worktree>;
+                const worktree = context.result as import('@agor/core/types').Worktree;
+
+                // Only create container when filesystem_status changes to 'ready'
+                if (patchData.filesystem_status === 'ready') {
+                  // Check if container already exists (derived from worktree ID)
+                  const containerName = worktreeContainersService.generateContainerName(worktree.worktree_id);
+                  const containerExists = await worktreeContainersService.containerExists(containerName);
+
+                  if (!containerExists) {
+                    console.log(
+                      `[Containers] Worktree ${worktree.worktree_id.substring(0, 8)} is ready, creating container`
+                    );
+
+                    // Get repo for the repo path
+                    const repo = await context.app.service('repos').get(worktree.repo_id);
+                    const sshPort = worktreeContainersService.calculateSSHPort(worktree.worktree_unique_id);
+
+                    // Create container (fire-and-forget)
+                    worktreeContainersService
+                      .createContainer({
+                        worktreeId: worktree.worktree_id,
+                        worktreePath: worktree.path,
+                        repoPath: repo.local_path,
+                        sshPort,
+                      })
+                      .then(async (createdContainerName) => {
+                        console.log(`[Containers] Container ${createdContainerName} created for worktree ${worktree.worktree_id.substring(0, 8)}`);
+
+                        // Sync owners to container
+                        await worktreeContainersService.syncWorktreeOwners(worktree.worktree_id);
+                      })
+                      .catch((error) => {
+                        console.error(
+                          `[Containers] Failed to create container for worktree ${worktree.worktree_id.substring(0, 8)}:`,
+                          error
+                        );
+                      });
+                  }
+                }
+
+                return context;
+              },
+            ]
+          : []),
       ],
       remove: [
         ...(worktreeRbacEnabled
@@ -1816,6 +2041,33 @@ async function main() {
                     { logPrefix: '[Executor/worktree.remove]' }
                   );
                 }
+
+                return context;
+              },
+            ]
+          : []),
+        // Container Isolation: Destroy container when worktree is deleted
+        ...(containerIsolationEnabled && worktreeContainersService
+          ? [
+              async (context: HookContext) => {
+                const worktree = context.result as import('@agor/core/types').Worktree;
+
+                // Derive container name from worktree ID
+                const containerName = worktreeContainersService.generateContainerName(worktree.worktree_id);
+
+                console.log(
+                  `[Containers] Worktree ${worktree.worktree_id.substring(0, 8)} deleted, destroying container ${containerName}`
+                );
+
+                // Destroy container (fire-and-forget - will check if exists)
+                worktreeContainersService
+                  .destroyContainer(worktree.worktree_id)
+                  .catch((error) => {
+                    console.error(
+                      `[Containers] Failed to destroy container for worktree ${worktree.worktree_id.substring(0, 8)}:`,
+                      error
+                    );
+                  });
 
                 return context;
               },

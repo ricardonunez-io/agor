@@ -345,6 +345,35 @@ export interface Worktree {
    * This controls OS-level permissions independent of app-layer 'others_can'.
    */
   others_fs_access?: 'none' | 'read' | 'write';
+
+  // ===== Container Isolation (isolated-terminal-containers.md) =====
+
+  /**
+   * Docker container name for this worktree
+   *
+   * Format: 'agor-wt-<short-id>'
+   * Container is created when worktree is created, destroyed when worktree is deleted.
+   */
+  container_name?: string;
+
+  /**
+   * Container status
+   *
+   * - 'creating': Container being created
+   * - 'running': Container running, ready for exec
+   * - 'stopped': Container stopped (can be restarted)
+   * - 'removing': Container being removed
+   * - 'error': Container in error state
+   */
+  container_status?: 'creating' | 'running' | 'stopped' | 'removing' | 'error';
+
+  /**
+   * SSH port allocated for this worktree container
+   *
+   * Calculated as: ssh_base_port + worktree_unique_id
+   * Example: 2222 + 5 = 2227
+   */
+  ssh_port?: number;
 }
 
 /**

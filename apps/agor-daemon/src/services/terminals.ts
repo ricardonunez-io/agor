@@ -36,6 +36,7 @@ import {
   UnixUserNotFoundError,
   validateResolvedUnixUser,
 } from '@agor/core/unix';
+import { deriveUnixUsername, ensureContainerUser } from '../utils/container-user.js';
 import { generateSessionToken, spawnExecutorFireAndForget } from '../utils/spawn-executor.js';
 
 interface CreateTerminalData {
@@ -297,11 +298,21 @@ export class TerminalsService {
     const executorUser = config.execution?.executor_unix_user;
 
     let impersonatedUser: string | null = null;
+    let userUnixUid: number | undefined;
+    let containerUsername: string = 'developer'; // Default for container execution
     const usersRepo = new UsersRepository(this.db);
     try {
       const user = await usersRepo.findById(userId);
       if (user?.unix_username) {
         impersonatedUser = user.unix_username;
+        containerUsername = user.unix_username;
+      } else if (user?.email) {
+        // Derive Unix username from Agor user email
+        // e.g., jose.garcia@company.com → jose_garcia
+        containerUsername = deriveUnixUsername(user.email);
+      }
+      if (user?.unix_uid) {
+        userUnixUid = user.unix_uid;
       }
     } catch (error) {
       console.warn(`⚠️ Failed to load user ${userId}:`, error);
@@ -325,16 +336,63 @@ export class TerminalsService {
       throw err;
     }
 
-    // Determine cwd and worktree info
+    // Determine cwd, worktree info, and container status
     let cwd = os.homedir();
     let worktreeName: string | undefined;
+    let containerName: string | undefined;
+    let containerRunning = false;
+    let containerIsolationEnabled = config.execution?.container_isolation === true;
 
     if (data.worktreeId) {
       const worktreeRepo = new WorktreeRepository(this.db);
       const worktree = await worktreeRepo.findById(data.worktreeId);
       if (worktree) {
         worktreeName = worktree.name;
-        if (finalUnixUser) {
+
+        // Create container on-demand if container isolation is enabled
+        const containersService = (this.app as any).worktreeContainersService;
+        if (containerIsolationEnabled && containersService) {
+          // Derive container name from worktree ID
+          containerName = containersService.generateContainerName(worktree.worktree_id);
+
+          // Check if container exists and is running
+          containerRunning = await containersService.isContainerRunning(containerName);
+          const containerExists = containerRunning || await containersService.containerExists(containerName);
+
+          // Create container if it doesn't exist
+          if (!containerExists) {
+            console.log(`[Terminals] Creating container on-demand for worktree ${worktree.name}`);
+            try {
+              const repo = await this.app.service('repos').get(worktree.repo_id);
+              const sshPort = containersService.calculateSSHPort(worktree.worktree_unique_id);
+              await containersService.createContainer({
+                worktreeId: worktree.worktree_id,
+                worktreePath: worktree.path,
+                repoPath: repo.local_path,
+                sshPort,
+              });
+              containerRunning = true;
+            } catch (error) {
+              console.error(`[Terminals] Failed to create container:`, error);
+              // Continue without container - fall back to host execution
+              containerName = undefined;
+            }
+          } else if (!containerRunning) {
+            // Container exists but is stopped - start it
+            try {
+              await containersService.ensureContainerRunning(worktree.worktree_id);
+              containerRunning = true;
+            } catch (error) {
+              console.error(`[Terminals] Failed to start container:`, error);
+              containerName = undefined;
+            }
+          }
+        }
+
+        // For container execution, cwd is always /workspace inside the container
+        if (containerIsolationEnabled && containerName && containerRunning) {
+          cwd = '/workspace';
+        } else if (finalUnixUser) {
           const symlinkPath = `/home/${finalUnixUser}/agor/worktrees/${worktree.name}`;
           cwd = fs.existsSync(symlinkPath) ? symlinkPath : worktree.path;
         } else {
@@ -343,12 +401,35 @@ export class TerminalsService {
       }
     }
 
+    // Ensure user exists in container before spawning terminal
+    if (containerIsolationEnabled && containerName && containerRunning) {
+      const runtime = config.execution?.containers?.runtime || 'docker';
+      const createUserCmd = ensureContainerUser(containerUsername, userUnixUid);
+      console.log(`[Terminals] Ensuring user '${containerUsername}' exists in container ${containerName}`);
+      try {
+        execSync(`${runtime} exec ${containerName} sh -c "${createUserCmd}"`, {
+          stdio: 'inherit',
+          timeout: 10000,
+        });
+      } catch (error) {
+        console.warn(`[Terminals] Failed to create user in container (may already exist):`, error);
+        // Continue anyway - user might already exist
+      }
+    }
+
     // Build Zellij session name
     const userSessionSuffix = formatShortId(userId);
     const sessionName = `agor-${userSessionSuffix}`;
 
+    // Determine spawn options based on container isolation
+    const useContainerExecution = containerIsolationEnabled && containerName;
+
     // Generate session token for executor
-    const daemonUrl = `http://localhost:${config.daemon?.port || 3030}`;
+    // For container execution, use host.docker.internal to reach the host daemon
+    const daemonPort = config.daemon?.port || 3030;
+    const daemonUrl = useContainerExecution
+      ? `http://host.docker.internal:${daemonPort}`
+      : `http://localhost:${daemonPort}`;
     const sessionToken = generateSessionToken(this.app);
 
     // Get user environment and write env file for shell sourcing
@@ -357,6 +438,8 @@ export class TerminalsService {
 
     // Get executor process environment (includes system vars)
     const executorEnv = await createUserProcessEnvironment(userId, this.db);
+
+    console.log(`[Terminals] Spawning executor: container=${containerName || 'none'}, daemonUrl=${daemonUrl}, cwd=${cwd}`);
 
     // Spawn executor with zellij.attach command
     spawnExecutorFireAndForget(
@@ -371,13 +454,25 @@ export class TerminalsService {
           tabName: worktreeName,
           cols: data.cols || 160,
           rows: data.rows || 40,
-          envFile, // Pass env file path for shell to source
+          envFile: useContainerExecution ? undefined : envFile, // Don't use envFile in container mode
         },
       },
       {
         logPrefix: `[TerminalsService.executor ${userId.slice(0, 8)}]`,
-        asUser: finalUnixUser || undefined,
+        asUser: useContainerExecution ? undefined : (finalUnixUser || undefined), // Don't use asUser in container mode
         env: executorEnv,
+        // Container execution options (only when worktree has a running container)
+        containerExecution: useContainerExecution
+          ? {
+              containerName: containerName!,
+              // Prefer UID for permission matching (consistent with NFS)
+              // Fall back to derived/configured username
+              containerUid: userUnixUid,
+              containerUser: userUnixUid ? undefined : containerUsername,
+              containerCwd: cwd,
+              runtime: config.execution?.containers?.runtime || 'docker',
+            }
+          : undefined,
         // Clean up map when executor exits (handles crashes too)
         onExit: () => this.handleExecutorExit(userId),
       }
