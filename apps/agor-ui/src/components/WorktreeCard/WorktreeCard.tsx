@@ -4,18 +4,19 @@ import {
   BranchesOutlined,
   ClockCircleOutlined,
   CodeOutlined,
+  CopyOutlined,
   DeleteOutlined,
   DragOutlined,
   EditOutlined,
   ForkOutlined,
-  LoginOutlined,
   PlusOutlined,
   PushpinFilled,
   ReloadOutlined,
   SubnodeOutlined,
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
-import { Badge, Button, Card, Collapse, message, Space, Spin, Tree, Typography, theme } from 'antd';
+import { Badge, Button, Card, Collapse, Space, Spin, Tree, Typography, theme } from 'antd';
+import { useThemedMessage } from '../../utils/message';
 import { AggregationColor } from 'antd/es/color-picker/color';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useConnectionDisabled } from '../../contexts/ConnectionContext';
@@ -130,6 +131,7 @@ const WorktreeCardComponent = ({
 }: WorktreeCardProps) => {
   const { token } = theme.useToken();
   const connectionDisabled = useConnectionDisabled();
+  const { showSuccess, showError } = useThemedMessage();
 
   // Fork/Spawn modal state
   const [forkSpawnModal, setForkSpawnModal] = useState<{
@@ -577,18 +579,28 @@ const WorktreeCardComponent = ({
               />
             )}
             {/* SSH copy button - only show if container isolation is enabled (worktree has ssh_host/ssh_port) */}
-            {worktree.ssh_host && worktree.ssh_port && currentUserId && (
+            {worktree.ssh_host && worktree.ssh_port && currentUserId && client && (
               <Button
                 type="text"
                 size="small"
-                icon={<LoginOutlined />}
-                onClick={(e) => {
+                icon={<CopyOutlined />}
+                onClick={async (e) => {
                   e.stopPropagation();
-                  const currentUser = userById.get(currentUserId);
-                  const username = currentUser?.unix_username || (currentUser?.email ? deriveUnixUsername(currentUser.email) : 'agor');
-                  const sshCommand = `ssh -p ${worktree.ssh_port} ${username}@${worktree.ssh_host}`;
-                  navigator.clipboard.writeText(sshCommand);
-                  message.success('SSH command copied to clipboard');
+                  try {
+                    // Call API to get SSH info - this also creates user and sets up SSH keys
+                    const sshInfo = await client.service(`worktrees/${worktree.worktree_id}/ssh-info`).find();
+                    const sshCommand = sshInfo.connection_string;
+                    await navigator.clipboard.writeText(sshCommand);
+                    showSuccess('SSH command copied to clipboard');
+                  } catch (error) {
+                    console.error('Failed to get SSH info:', error);
+                    // Fallback to local generation if API fails
+                    const currentUser = userById.get(currentUserId);
+                    const username = currentUser?.unix_username || (currentUser?.email ? deriveUnixUsername(currentUser.email) : 'agor');
+                    const sshCommand = `ssh -p ${worktree.ssh_port} ${username}@${worktree.ssh_host}`;
+                    await navigator.clipboard.writeText(sshCommand);
+                    showError('SSH copied (user may not be set up in container)');
+                  }
                 }}
                 title="Copy SSH command"
               />
@@ -604,7 +616,7 @@ const WorktreeCardComponent = ({
                   onRecreateContainer(worktree.worktree_id);
                 }}
                 disabled={connectionDisabled}
-                title="Reset container environment (keeps worktree files, recreates isolated container)"
+                title="Reset container environment (kills sessions and environment)"
               />
             )}
             {onOpenSettings && (

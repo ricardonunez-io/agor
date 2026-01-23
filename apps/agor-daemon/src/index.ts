@@ -98,7 +98,7 @@ import {
   getDaemonUrl,
   spawnExecutorFireAndForget,
 } from './utils/spawn-executor.js';
-import { deriveUnixUsername, ensureContainerUser } from './utils/container-user.js';
+import { deriveUnixUsername } from './utils/container-user.js';
 import { extractPortFromUrl } from './utils/container-utils.js';
 
 // ============================================================================
@@ -713,10 +713,11 @@ async function main() {
       const containerRuntime = config.execution?.containers?.runtime || 'docker';
       const containerName = containerNameForExecution;
 
-      // Derive container username: prefer unix_username, then derive from session creator
+      // Derive container username from session creator
+      // Each user gets their own Unix account for credential isolation (SSH keys, etc.)
+      // But AI session data (~/.claude/) is symlinked to shared location
       let containerUser = sessionUnixUser || 'developer';
       if (!sessionUnixUser && session.created_by) {
-        // Try to get user info to derive username
         try {
           const userInfo = await usersRepository.findById(session.created_by);
           if (userInfo?.unix_username) {
@@ -730,13 +731,15 @@ async function main() {
       }
 
       // Ensure user exists in container before spawning executor
-      const { execSync } = await import('node:child_process');
-      const createUserCmd = ensureContainerUser(containerUser);
+      // Uses the centralized createUserInContainer() which sets up:
+      // - User account with home directory
+      // - Shared AI session directory (~/.claude -> /workspace/.agor/claude/)
+      // - Podman socket access
       console.log(`[Daemon] Ensuring user '${containerUser}' exists in container ${containerName}`);
       try {
-        execSync(`${containerRuntime} exec ${containerName} sh -c "${createUserCmd}"`, {
-          stdio: 'inherit',
-          timeout: 10000,
+        await worktreeContainersService!.createUserInContainer({
+          containerName,
+          unixUsername: containerUser,
         });
       } catch (error) {
         console.warn(`[Daemon] Failed to create user in container (may already exist):`, error);
@@ -748,8 +751,14 @@ async function main() {
       // Add user flag
       dockerArgs.push('-u', containerUser);
 
+      // Transform DAEMON_URL for container: localhost/127.0.0.1 -> host.docker.internal
+      // This allows the executor inside the container to reach the daemon on the host
+      const containerDaemonUrl = executorEnv.DAEMON_URL
+        ?.replace('localhost', 'host.docker.internal')
+        .replace('127.0.0.1', 'host.docker.internal');
+
       // Add environment variables
-      dockerArgs.push('-e', `DAEMON_URL=${executorEnv.DAEMON_URL}`);
+      dockerArgs.push('-e', `DAEMON_URL=${containerDaemonUrl}`);
       dockerArgs.push('-e', 'TERM=xterm-256color');
       if (executorEnv.ANTHROPIC_API_KEY) {
         dockerArgs.push('-e', `ANTHROPIC_API_KEY=${executorEnv.ANTHROPIC_API_KEY}`);
@@ -760,6 +769,9 @@ async function main() {
       if (executorEnv.GOOGLE_API_KEY) {
         dockerArgs.push('-e', `GOOGLE_API_KEY=${executorEnv.GOOGLE_API_KEY}`);
       }
+
+      // Set HOME to container user's home directory (prevents Claude Code from trying to use host HOME)
+      dockerArgs.push('-e', `HOME=/home/${containerUser}`);
 
       // Working directory inside container
       dockerArgs.push('-w', '/workspace');
@@ -773,6 +785,9 @@ async function main() {
 
       // Update cwd in payload for container execution
       executorPayload.params.cwd = '/workspace';
+
+      // Update daemonUrl in payload for container execution (executor reads from payload, not env)
+      (executorPayload as any).daemonUrl = containerDaemonUrl;
 
       console.log(`[Daemon] Container execution mode: ${containerRuntime} exec ${containerName}`);
       console.log(`[Daemon] Container user: ${containerUser || 'root'}`);
@@ -1988,24 +2003,29 @@ async function main() {
 
                     // Get repo for the repo path
                     const repo = await context.app.service('repos').get(worktree.repo_id);
-                    const sshPort = worktreeContainersService.calculateSSHPort(worktree.worktree_unique_id);
-                    const appInternalPort = extractPortFromUrl(worktree.app_url);
+                    // Internal port: prefer health_check_url (where app actually listens), fall back to app_url
+                    const appInternalPort = extractPortFromUrl(worktree.health_check_url) || extractPortFromUrl(worktree.app_url);
                     const appExternalPort = appInternalPort
                       ? worktreeContainersService.calculateAppExternalPort(worktree.worktree_unique_id)
                       : undefined;
 
-                    // Create container (fire-and-forget)
+                    // Create container - SSH port is dynamic, app port uses calculated value (fire-and-forget)
                     worktreeContainersService
                       .createContainer({
                         worktreeId: worktree.worktree_id,
                         worktreePath: worktree.path,
                         repoPath: repo.local_path,
-                        sshPort,
                         appInternalPort,
                         appExternalPort,
                       })
-                      .then(async (createdContainerName) => {
-                        console.log(`[Containers] Container ${createdContainerName} created for worktree ${worktree.worktree_id.substring(0, 8)}`);
+                      .then(async (result) => {
+                        console.log(`[Containers] Container ${result.containerName} created for worktree ${worktree.worktree_id.substring(0, 8)} (SSH port: ${result.sshPort})`);
+
+                        // Store dynamically assigned SSH port in worktree record
+                        await context.app.service('worktrees').patch(worktree.worktree_id, {
+                          ssh_port: result.sshPort,
+                          container_name: result.containerName,
+                        });
 
                         // Sync owners to container
                         await worktreeContainersService.syncWorktreeOwners(worktree.worktree_id);
@@ -4505,10 +4525,10 @@ async function main() {
         async create(_data: unknown, params: RouteParams) {
           const id = params.route?.id;
           if (!id) throw new Error('Worktree ID required');
-          const containerName = await worktreeContainersService.recreateContainer(
+          const result = await worktreeContainersService.recreateContainer(
             id as import('@agor/core/types').WorktreeID
           );
-          return { success: true, containerName };
+          return { success: true, ...result };
         },
       },
       {

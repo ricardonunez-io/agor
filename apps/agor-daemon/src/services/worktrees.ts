@@ -25,7 +25,6 @@ import type {
 } from '@agor/core/types';
 import { getNextRunTime, validateCron } from '@agor/core/utils/cron';
 import { DrizzleService } from '../adapters/drizzle';
-import { deriveUnixUsername, ensureContainerUser } from '../utils/container-user.js';
 import { extractPortFromUrl } from '../utils/container-utils.js';
 import { getDaemonUrl, spawnExecutor } from '../utils/spawn-executor.js';
 
@@ -175,8 +174,9 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
 
   /**
    * Transform worktree for container isolation:
-   * - app_url: use external host and port
-   * - ssh_host/ssh_port: add SSH connection info
+   * - ssh_host: add SSH host from config
+   * - ssh_port: already stored in DB (dynamically assigned when container created)
+   * - app_url: transform to use external host and calculated port
    */
   private transformForContainerIsolation(worktree: Worktree): Worktree {
     const containerIsolationEnabled = this.config.execution?.container_isolation === true;
@@ -188,13 +188,12 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
 
     let transformed = { ...worktree };
 
-    // Add SSH connection info
-    const sshPort = containersService.calculateSSHPort(worktree.worktree_unique_id);
-    const sshHost = containersService.getSSHHost();
-    transformed.ssh_port = sshPort;
-    transformed.ssh_host = sshHost;
+    // Add SSH host from config (port is already stored in DB from container creation)
+    if (worktree.ssh_port) {
+      transformed.ssh_host = containersService.getSSHHost();
+    }
 
-    // Transform app_url if present
+    // Transform app_url if present (uses calculated port from worktree_unique_id)
     if (worktree.app_url) {
       const internalPort = extractPortFromUrl(worktree.app_url);
       if (internalPort) {
@@ -776,19 +775,24 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
         console.log(`[Worktrees] Creating container on-demand for worktree ${worktree.name}`);
         try {
           const repo = await this.app.service('repos').get(worktree.repo_id);
-          const sshPort = containersService.calculateSSHPort(worktree.worktree_unique_id);
-          const appInternalPort = extractPortFromUrl(worktree.app_url);
+          // Internal port: prefer health_check_url (where app actually listens), fall back to app_url
+          const appInternalPort = extractPortFromUrl(worktree.health_check_url) || extractPortFromUrl(worktree.app_url);
           const appExternalPort = appInternalPort
             ? containersService.calculateAppExternalPort(worktree.worktree_unique_id)
             : undefined;
-          await containersService.createContainer({
+          // Create container - SSH port is dynamic, app port uses calculated value
+          const result = await containersService.createContainer({
             worktreeId: worktree.worktree_id,
             worktreePath: worktree.path,
             repoPath: repo.local_path,
-            sshPort,
             appInternalPort,
             appExternalPort,
           });
+          // Store dynamically assigned SSH port in worktree record
+          await this.patch(worktree.worktree_id, {
+            ssh_port: result.sshPort,
+            container_name: result.containerName,
+          }, params);
           containerRunning = true;
         } catch (error) {
           console.error(`[Worktrees] Failed to create container:`, error);

@@ -137,6 +137,7 @@ export async function setupQuery(
     permissionMode?: PermissionMode;
     resume?: boolean;
     abortController?: AbortController;
+    cwdOverride?: string; // Override CWD (for container execution where worktree.path is host path)
   } = {}
 ): Promise<{
   query: InterruptibleQuery;
@@ -169,14 +170,25 @@ export async function setupQuery(
   const modelConfig = session.model_config;
   const model = modelConfig?.model || DEFAULT_CLAUDE_MODEL;
 
-  // Determine CWD from worktree (if session has one)
+  // Determine CWD - prefer override (for container execution), then worktree path
   let cwd = process.cwd();
-  if (session.worktree_id && deps.worktreesRepo) {
+  if (options.cwdOverride) {
+    // Container execution: use the provided override (worktree mounted at different path)
+    cwd = options.cwdOverride;
+    console.log(`✅ Using cwdOverride for container execution: ${cwd}`);
+  } else if (session.worktree_id && deps.worktreesRepo) {
     try {
       const worktree = await deps.worktreesRepo.findById(session.worktree_id);
       if (worktree) {
-        cwd = worktree.path;
-        console.log(`✅ Using worktree path as cwd: ${cwd}`);
+        // Check if worktree path exists (might not if running in container)
+        try {
+          await fs.access(worktree.path);
+          cwd = worktree.path;
+          console.log(`✅ Using worktree path as cwd: ${cwd}`);
+        } catch {
+          // Path doesn't exist (container execution), use process.cwd()
+          console.log(`⚠️  Worktree path ${worktree.path} not accessible, using process.cwd(): ${cwd}`);
+        }
       } else {
         console.warn(
           `⚠️  Session ${sessionId} references non-existent worktree ${session.worktree_id}, using process.cwd(): ${cwd}`
@@ -257,6 +269,12 @@ export async function setupQuery(
     includePartialMessages: true,
     // Enable debug logging to see what's happening
     debug: true,
+    // Pass environment variables to Claude Code subprocess
+    // This ensures HOME is set correctly in container execution
+    env: {
+      ...process.env,
+      HOME: process.env.HOME, // Explicitly pass HOME (set by docker exec -e HOME=...)
+    },
     // Capture stderr to get actual error messages (not just "exit code 1")
     stderr: (data: string) => {
       stderrBuffer += data;

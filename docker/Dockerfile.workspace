@@ -184,17 +184,11 @@ RUN echo "root:100000:65536" >> /etc/subuid && \
     echo "root:100000:65536" >> /etc/subgid
 
 # ============================================================================
-# Default Non-Root User
+# Shared Directory for AI Sessions
 # ============================================================================
-# Create a default 'developer' user for container execution
-# This user owns /workspace and is used when no specific unix_username is set
-RUN useradd -m -s /bin/bash developer && \
-    mkdir -p /home/developer/.config/zellij && \
-    mkdir -p /home/developer/.config/containers && \
-    chown -R developer:developer /home/developer && \
-    # Configure subuid/subgid for developer user (rootless Podman)
-    echo "developer:100000:65536" >> /etc/subuid && \
-    echo "developer:100000:65536" >> /etc/subgid
+# Create /home/shared for shared AI session data (Claude, Codex, Gemini)
+# All users' ~/.<tool> directories symlink here so they share sessions
+RUN mkdir -p /home/shared && chmod 777 /home/shared
 
 # ============================================================================
 # Podman Access for All Users
@@ -237,10 +231,9 @@ ENV DOCKER_HOST=unix:///run/podman/podman.sock
 # ============================================================================
 # Zellij Configuration
 # ============================================================================
+# Copy to /etc/skel so new users get the config automatically
+RUN mkdir -p /etc/skel/.config/zellij
 COPY docker/zellij-config.kdl /etc/skel/.config/zellij/config.kdl
-RUN mkdir -p /etc/skel/.config/zellij && \
-    cp /etc/skel/.config/zellij/config.kdl /home/developer/.config/zellij/ && \
-    chown -R developer:developer /home/developer/.config
 
 # ============================================================================
 # Working Directory

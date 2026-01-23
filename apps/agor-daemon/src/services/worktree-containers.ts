@@ -40,9 +40,16 @@ interface CreateContainerOptions {
   worktreeId: WorktreeID;
   worktreePath: string;
   repoPath: string;
-  sshPort: number;
   appInternalPort?: number; // Port the app listens on inside container (from app_url)
   appExternalPort?: number; // Unique port exposed on host (calculated from unique_id)
+}
+
+/**
+ * Result of container creation with dynamically assigned SSH port
+ */
+interface CreateContainerResult {
+  containerName: string;
+  sshPort: number; // Dynamically assigned by Docker
 }
 
 /**
@@ -120,7 +127,7 @@ export class WorktreeContainersService {
   }
 
   /**
-   * Calculate SSH port for a worktree
+   * @deprecated SSH ports are now dynamically assigned by Docker. Use worktree.ssh_port instead.
    */
   calculateSSHPort(worktreeUniqueId: number): number {
     return this.getSSHBasePort() + worktreeUniqueId;
@@ -135,7 +142,8 @@ export class WorktreeContainersService {
 
   /**
    * Calculate external app port for a worktree
-   * This is the unique port exposed on the host that maps to the app's internal port
+   * This is the unique port exposed on the host that maps to the app's internal port.
+   * Uses calculated port (base_port + unique_id) - not dynamically assigned like SSH.
    */
   calculateAppExternalPort(worktreeUniqueId: number): number {
     return this.getAppBasePort() + worktreeUniqueId;
@@ -157,9 +165,12 @@ export class WorktreeContainersService {
 
   /**
    * Create a container for a worktree
+   *
+   * Uses dynamic port assignment - Docker picks available ports automatically.
+   * Returns the dynamically assigned SSH port so it can be stored in the worktree record.
    */
-  async createContainer(options: CreateContainerOptions): Promise<string> {
-    const { worktreeId, worktreePath, repoPath, sshPort, appInternalPort, appExternalPort } = options;
+  async createContainer(options: CreateContainerOptions): Promise<CreateContainerResult> {
+    const { worktreeId, worktreePath, repoPath, appInternalPort, appExternalPort } = options;
     const containerName = this.generateContainerName(worktreeId);
     const image = this.getImage();
     const restartPolicy = this.config.execution?.containers?.restart_policy || DEFAULTS.RESTART_POLICY;
@@ -175,6 +186,9 @@ export class WorktreeContainersService {
       // Git worktrees have a .git file pointing to the main repo's .git/worktrees/<name>
       // By mounting the repo at /repo, git can follow the reference.
       // Container is fully isolated - no host agor access, tools installed in image.
+      //
+      // SSH PORT: Dynamic assignment (-p 0:22) - Docker picks available port
+      // APP PORT: Static assignment - uses calculated port from worktree_unique_id
       const args = [
         'create',
         '--name', containerName,
@@ -183,9 +197,9 @@ export class WorktreeContainersService {
         '-v', `${worktreePath}:/workspace:rw`,
         // Mount main repo for git operations (worktree's .git file references this)
         '-v', `${repoPath}:/repo:rw`,
-        // Expose SSH port
-        '-p', `${sshPort}:22`,
-        // Expose app port: external (unique per worktree) -> internal (app's actual port)
+        // Expose SSH port - Docker picks available port (dynamic)
+        '-p', '0:22',
+        // Expose app port if configured - uses calculated external port (static)
         ...(appInternalPort && appExternalPort ? ['-p', `${appExternalPort}:${appInternalPort}`] : []),
         // Restart policy
         '--restart', restartPolicy,
@@ -218,6 +232,13 @@ export class WorktreeContainersService {
       // Start the container
       await this.runDocker(['start', containerName]);
 
+      // Query the dynamically assigned SSH port
+      // `docker port <container> <port>` returns: 0.0.0.0:32768
+      const sshPortOutput = await this.runDocker(['port', containerName, '22']);
+      const sshPort = this.parsePortOutput(sshPortOutput);
+
+      console.log(`[Containers] Container ${containerName} created with SSH port ${sshPort}`);
+
       // Fix the docker wrapper script to not use sudo (socket is world-writable)
       // Using single-quoted heredoc so $ signs are preserved literally in the script
       // Key: podman needs --url to query the system socket, not user storage
@@ -239,11 +260,23 @@ DOCKERWRAPPER`,
       });
 
       console.log(`[Containers] Container ${containerName} created and started`);
-      return containerName;
+      return { containerName, sshPort };
     } catch (error) {
       console.error(`[Containers] Failed to create container ${containerName}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Parse Docker port output to extract port number
+   * Input format: "0.0.0.0:32768" or "0.0.0.0:32768\n"
+   */
+  private parsePortOutput(output: string): number {
+    const match = output.trim().match(/:(\d+)$/);
+    if (!match) {
+      throw new Error(`Failed to parse port from Docker output: ${output}`);
+    }
+    return parseInt(match[1], 10);
   }
 
   /**
@@ -282,8 +315,9 @@ DOCKERWRAPPER`,
   /**
    * Recreate a container (destroy and create fresh)
    * This is useful when container state becomes corrupted or needs a clean slate.
+   * Returns the new dynamically assigned ports.
    */
-  async recreateContainer(worktreeId: WorktreeID): Promise<string> {
+  async recreateContainer(worktreeId: WorktreeID): Promise<CreateContainerResult> {
     const worktree = await this.worktreeRepo.findById(worktreeId);
     if (!worktree) {
       throw new Error(`Worktree ${worktreeId} not found`);
@@ -297,15 +331,13 @@ DOCKERWRAPPER`,
     // Get repo for repo path
     const repo = await (this.app.service('repos') as { get: (id: string) => Promise<{ local_path: string }> }).get(worktree.repo_id);
 
-    // Calculate ports
-    const sshPort = this.calculateSSHPort(worktree.worktree_unique_id);
-    const appUrl = worktree.app_url;
+    // Extract app internal port: prefer health_check_url (where app actually listens), fall back to app_url
     let appInternalPort: number | undefined;
     let appExternalPort: number | undefined;
-
-    if (appUrl) {
+    const portSourceUrl = worktree.health_check_url || worktree.app_url;
+    if (portSourceUrl) {
       try {
-        const url = new URL(appUrl);
+        const url = new URL(portSourceUrl);
         appInternalPort = parseInt(url.port, 10) || (url.protocol === 'https:' ? 443 : 80);
         appExternalPort = this.calculateAppExternalPort(worktree.worktree_unique_id);
       } catch {
@@ -313,21 +345,26 @@ DOCKERWRAPPER`,
       }
     }
 
-    // Create new container
-    const containerName = await this.createContainer({
+    // Create new container - SSH port is dynamic, app port uses calculated value
+    const result = await this.createContainer({
       worktreeId,
       worktreePath: worktree.path,
       repoPath: repo.local_path,
-      sshPort,
       appInternalPort,
       appExternalPort,
+    });
+
+    // Update worktree record with new ports
+    await this.worktreeRepo.update(worktreeId, {
+      ssh_port: result.sshPort,
+      container_name: result.containerName,
     });
 
     // Sync owners to container
     await this.syncWorktreeOwners(worktreeId);
 
-    console.log(`[Containers] Container ${containerName} recreated for worktree ${worktreeId}`);
-    return containerName;
+    console.log(`[Containers] Container ${result.containerName} recreated for worktree ${worktreeId}`);
+    return result;
   }
 
   /**
@@ -425,13 +462,6 @@ DOCKERWRAPPER`,
         // User might already exist
       });
 
-      // Create agor directory structure in user's home
-      await this.dockerExec(containerName, [
-        'mkdir',
-        '-p',
-        `/home/${unixUsername}/agor/worktrees`,
-      ]);
-
       // Set DOCKER_HOST in user's profile so docker-compose finds the Podman socket
       // Using .profile instead of .bashrc because bashrc isn't sourced for non-interactive SSH
       await this.dockerExec(containerName, [
@@ -441,14 +471,6 @@ DOCKERWRAPPER`,
       ]).catch(() => {
         // profile might not exist or be writable
       });
-
-      // Symlink workspace
-      await this.dockerExec(containerName, [
-        'ln',
-        '-sf',
-        '/workspace',
-        `/home/${unixUsername}/agor/worktrees/current`,
-      ]);
 
       // Set ownership
       await this.dockerExec(containerName, [
@@ -469,7 +491,67 @@ DOCKERWRAPPER`,
         console.warn(`[Containers] Failed to set ACL for ${unixUsername} on podman socket:`, error);
       });
 
-      console.log(`[Containers] User ${unixUsername} created in ${containerName}`);
+      // Add user to docker group for Podman socket access (backup to ACL)
+      await this.dockerExec(containerName, [
+        'sh',
+        '-c',
+        `getent group docker && usermod -aG docker ${unixUsername} || true`,
+      ]).catch(() => {
+        // Group might not exist
+      });
+
+      // =========================================================================
+      // SHARED AI SESSION SETUP
+      //
+      // Create shared directories for AI session data so all users on the
+      // worktree can collaborate on the same AI sessions.
+      // - /home/shared/<tool>/ is world-writable (shared session data)
+      // - ~/.<tool> symlinks to it (tools use ~/.<tool> by default)
+      //
+      // Uses /home/shared/ because:
+      // - Semantically clear as shared location
+      // - Persists across container restarts
+      // - Not in /workspace so won't pollute the git repo
+      //
+      // Supported tools:
+      // - Claude Code: ~/.claude/
+      // - Codex: ~/.codex/
+      // - Gemini: ~/.gemini/
+      // =========================================================================
+      const userHome = `/home/${unixUsername}`;
+      const sharedBase = '/home/shared';
+      const sharedTools = ['claude', 'codex', 'gemini'];
+
+      // Create base shared directory
+      await this.dockerExec(containerName, [
+        'sh',
+        '-c',
+        `mkdir -p ${sharedBase} && chmod 777 ${sharedBase}`,
+      ]).catch(() => {});
+
+      for (const tool of sharedTools) {
+        const sharedDir = `${sharedBase}/${tool}`;
+
+        // Create shared directory (world-writable)
+        await this.dockerExec(containerName, [
+          'sh',
+          '-c',
+          `mkdir -p ${sharedDir} && chmod 777 ${sharedDir}`,
+        ]).catch(() => {
+          // Directory might already exist
+        });
+
+        // Remove existing ~/.<tool> (if any) and create symlink to shared directory
+        await this.dockerExec(containerName, [
+          'sh',
+          '-c',
+          `rm -rf ${userHome}/.${tool} && ln -sf ${sharedDir} ${userHome}/.${tool} && chown -h ${unixUsername}:${unixUsername} ${userHome}/.${tool}`,
+        ]).catch((error) => {
+          console.warn(`[Containers] Failed to setup shared ${tool} directory for ${unixUsername}:`, error);
+        });
+      }
+
+      console.log(`[Containers] User ${unixUsername} created in ${containerName} (with shared session setup for ${sharedTools.join(', ')})`);
     } catch (error) {
       console.error(`[Containers] Failed to create user ${unixUsername} in ${containerName}:`, error);
       throw error;
@@ -492,7 +574,92 @@ DOCKERWRAPPER`,
   }
 
   /**
+   * Setup SSH keys for a user in a container
+   */
+  async setupUserSSHKeys(
+    containerName: string,
+    unixUsername: string,
+    sshPublicKeys: string | null | undefined
+  ): Promise<void> {
+    if (!sshPublicKeys) {
+      console.log(`[Containers] No SSH keys configured for ${unixUsername}`);
+      return;
+    }
+
+    const keys = sshPublicKeys
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && line.startsWith('ssh-'));
+
+    if (keys.length === 0) {
+      console.log(`[Containers] No valid SSH keys found for ${unixUsername}`);
+      return;
+    }
+
+    console.log(`[Containers] Setting up ${keys.length} SSH key(s) for ${unixUsername}`);
+
+    const userHome = `/home/${unixUsername}`;
+    const sshDir = `${userHome}/.ssh`;
+
+    try {
+      // Create .ssh directory with correct permissions
+      await this.dockerExec(containerName, ['mkdir', '-p', sshDir]);
+      await this.dockerExec(containerName, ['chmod', '700', sshDir]);
+
+      // Write authorized_keys file
+      const authorizedKeysContent = keys.join('\n') + '\n';
+      await this.dockerExec(containerName, [
+        'sh',
+        '-c',
+        `printf '%s' '${authorizedKeysContent.replace(/'/g, "'\\''")}' > ${sshDir}/authorized_keys`,
+      ]);
+
+      // Set permissions
+      await this.dockerExec(containerName, ['chmod', '600', `${sshDir}/authorized_keys`]);
+      await this.dockerExec(containerName, ['chown', '-R', `${unixUsername}:${unixUsername}`, sshDir]);
+
+      console.log(`[Containers] SSH keys configured for ${unixUsername}`);
+    } catch (error) {
+      console.error(`[Containers] Failed to setup SSH keys for ${unixUsername}:`, error);
+    }
+  }
+
+  /**
+   * Refresh SSH keys for a user in a worktree container
+   * Called when user updates their SSH keys
+   */
+  async refreshUserSSHKeys(worktreeId: WorktreeID, userId: UserID): Promise<void> {
+    const containerName = this.generateContainerName(worktreeId);
+
+    // Check if container is running
+    const running = await this.isContainerRunning(containerName);
+    if (!running) {
+      console.log(`[Containers] Container not running for worktree ${worktreeId}, skipping SSH refresh`);
+      return;
+    }
+
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    const unixUsername = user.unix_username || deriveUnixUsername(user.email);
+
+    // Ensure user exists
+    await this.createUserInContainer({
+      containerName,
+      unixUsername,
+      unixUid: user.unix_uid,
+      unixGid: user.unix_gid,
+    });
+
+    // Setup SSH keys
+    await this.setupUserSSHKeys(containerName, unixUsername, user.ssh_public_keys);
+  }
+
+  /**
    * Get SSH connection info for a worktree
+   * Also ensures user exists and SSH keys are set up
    */
   async getSSHConnectionInfo(
     worktreeId: WorktreeID,
@@ -512,8 +679,29 @@ DOCKERWRAPPER`,
     // Use explicit unix_username or derive from email
     const username = user.unix_username || deriveUnixUsername(user.email);
 
+    const containerName = this.generateContainerName(worktreeId);
+
+    // Ensure container is running
+    const running = await this.isContainerRunning(containerName);
+    if (running) {
+      // Create user and setup SSH keys when SSH info is requested
+      console.log(`[Containers] Setting up user ${username} for SSH access`);
+      await this.createUserInContainer({
+        containerName,
+        unixUsername: username,
+        unixUid: user.unix_uid,
+        unixGid: user.unix_gid,
+      });
+      await this.setupUserSSHKeys(containerName, username, user.ssh_public_keys);
+    }
+
     const host = this.getSSHHost();
-    const port = this.calculateSSHPort(worktree.worktree_unique_id);
+    // Use stored port from worktree record (dynamically assigned when container was created)
+    const port = worktree.ssh_port;
+
+    if (!port) {
+      throw new Error('SSH port not configured for this worktree. Container may not have been created yet.');
+    }
 
     return {
       host,
@@ -525,8 +713,14 @@ DOCKERWRAPPER`,
 
   /**
    * Sync all worktree owners to container users
+   * Only runs when worktree_rbac is enabled (owners service must exist)
    */
   async syncWorktreeOwners(worktreeId: WorktreeID): Promise<void> {
+    // Skip if RBAC is disabled - owners service won't exist
+    if (!this.config.execution?.worktree_rbac) {
+      return;
+    }
+
     const containerName = this.generateContainerName(worktreeId);
 
     // Check if container exists

@@ -36,7 +36,7 @@ import {
   UnixUserNotFoundError,
   validateResolvedUnixUser,
 } from '@agor/core/unix';
-import { deriveUnixUsername, ensureContainerUser } from '../utils/container-user.js';
+import { deriveUnixUsername } from '../utils/container-user.js';
 import { extractPortFromUrl } from '../utils/container-utils.js';
 import { generateSessionToken, spawnExecutorFireAndForget } from '../utils/spawn-executor.js';
 
@@ -369,18 +369,23 @@ export class TerminalsService {
             console.log(`[Terminals] Creating container on-demand for worktree ${worktree.name}`);
             try {
               const repo = await this.app.service('repos').get(worktree.repo_id);
-              const sshPort = containersService.calculateSSHPort(worktree.worktree_unique_id);
-              const appInternalPort = extractPortFromUrl(worktree.app_url);
+              // Internal port: prefer health_check_url (where app actually listens), fall back to app_url
+              const appInternalPort = extractPortFromUrl(worktree.health_check_url) || extractPortFromUrl(worktree.app_url);
               const appExternalPort = appInternalPort
                 ? containersService.calculateAppExternalPort(worktree.worktree_unique_id)
                 : undefined;
-              await containersService.createContainer({
+              // Create container - SSH port is dynamic, app port uses calculated value
+              const result = await containersService.createContainer({
                 worktreeId: worktree.worktree_id,
                 worktreePath: worktree.path,
                 repoPath: repo.local_path,
-                sshPort,
                 appInternalPort,
                 appExternalPort,
+              });
+              // Store dynamically assigned SSH port in worktree record
+              await this.app.service('worktrees').patch(worktree.worktree_id, {
+                ssh_port: result.sshPort,
+                container_name: result.containerName,
               });
               containerRunning = true;
             } catch (error) {
@@ -413,15 +418,20 @@ export class TerminalsService {
     }
 
     // Ensure user exists in container before spawning terminal
+    // Uses the centralized createUserInContainer() which sets up:
+    // - User account with home directory
+    // - Shared AI session directory (~/.claude -> /workspace/.agor/claude/)
+    // - Podman socket access
     if (containerIsolationEnabled && containerName && containerRunning) {
+      const containersService = (this.app as any).worktreeContainersService;
       const runtime = config.execution?.containers?.runtime || 'docker';
-      const createUserCmd = ensureContainerUser(containerUsername, userUnixUid);
       const userStartTime = Date.now();
       console.log(`[Terminals] Ensuring user '${containerUsername}' exists in container ${containerName}`);
       try {
-        execSync(`${runtime} exec ${containerName} sh -c "${createUserCmd}"`, {
-          stdio: 'pipe', // Don't inherit - faster
-          timeout: 10000,
+        await containersService?.createUserInContainer({
+          containerName,
+          unixUsername: containerUsername,
+          unixUid: userUnixUid,
         });
         console.log(`[Terminals] User creation took ${Date.now() - userStartTime}ms`);
 

@@ -135,10 +135,15 @@ async function handlePromptPayload(
   // When executor is spawned via impersonation (sudo su -), the parent
   // process environment is lost. The daemon passes env vars in the payload,
   // and we apply them here before starting the SDK.
+  //
+  // IMPORTANT: Skip HOME - in container execution, docker exec sets the correct
+  // HOME for the container user. The payload contains the HOST's HOME which is wrong.
   // =========================================================================
   if (payload.env && Object.keys(payload.env).length > 0) {
-    console.log(`[executor] Applying ${Object.keys(payload.env).length} env vars from payload`);
-    for (const [key, value] of Object.entries(payload.env)) {
+    const skipKeys = ['HOME']; // Don't overwrite HOME set by docker exec
+    const filteredEnv = Object.entries(payload.env).filter(([key]) => !skipKeys.includes(key));
+    console.log(`[executor] Applying ${filteredEnv.length} env vars from payload (skipping: ${skipKeys.join(', ')})`);
+    for (const [key, value] of filteredEnv) {
       process.env[key] = value;
     }
   }
@@ -162,6 +167,7 @@ async function handlePromptPayload(
     tool: payload.params.tool,
     permissionMode: payload.params.permissionMode,
     daemonUrl: payload.daemonUrl || 'http://localhost:3030',
+    cwd: payload.params.cwd, // Override CWD for container execution
   });
 
   await executor.start();

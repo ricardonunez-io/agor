@@ -20,6 +20,7 @@ export interface ExecutorConfig {
   tool: 'claude-code' | 'gemini' | 'codex' | 'opencode';
   permissionMode?: PermissionMode;
   daemonUrl: string;
+  cwd?: string; // Override CWD (for container execution where worktree is at different path)
 }
 
 export class AgorExecutor {
@@ -181,6 +182,7 @@ export class AgorExecutor {
       prompt: this.config.prompt,
       permissionMode: this.config.permissionMode,
       abortController: this.abortController,
+      cwdOverride: this.config.cwd, // Override CWD for container execution
     });
 
     this.isRunning = false;

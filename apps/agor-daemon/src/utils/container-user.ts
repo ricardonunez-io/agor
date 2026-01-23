@@ -67,12 +67,32 @@ export function createUserCommand(username: string, uid?: number): string {
  * Generate a command to ensure a user exists and add them to the docker group.
  * This allows the user to access the Podman socket.
  *
+ * Also sets up shared AI session directories:
+ * - Creates /workspace/.agor/claude/ (shared Claude session data)
+ * - Symlinks ~/.claude -> /workspace/.agor/claude/ (so all users share sessions)
+ *
+ * This allows multiple users to collaborate on the same AI sessions while
+ * keeping other user data (SSH keys, credentials) isolated in their home dirs.
+ *
  * @param username - Unix username to create
  * @param uid - Optional specific UID to use
  * @returns Shell command string
  */
 export function ensureContainerUser(username: string, uid?: number): string {
   const createCmd = createUserCommand(username, uid);
-  // Also add to docker group for Podman socket access (if group exists)
-  return `${createCmd} && (getent group docker && usermod -aG docker ${username} || true)`;
+
+  // Commands to set up shared AI session directories
+  // 1. Create shared claude directory (world-writable so all users can access)
+  // 2. Symlink user's ~/.claude to the shared directory
+  const sharedClaudeDir = '/workspace/.agor/claude';
+  const userHome = username === 'root' ? '/root' : `/home/${username}`;
+  const setupSharedSessions = `
+    mkdir -p ${sharedClaudeDir} && chmod 777 ${sharedClaudeDir} && \
+    rm -rf ${userHome}/.claude && \
+    ln -sf ${sharedClaudeDir} ${userHome}/.claude && \
+    chown -h ${username}:${username} ${userHome}/.claude
+  `.replace(/\n\s+/g, ' ').trim();
+
+  // Combine: create user, add to docker group, setup shared sessions
+  return `${createCmd} && (getent group docker && usermod -aG docker ${username} || true) && (${setupSharedSessions})`;
 }
