@@ -1,5 +1,6 @@
 import type { Repo, Worktree } from '@agor/core/types';
 import {
+  BuildOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   EditOutlined,
@@ -22,6 +23,7 @@ interface EnvironmentPillProps {
   onStopEnvironment?: (worktreeId: string) => void;
   onNukeEnvironment?: (worktreeId: string) => void;
   onViewLogs?: (worktreeId: string) => void;
+  onViewBuildLogs?: (worktreeId: string) => void;
   connectionDisabled?: boolean; // Disable actions when disconnected
 }
 
@@ -33,6 +35,7 @@ export function EnvironmentPill({
   onStopEnvironment,
   onNukeEnvironment,
   onViewLogs,
+  onViewBuildLogs,
   connectionDisabled = false,
 }: EnvironmentPillProps) {
   const { token } = theme.useToken();
@@ -303,6 +306,25 @@ export function EnvironmentPill({
                     }
                   }}
                   disabled={!repo.environment_config?.logs_command}
+                  style={{
+                    height: 22,
+                    width: 22,
+                    minWidth: 22,
+                    padding: 0,
+                  }}
+                />
+              </Tooltip>
+            )}
+            {onViewBuildLogs && (
+              <Tooltip title="View build logs (start/stop output)">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<BuildOutlined />}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onViewBuildLogs(worktree.worktree_id);
+                  }}
                   style={{
                     height: 22,
                     width: 22,

@@ -118,6 +118,7 @@ interface SessionCanvasProps {
   onStopEnvironment?: (worktreeId: string) => void;
   onViewLogs?: (worktreeId: string) => void;
   onNukeEnvironment?: (worktreeId: string) => void;
+  onRecreateContainer?: (worktreeId: string) => void;
   onOpenCommentsPanel?: () => void;
   onCommentHover?: (commentId: string | null) => void;
   onCommentSelect?: (commentId: string | null) => void;
@@ -188,6 +189,8 @@ interface WorktreeNodeData {
   onStartEnvironment?: (worktreeId: string) => void;
   onStopEnvironment?: (worktreeId: string) => void;
   onViewLogs?: (worktreeId: string) => void;
+  onNukeEnvironment?: (worktreeId: string) => void;
+  onRecreateContainer?: (worktreeId: string) => void;
   onUnpin?: (worktreeId: string) => void;
   compact?: boolean;
   isPinned?: boolean;
@@ -220,6 +223,8 @@ const WorktreeNode = ({ data }: { data: WorktreeNodeData }) => {
         onStartEnvironment={data.onStartEnvironment}
         onStopEnvironment={data.onStopEnvironment}
         onViewLogs={data.onViewLogs}
+        onNukeEnvironment={data.onNukeEnvironment}
+        onRecreateContainer={data.onRecreateContainer}
         onUnpin={data.onUnpin}
         isPinned={data.isPinned}
         zoneName={data.zoneName}
@@ -275,6 +280,7 @@ const SessionCanvas = forwardRef<SessionCanvasRef, SessionCanvasProps>(
       onStopEnvironment,
       onViewLogs,
       onNukeEnvironment,
+      onRecreateContainer,
       onOpenCommentsPanel,
       onCommentHover,
       onCommentSelect,
@@ -581,6 +587,7 @@ const SessionCanvas = forwardRef<SessionCanvasRef, SessionCanvasProps>(
             onStopEnvironment,
             onViewLogs,
             onNukeEnvironment,
+            onRecreateContainer,
             onUnpin: handleUnpinWorktree,
             compact: false,
             isPinned: !!dbZoneId,
@@ -612,6 +619,7 @@ const SessionCanvas = forwardRef<SessionCanvasRef, SessionCanvasProps>(
       onStopEnvironment,
       onViewLogs,
       onNukeEnvironment,
+      onRecreateContainer,
       handleUnpinWorktree,
       zoneLabels,
       userById,

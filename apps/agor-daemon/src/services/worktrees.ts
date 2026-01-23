@@ -6,7 +6,8 @@
  */
 
 import { type ChildProcess, spawn } from 'node:child_process';
-import { mkdir } from 'node:fs/promises';
+import { existsSync, createWriteStream } from 'node:fs';
+import { mkdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { type AgorConfig, createUserProcessEnvironment, ENVIRONMENT, PAGINATION } from '@agor/core/config';
@@ -27,6 +28,81 @@ import { DrizzleService } from '../adapters/drizzle';
 import { deriveUnixUsername, ensureContainerUser } from '../utils/container-user.js';
 import { extractPortFromUrl } from '../utils/container-utils.js';
 import { getDaemonUrl, spawnExecutor } from '../utils/spawn-executor.js';
+
+/**
+ * Build log file path for a worktree
+ */
+function getBuildLogPath(worktreePath: string): string {
+  return join(worktreePath, '.agor', 'build.log');
+}
+
+/**
+ * Run a command and capture output to a log file
+ * Output is also streamed to console for daemon visibility
+ */
+async function runCommandWithLogs(options: {
+  command: string;
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  logPath: string;
+  label: string; // e.g., "start", "stop", "nuke"
+}): Promise<void> {
+  const { command, cwd, env, logPath, label } = options;
+
+  // Ensure .agor directory exists
+  await mkdir(dirname(logPath), { recursive: true });
+
+  // Open log file for appending
+  const logStream = createWriteStream(logPath, { flags: 'a' });
+
+  // Write header
+  const header = `\n=== ${label.toUpperCase()} ===\nCommand: ${command}\nCWD: ${cwd}\nStarted: ${new Date().toISOString()}\n${'='.repeat(50)}\n\n`;
+  logStream.write(header);
+  console.log(header.trim());
+
+  return new Promise<void>((resolve, reject) => {
+    const childProcess = spawn(command, {
+      cwd,
+      shell: true,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    // Pipe stdout to log file and console
+    childProcess.stdout?.on('data', (data: Buffer) => {
+      const text = data.toString();
+      logStream.write(text);
+      process.stdout.write(text);
+    });
+
+    // Pipe stderr to log file and console
+    childProcess.stderr?.on('data', (data: Buffer) => {
+      const text = data.toString();
+      logStream.write(text);
+      process.stderr.write(text);
+    });
+
+    childProcess.on('exit', (code) => {
+      const footer = `\n${'='.repeat(50)}\nExit code: ${code}\nFinished: ${new Date().toISOString()}\n`;
+      logStream.write(footer);
+      logStream.end();
+      console.log(footer.trim());
+
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`${label} command exited with code ${code}`));
+      }
+    });
+
+    childProcess.on('error', (error) => {
+      const errorMsg = `\n${'='.repeat(50)}\nError: ${error.message}\n`;
+      logStream.write(errorMsg);
+      logStream.end();
+      reject(error);
+    });
+  });
+}
 
 /**
  * Worktree service params
@@ -196,12 +272,19 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       data.schedule_next_run_at = undefined;
     }
 
-    // Call parent patch
+    // Call parent patch, but suppress its emit so we can emit transformed data
+    const originalEmit = this.emit;
+    this.emit = undefined;
     const updatedWorktree = (await super.patch(id, data, params)) as Worktree;
+    this.emit = originalEmit;
+
+    // Transform and emit the result with correct external URLs
+    const transformedWorktree = this.transformForContainerIsolation(updatedWorktree);
+    this.emit?.('patched', transformedWorktree, params);
 
     // Handle board_objects changes if board_id changed
     if (!boardIdProvided) {
-      return updatedWorktree;
+      return transformedWorktree;
     }
 
     if (oldBoardId !== newBoardId) {
@@ -235,7 +318,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       }
     }
 
-    return this.transformForContainerIsolation(updatedWorktree);
+    return transformedWorktree;
   }
 
   /**
@@ -734,14 +817,21 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       params
     );
 
-    try {
-      // Use static start_command (initialized from template at worktree creation)
-      // Already validated above that start_command exists
-      const command = worktree.start_command!;
+    // Use static start_command (initialized from template at worktree creation)
+    // Already validated above that start_command exists
+    const command = worktree.start_command!;
 
+    // Write to build log
+    const buildLogPath = getBuildLogPath(worktree.path);
+    await mkdir(dirname(buildLogPath), { recursive: true });
+    const buildLogStream = createWriteStream(buildLogPath, { flags: 'a' });
+    const logHeader = `\n=== START ===\nCommand: ${command}\nCWD: ${worktree.path}\nStarted: ${new Date().toISOString()}\n${'='.repeat(50)}\n\n`;
+    buildLogStream.write(logHeader);
+
+    try {
       console.log(`🚀 Starting environment for worktree ${worktree.name}: ${command}`);
 
-      // Create log directory
+      // Create daemon log directory (for process tracking)
       const logPath = join(
         homedir(),
         '.agor',
@@ -789,7 +879,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
             'sh', '-c', command,
           ];
           childProcess = spawn(runtime, dockerArgs, {
-            stdio: ['inherit', 'inherit', 'inherit'] as const,
+            stdio: ['ignore', 'pipe', 'pipe'] as const,
             env, // Pass environment (used by docker client, not passed into container)
           });
         } else {
@@ -797,12 +887,30 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
           childProcess = spawn(command, {
             cwd: worktree.path,
             shell: true,
-            stdio: ['inherit', 'inherit', 'inherit'] as const,
+            stdio: ['ignore', 'pipe', 'pipe'] as const,
             env,
           });
         }
 
+        // Pipe stdout to build log and console
+        childProcess.stdout?.on('data', (data: Buffer) => {
+          const text = data.toString();
+          buildLogStream.write(text);
+          process.stdout.write(text);
+        });
+
+        // Pipe stderr to build log and console
+        childProcess.stderr?.on('data', (data: Buffer) => {
+          const text = data.toString();
+          buildLogStream.write(text);
+          process.stderr.write(text);
+        });
+
         childProcess.on('exit', (code: number | null) => {
+          const footer = `\n${'='.repeat(50)}\nExit code: ${code}\nFinished: ${new Date().toISOString()}\n`;
+          buildLogStream.write(footer);
+          buildLogStream.end();
+
           if (code === 0) {
             console.log(`✅ Start command completed successfully for ${worktree.name}`);
             resolve();
@@ -811,7 +919,12 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
           }
         });
 
-        childProcess.on('error', reject);
+        childProcess.on('error', (error) => {
+          const errorMsg = `\n${'='.repeat(50)}\nError: ${error.message}\nFinished: ${new Date().toISOString()}\n`;
+          buildLogStream.write(errorMsg);
+          buildLogStream.end();
+          reject(error);
+        });
       });
 
       // Use static app_url (initialized from template at worktree creation)
@@ -898,6 +1011,13 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
 
         console.log(`🛑 Stopping environment for worktree ${worktree.name}: ${command}`);
 
+        // Write to build log
+        const buildLogPath = getBuildLogPath(worktree.path);
+        await mkdir(dirname(buildLogPath), { recursive: true });
+        const buildLogStream = createWriteStream(buildLogPath, { flags: 'a' });
+        const logHeader = `\n=== STOP ===\nCommand: ${command}\nCWD: ${worktree.path}\nStarted: ${new Date().toISOString()}\n${'='.repeat(50)}\n\n`;
+        buildLogStream.write(logHeader);
+
         // Create clean environment for user process (filters Agor-internal vars like NODE_ENV)
         const env = await createUserProcessEnvironment(worktree.created_by, this.db);
 
@@ -943,7 +1063,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
               'sh', '-c', command,
             ];
             stopProcess = spawn(runtime, dockerArgs, {
-              stdio: 'inherit',
+              stdio: ['ignore', 'pipe', 'pipe'],
               env,
             });
           } else {
@@ -951,12 +1071,30 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
             stopProcess = spawn(command, {
               cwd: worktree.path,
               shell: true,
-              stdio: 'inherit',
+              stdio: ['ignore', 'pipe', 'pipe'],
               env,
             });
           }
 
+          // Pipe stdout to build log and console
+          stopProcess.stdout?.on('data', (data: Buffer) => {
+            const text = data.toString();
+            buildLogStream.write(text);
+            process.stdout.write(text);
+          });
+
+          // Pipe stderr to build log and console
+          stopProcess.stderr?.on('data', (data: Buffer) => {
+            const text = data.toString();
+            buildLogStream.write(text);
+            process.stderr.write(text);
+          });
+
           stopProcess.on('exit', (code) => {
+            const footer = `\n${'='.repeat(50)}\nExit code: ${code}\nFinished: ${new Date().toISOString()}\n`;
+            buildLogStream.write(footer);
+            buildLogStream.end();
+
             if (code === 0) {
               resolve();
             } else {
@@ -964,7 +1102,12 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
             }
           });
 
-          stopProcess.on('error', reject);
+          stopProcess.on('error', (error) => {
+            const errorMsg = `\n${'='.repeat(50)}\nError: ${error.message}\nFinished: ${new Date().toISOString()}\n`;
+            buildLogStream.write(errorMsg);
+            buildLogStream.end();
+            reject(error);
+          });
         });
       } else {
         // No down command - kill the managed process if we have it
@@ -1061,6 +1204,13 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       console.log(`💣 NUKING environment for worktree ${worktree.name}: ${command}`);
       console.warn('⚠️  This is a destructive operation!');
 
+      // Write to build log
+      const buildLogPath = getBuildLogPath(worktree.path);
+      await mkdir(dirname(buildLogPath), { recursive: true });
+      const buildLogStream = createWriteStream(buildLogPath, { flags: 'a' });
+      const logHeader = `\n=== NUKE ===\nCommand: ${command}\nCWD: ${worktree.path}\nStarted: ${new Date().toISOString()}\n${'='.repeat(50)}\n\n`;
+      buildLogStream.write(logHeader);
+
       // Create clean environment for user process (filters Agor-internal vars like NODE_ENV)
       const env = await createUserProcessEnvironment(worktree.created_by, this.db);
 
@@ -1069,11 +1219,29 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
         const nukeProcess = spawn(command, {
           cwd: worktree.path,
           shell: true,
-          stdio: 'inherit',
+          stdio: ['ignore', 'pipe', 'pipe'],
           env, // Pass clean environment without Agor-internal variables
         });
 
+        // Pipe stdout to build log and console
+        nukeProcess.stdout?.on('data', (data: Buffer) => {
+          const text = data.toString();
+          buildLogStream.write(text);
+          process.stdout.write(text);
+        });
+
+        // Pipe stderr to build log and console
+        nukeProcess.stderr?.on('data', (data: Buffer) => {
+          const text = data.toString();
+          buildLogStream.write(text);
+          process.stderr.write(text);
+        });
+
         nukeProcess.on('exit', (code) => {
+          const footer = `\n${'='.repeat(50)}\nExit code: ${code}\nFinished: ${new Date().toISOString()}\n`;
+          buildLogStream.write(footer);
+          buildLogStream.end();
+
           if (code === 0) {
             resolve();
           } else {
@@ -1081,7 +1249,12 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
           }
         });
 
-        nukeProcess.on('error', reject);
+        nukeProcess.on('error', (error) => {
+          const errorMsg = `\n${'='.repeat(50)}\nError: ${error.message}\nFinished: ${new Date().toISOString()}\n`;
+          buildLogStream.write(errorMsg);
+          buildLogStream.end();
+          reject(error);
+        });
       });
 
       // Clean up any managed process references
@@ -1339,17 +1512,55 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       // Create clean environment for user process (filters Agor-internal vars like NODE_ENV)
       const env = await createUserProcessEnvironment(worktree.created_by, this.db);
 
+      // Check if container isolation is enabled
+      // Note: worktreeContainersService is stored directly on app object (not via app.set)
+      const containersService = (this.app as any).worktreeContainersService as
+        | import('./worktree-containers.js').WorktreeContainersService
+        | undefined;
+      let containerName: string | undefined;
+      let containerRunning = false;
+
+      console.log(`[Worktrees] getLogs: containersService exists=${!!containersService}, isEnabled=${containersService?.isEnabled()}`);
+
+      if (containersService?.isEnabled()) {
+        containerName = containersService.generateContainerName(worktree.worktree_id);
+        containerRunning = await containersService.isContainerRunning(containerName);
+        console.log(`[Worktrees] getLogs: containerName=${containerName}, running=${containerRunning}`);
+      }
+
+      const useContainerExecution = containerName && containerRunning;
+      console.log(`[Worktrees] getLogs: useContainerExecution=${useContainerExecution}`);
+      const runtime = this.config.execution?.containers?.runtime || 'docker';
+
       // Execute command with timeout and output limits
       const result = await new Promise<{
         stdout: string;
         stderr: string;
         truncated: boolean;
       }>((resolve, reject) => {
-        const childProcess = spawn(command, {
-          cwd: worktree.path,
-          shell: true,
-          env, // Pass clean environment without Agor-internal variables
-        });
+        let childProcess;
+
+        if (useContainerExecution) {
+          // Run logs command inside the worktree container
+          console.log(`[Worktrees] Running logs command inside container ${containerName}`);
+          const dockerArgs = [
+            'exec',
+            '-w', '/workspace',
+            containerName!,
+            'sh', '-c', command,
+          ];
+          childProcess = spawn(runtime, dockerArgs, {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env,
+          });
+        } else {
+          // Run command on host
+          childProcess = spawn(command, {
+            cwd: worktree.path,
+            shell: true,
+            env, // Pass clean environment without Agor-internal variables
+          });
+        }
 
         let stdout = '';
         let stderr = '';
@@ -1426,6 +1637,44 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
         logs: '',
         timestamp: new Date().toISOString(),
         error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Get build logs (start/stop/nuke command output)
+   */
+  async getBuildLogs(
+    id: WorktreeID,
+    params?: WorktreeParams
+  ): Promise<{
+    logs: string;
+    exists: boolean;
+    path: string;
+  }> {
+    const worktree = await this.get(id, params);
+    const logPath = getBuildLogPath(worktree.path);
+
+    if (!existsSync(logPath)) {
+      return {
+        logs: '',
+        exists: false,
+        path: logPath,
+      };
+    }
+
+    try {
+      const content = await readFile(logPath, 'utf-8');
+      return {
+        logs: content,
+        exists: true,
+        path: logPath,
+      };
+    } catch (error) {
+      return {
+        logs: `Error reading build logs: ${error instanceof Error ? error.message : String(error)}`,
+        exists: true,
+        path: logPath,
       };
     }
   }

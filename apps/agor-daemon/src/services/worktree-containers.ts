@@ -189,6 +189,8 @@ export class WorktreeContainersService {
         ...(appInternalPort && appExternalPort ? ['-p', `${appExternalPort}:${appInternalPort}`] : []),
         // Restart policy
         '--restart', restartPolicy,
+        // Use tini as init to properly reap zombie processes
+        '--init',
         // Podman-in-Docker: Enable nested containers (for docker-compose via Podman)
         // These capabilities allow rootless Podman to create namespaces and cgroups
         '--privileged',
@@ -215,6 +217,26 @@ export class WorktreeContainersService {
 
       // Start the container
       await this.runDocker(['start', containerName]);
+
+      // Fix the docker wrapper script to not use sudo (socket is world-writable)
+      // Using single-quoted heredoc so $ signs are preserved literally in the script
+      // Key: podman needs --url to query the system socket, not user storage
+      await this.dockerExec(containerName, [
+        'sh',
+        '-c',
+        `cat > /usr/local/bin/docker << 'DOCKERWRAPPER'
+#!/bin/bash
+export DOCKER_HOST=unix:///run/podman/podman.sock
+if [ "$1" = "compose" ]; then
+  shift
+  exec /usr/local/bin/docker-compose "$@"
+else
+  exec /usr/bin/podman --url unix:///run/podman/podman.sock "$@"
+fi
+DOCKERWRAPPER`,
+      ]).catch((error) => {
+        console.warn(`[Containers] Failed to fix docker wrapper in ${containerName}:`, error);
+      });
 
       console.log(`[Containers] Container ${containerName} created and started`);
       return containerName;
@@ -255,6 +277,57 @@ export class WorktreeContainersService {
       console.error(`[Containers] Failed to destroy container ${containerName}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Recreate a container (destroy and create fresh)
+   * This is useful when container state becomes corrupted or needs a clean slate.
+   */
+  async recreateContainer(worktreeId: WorktreeID): Promise<string> {
+    const worktree = await this.worktreeRepo.findById(worktreeId);
+    if (!worktree) {
+      throw new Error(`Worktree ${worktreeId} not found`);
+    }
+
+    console.log(`[Containers] Recreating container for worktree ${worktreeId}`);
+
+    // Destroy existing container (if any)
+    await this.destroyContainer(worktreeId);
+
+    // Get repo for repo path
+    const repo = await (this.app.service('repos') as { get: (id: string) => Promise<{ local_path: string }> }).get(worktree.repo_id);
+
+    // Calculate ports
+    const sshPort = this.calculateSSHPort(worktree.worktree_unique_id);
+    const appUrl = worktree.app_url;
+    let appInternalPort: number | undefined;
+    let appExternalPort: number | undefined;
+
+    if (appUrl) {
+      try {
+        const url = new URL(appUrl);
+        appInternalPort = parseInt(url.port, 10) || (url.protocol === 'https:' ? 443 : 80);
+        appExternalPort = this.calculateAppExternalPort(worktree.worktree_unique_id);
+      } catch {
+        // Invalid URL, skip port mapping
+      }
+    }
+
+    // Create new container
+    const containerName = await this.createContainer({
+      worktreeId,
+      worktreePath: worktree.path,
+      repoPath: repo.local_path,
+      sshPort,
+      appInternalPort,
+      appExternalPort,
+    });
+
+    // Sync owners to container
+    await this.syncWorktreeOwners(worktreeId);
+
+    console.log(`[Containers] Container ${containerName} recreated for worktree ${worktreeId}`);
+    return containerName;
   }
 
   /**
@@ -359,6 +432,16 @@ export class WorktreeContainersService {
         `/home/${unixUsername}/agor/worktrees`,
       ]);
 
+      // Set DOCKER_HOST in user's profile so docker-compose finds the Podman socket
+      // Using .profile instead of .bashrc because bashrc isn't sourced for non-interactive SSH
+      await this.dockerExec(containerName, [
+        'sh',
+        '-c',
+        `echo 'export DOCKER_HOST=unix:///run/podman/podman.sock' >> /home/${unixUsername}/.profile`,
+      ]).catch(() => {
+        // profile might not exist or be writable
+      });
+
       // Symlink workspace
       await this.dockerExec(containerName, [
         'ln',
@@ -374,6 +457,17 @@ export class WorktreeContainersService {
         `${unixUsername}:${unixUsername}`,
         `/home/${unixUsername}`,
       ]);
+
+      // Grant user access to Podman socket via ACL (allows docker-compose without sudo)
+      await this.dockerExec(containerName, [
+        'setfacl',
+        '-m',
+        `u:${unixUsername}:rw`,
+        '/run/podman/podman.sock',
+      ]).catch((error) => {
+        // ACL might not be available or socket might not exist yet
+        console.warn(`[Containers] Failed to set ACL for ${unixUsername} on podman socket:`, error);
+      });
 
       console.log(`[Containers] User ${unixUsername} created in ${containerName}`);
     } catch (error) {

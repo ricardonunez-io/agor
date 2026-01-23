@@ -802,6 +802,20 @@ function AppContent() {
     }
   };
 
+  const handleRecreateContainer = async (worktreeId: string) => {
+    if (!client) return;
+    try {
+      showLoading('Recreating container...', { key: 'recreate-container' });
+      await client.service(`worktrees/${worktreeId}/recreate-container`).create({});
+      showSuccess('Container recreated successfully!', { key: 'recreate-container' });
+    } catch (error) {
+      showError(
+        `Failed to recreate container: ${error instanceof Error ? error.message : String(error)}`,
+        { key: 'recreate-container' }
+      );
+    }
+  };
+
   // Handle MCP server CRUD
   const handleCreateMCPServer = async (data: CreateMCPServerInput) => {
     if (!client) return;
@@ -1057,6 +1071,7 @@ function AppContent() {
                 onStartEnvironment={handleStartEnvironment}
                 onStopEnvironment={handleStopEnvironment}
                 onNukeEnvironment={handleNukeEnvironment}
+                onRecreateContainer={handleRecreateContainer}
                 onCreateUser={handleCreateUser}
                 onUpdateUser={handleUpdateUser}
                 onDeleteUser={handleDeleteUser}
@@ -1128,6 +1143,7 @@ function AppContent() {
                 onStartEnvironment={handleStartEnvironment}
                 onStopEnvironment={handleStopEnvironment}
                 onNukeEnvironment={handleNukeEnvironment}
+                onRecreateContainer={handleRecreateContainer}
                 onCreateUser={handleCreateUser}
                 onUpdateUser={handleUpdateUser}
                 onDeleteUser={handleDeleteUser}
@@ -1199,6 +1215,7 @@ function AppContent() {
                 onStartEnvironment={handleStartEnvironment}
                 onStopEnvironment={handleStopEnvironment}
                 onNukeEnvironment={handleNukeEnvironment}
+                onRecreateContainer={handleRecreateContainer}
                 onCreateUser={handleCreateUser}
                 onUpdateUser={handleUpdateUser}
                 onDeleteUser={handleDeleteUser}

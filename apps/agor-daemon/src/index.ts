@@ -4496,6 +4496,28 @@ async function main() {
     requireAuth
   );
 
+  // POST /worktrees/:id/recreate-container - Recreate worktree container (destroy and create fresh)
+  if (containerIsolationEnabled && worktreeContainersService) {
+    registerAuthenticatedRoute(
+      app,
+      '/worktrees/:id/recreate-container',
+      {
+        async create(_data: unknown, params: RouteParams) {
+          const id = params.route?.id;
+          if (!id) throw new Error('Worktree ID required');
+          const containerName = await worktreeContainersService.recreateContainer(
+            id as import('@agor/core/types').WorktreeID
+          );
+          return { success: true, containerName };
+        },
+      },
+      {
+        create: { role: 'admin', action: 'recreate worktree containers' },
+      },
+      requireAuth
+    );
+  }
+
   // GET /worktrees/:id/health - Check environment health
   registerAuthenticatedRoute(
     app,
@@ -4586,6 +4608,33 @@ async function main() {
     } as any,
     {
       find: { role: 'member', action: 'view worktree logs' },
+    },
+    requireAuth
+  );
+
+  // GET /worktrees/build-logs?worktree_id=xxx - Get build logs (start/stop/nuke output)
+  registerAuthenticatedRoute(
+    app,
+    '/worktrees/build-logs',
+    {
+      async find(params: Params) {
+        console.log('🔧 Build logs endpoint called');
+
+        // Extract worktree ID from query params
+        const id = params?.query?.worktree_id;
+
+        if (!id) {
+          console.error('❌ No worktree_id in query params');
+          throw new Error('worktree_id query parameter required');
+        }
+
+        console.log('✅ Found worktree ID:', id);
+        return worktreesService.getBuildLogs(id as import('@agor/core/types').WorktreeID, params);
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: Service type not compatible with Express
+    } as any,
+    {
+      find: { role: 'member', action: 'view worktree build logs' },
     },
     requireAuth
   );

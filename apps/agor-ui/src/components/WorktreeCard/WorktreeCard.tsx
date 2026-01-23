@@ -11,6 +11,7 @@ import {
   LoginOutlined,
   PlusOutlined,
   PushpinFilled,
+  ReloadOutlined,
   SubnodeOutlined,
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
@@ -21,6 +22,7 @@ import { useConnectionDisabled } from '../../contexts/ConnectionContext';
 import { getSessionDisplayTitle, getSessionTitleStyles } from '../../utils/sessionTitle';
 import { ensureColorVisible, isDarkTheme } from '../../utils/theme';
 import { ArchiveDeleteWorktreeModal } from '../ArchiveDeleteWorktreeModal';
+import { BuildLogsModal } from '../BuildLogsModal';
 import { EnvironmentPill } from '../EnvironmentPill';
 import { type ForkSpawnAction, ForkSpawnModal } from '../ForkSpawnModal';
 import { CreatedByTag } from '../metadata';
@@ -88,6 +90,7 @@ interface WorktreeCardProps {
   onStopEnvironment?: (worktreeId: string) => void;
   onViewLogs?: (worktreeId: string) => void;
   onNukeEnvironment?: (worktreeId: string) => void;
+  onRecreateContainer?: (worktreeId: string) => void;
   onUnpin?: (worktreeId: string) => void;
   isPinned?: boolean;
   zoneName?: string;
@@ -116,6 +119,7 @@ const WorktreeCardComponent = ({
   onStopEnvironment,
   onViewLogs,
   onNukeEnvironment,
+  onRecreateContainer,
   onUnpin,
   isPinned = false,
   zoneName,
@@ -140,6 +144,9 @@ const WorktreeCardComponent = ({
 
   // Archive/Delete modal state
   const [archiveDeleteModalOpen, setArchiveDeleteModalOpen] = useState(false);
+
+  // Build logs modal state
+  const [buildLogsModalOpen, setBuildLogsModalOpen] = useState(false);
 
   // Tree expansion state - track which nodes are expanded
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
@@ -586,6 +593,20 @@ const WorktreeCardComponent = ({
                 title="Copy SSH command"
               />
             )}
+            {/* Recreate container button - only show if container isolation is enabled */}
+            {worktree.ssh_host && worktree.ssh_port && onRecreateContainer && (
+              <Button
+                type="text"
+                size="small"
+                icon={<ReloadOutlined />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRecreateContainer(worktree.worktree_id);
+                }}
+                disabled={connectionDisabled}
+                title="Reset container environment (keeps worktree files, recreates isolated container)"
+              />
+            )}
             {onOpenSettings && (
               <Button
                 type="text"
@@ -636,6 +657,7 @@ const WorktreeCardComponent = ({
             onStartEnvironment={onStartEnvironment}
             onStopEnvironment={onStopEnvironment}
             onViewLogs={onViewLogs}
+            onViewBuildLogs={() => setBuildLogsModalOpen(true)}
             onNukeEnvironment={onNukeEnvironment}
             connectionDisabled={connectionDisabled}
           />
@@ -755,6 +777,14 @@ const WorktreeCardComponent = ({
           setArchiveDeleteModalOpen(false);
         }}
         onCancel={() => setArchiveDeleteModalOpen(false)}
+      />
+
+      {/* Build Logs Modal */}
+      <BuildLogsModal
+        open={buildLogsModalOpen}
+        onClose={() => setBuildLogsModalOpen(false)}
+        worktree={worktree}
+        client={client}
       />
     </Card>
   );

@@ -115,6 +115,7 @@ export interface AppProps {
   onStartEnvironment?: (worktreeId: string) => void;
   onStopEnvironment?: (worktreeId: string) => void;
   onNukeEnvironment?: (worktreeId: string) => void;
+  onRecreateContainer?: (worktreeId: string) => void;
   onCreateUser?: (data: CreateUserInput) => void;
   onUpdateUser?: (userId: string, updates: UpdateUserInput) => void;
   onDeleteUser?: (userId: string) => void;
@@ -178,6 +179,7 @@ export const App: React.FC<AppProps> = ({
   onStartEnvironment,
   onStopEnvironment,
   onNukeEnvironment,
+  onRecreateContainer,
   onCreateUser,
   onUpdateUser,
   onDeleteUser,
@@ -770,6 +772,7 @@ export const App: React.FC<AppProps> = ({
                         onStopEnvironment={onStopEnvironment}
                         onViewLogs={setLogsModalWorktreeId}
                         onNukeEnvironment={onNukeEnvironment}
+                        onRecreateContainer={onRecreateContainer}
                         onOpenCommentsPanel={() => setCommentsPanelCollapsed(false)}
                         onCommentHover={setHoveredCommentId}
                         onCommentSelect={(commentId) => {
