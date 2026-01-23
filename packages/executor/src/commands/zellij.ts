@@ -85,12 +85,16 @@ export async function handleZellijAttach(
   }
 
   try {
+    const startTime = Date.now();
+    const logTime = (label: string) => console.log(`[zellij.attach] ${label} (${Date.now() - startTime}ms total)`);
+
     // Connect to daemon
     const daemonUrl = payload.daemonUrl || 'http://localhost:3030';
+    console.log(`[zellij.attach] START - Connecting to daemon at ${daemonUrl}...`);
     feathersClient = await createExecutorClient(daemonUrl, payload.sessionToken);
     _currentUserId = userId;
 
-    console.log(`[zellij.attach] Connected to daemon, joining channel user/${userId}/terminal`);
+    logTime('Connected to daemon');
 
     // Join the user's terminal channel
     // The daemon will route terminal events through this channel
@@ -112,6 +116,7 @@ export async function handleZellijAttach(
 
     // Import node-pty dynamically (native module)
     // Using @homebridge/node-pty-prebuilt-multiarch for consistency with daemon
+    logTime('Before node-pty import');
     const nodePty = (await import('@homebridge/node-pty-prebuilt-multiarch')) as {
       spawn: (
         file: string,
@@ -125,6 +130,7 @@ export async function handleZellijAttach(
         }
       ) => IPty;
     };
+    logTime('node-pty imported');
 
     // Build zellij command - config path added after fs/actualHome are defined below
     const zellijArgs = ['attach', sessionName, '--create'];
@@ -140,8 +146,10 @@ export async function handleZellijAttach(
     // Get actual home directory and shell for current user from passwd
     // os.homedir() doesn't work correctly with sudo impersonation - it returns the original user's home
     // We must use getent passwd to get the correct values for the impersonated user
+    logTime('Before fs/execSync import');
     const fs = await import('node:fs');
     const { execSync } = await import('node:child_process');
+    logTime('After fs/execSync import');
 
     let actualHome = '/tmp'; // Fallback
     let userShell = '/bin/bash'; // Fallback
@@ -173,21 +181,22 @@ export async function handleZellijAttach(
       actualHome = process.env.HOME || os.homedir() || '/tmp';
       userShell = process.env.SHELL || '/bin/bash';
     }
-    console.log(`[zellij.attach] User home: ${actualHome}, shell: ${userShell}`);
+    logTime(`User info resolved: home=${actualHome}, shell=${userShell}`);
 
     // Ensure Zellij cache directory exists - useradd -m creates home but not .cache/zellij
     // Zellij needs this for plugin data, session info, and session serialization
     const zellijCacheDir = `${actualHome}/.cache/zellij`;
     if (!fs.existsSync(zellijCacheDir)) {
-      console.log(`[zellij.attach] Creating Zellij cache directory: ${zellijCacheDir}`);
+      logTime('Creating Zellij cache directory');
       fs.mkdirSync(zellijCacheDir, { recursive: true });
+      logTime('Cache directory created');
     }
 
     // Zellij will use ~/.config/zellij/config.kdl by default
     // The docker entrypoint copies Agor's default config there on user creation
     // Users can customize their config as needed
 
-    console.log(`[zellij.attach] Spawning PTY: zellij ${zellijArgs.join(' ')}`);
+    logTime(`Spawning PTY: zellij ${zellijArgs.join(' ')}`);
     console.log(`[zellij.attach] CWD: ${cwd}, Size: ${cols}x${rows}`);
 
     // Spawn PTY with zellij
@@ -211,10 +220,15 @@ export async function handleZellijAttach(
     currentPtyCols = cols || 80;
     currentPtyRows = rows || 24;
 
-    console.log(`[zellij.attach] PTY spawned, PID: ${pty.pid}`);
+    logTime(`PTY spawned, PID: ${pty.pid}`);
 
     // Stream PTY output to channel
+    let firstOutputLogged = false;
     pty.onData((data) => {
+      if (!firstOutputLogged) {
+        logTime('First PTY output received (Zellij ready)');
+        firstOutputLogged = true;
+      }
       socket.emit('terminal:output', {
         userId,
         data,

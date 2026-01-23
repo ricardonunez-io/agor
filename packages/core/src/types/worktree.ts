@@ -374,6 +374,14 @@ export interface Worktree {
    * Example: 2222 + 5 = 2227
    */
   ssh_port?: number;
+
+  /**
+   * SSH host for this worktree container
+   *
+   * Derived from config (execution.ssh.host or daemon.host)
+   * Used by UI to build SSH connection command.
+   */
+  ssh_host?: string;
 }
 
 /**

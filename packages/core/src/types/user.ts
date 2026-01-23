@@ -127,6 +127,8 @@ export interface User extends BaseUserFields {
   unix_gid?: number;
   // GitHub username for SSH key fetching (optional)
   github_username?: string;
+  // User's SSH public keys for container access (one key per line, optional)
+  ssh_public_keys?: string;
   // API key status (boolean only, never exposes actual keys)
   api_keys?: {
     ANTHROPIC_API_KEY?: boolean; // true = key is set, false/undefined = not set
@@ -162,6 +164,7 @@ export interface UpdateUserInput extends Partial<BaseUserFields> {
   unix_uid?: number;
   unix_gid?: number;
   github_username?: string;
+  ssh_public_keys?: string;
   /** Force user to change password on next login (admin-only) */
   must_change_password?: boolean;
   // API keys for update (accepts plaintext, encrypted before storage)

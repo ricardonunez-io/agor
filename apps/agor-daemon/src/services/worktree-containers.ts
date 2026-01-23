@@ -16,6 +16,7 @@ import { type Database, type WorktreeRepository, type UsersRepository, formatSho
 import type { Application } from '@agor/core/feathers';
 import type { AgorConfig } from '@agor/core/config';
 import type { User, UserID, Worktree, WorktreeID } from '@agor/core/types';
+import { deriveUnixUsername } from '../utils/container-user.js';
 
 /**
  * Container status
@@ -40,6 +41,8 @@ interface CreateContainerOptions {
   worktreePath: string;
   repoPath: string;
   sshPort: number;
+  appInternalPort?: number; // Port the app listens on inside container (from app_url)
+  appExternalPort?: number; // Unique port exposed on host (calculated from unique_id)
 }
 
 /**
@@ -50,7 +53,6 @@ interface CreateUserOptions {
   unixUsername: string;
   unixUid?: number;
   unixGid?: number;
-  githubUsername?: string;
 }
 
 /**
@@ -59,6 +61,7 @@ interface CreateUserOptions {
 const DEFAULTS = {
   IMAGE: 'agor/workspace:latest',
   SSH_BASE_PORT: 2222,
+  APP_BASE_PORT: 16000,
   RESTART_POLICY: 'unless-stopped' as const,
 };
 
@@ -112,7 +115,7 @@ export class WorktreeContainersService {
   /**
    * Get SSH host for connection strings
    */
-  private getSSHHost(): string {
+  getSSHHost(): string {
     return this.config.execution?.ssh?.host || this.config.daemon?.host || 'localhost';
   }
 
@@ -121,6 +124,28 @@ export class WorktreeContainersService {
    */
   calculateSSHPort(worktreeUniqueId: number): number {
     return this.getSSHBasePort() + worktreeUniqueId;
+  }
+
+  /**
+   * Get app base port from config
+   */
+  private getAppBasePort(): number {
+    return this.config.execution?.app?.base_port || DEFAULTS.APP_BASE_PORT;
+  }
+
+  /**
+   * Calculate external app port for a worktree
+   * This is the unique port exposed on the host that maps to the app's internal port
+   */
+  calculateAppExternalPort(worktreeUniqueId: number): number {
+    return this.getAppBasePort() + worktreeUniqueId;
+  }
+
+  /**
+   * Get app host for external URLs (public IP or hostname)
+   */
+  getAppHost(): string {
+    return this.config.execution?.app?.host || this.config.daemon?.host || 'localhost';
   }
 
   /**
@@ -134,12 +159,15 @@ export class WorktreeContainersService {
    * Create a container for a worktree
    */
   async createContainer(options: CreateContainerOptions): Promise<string> {
-    const { worktreeId, worktreePath, repoPath, sshPort } = options;
+    const { worktreeId, worktreePath, repoPath, sshPort, appInternalPort, appExternalPort } = options;
     const containerName = this.generateContainerName(worktreeId);
     const image = this.getImage();
     const restartPolicy = this.config.execution?.containers?.restart_policy || DEFAULTS.RESTART_POLICY;
 
     console.log(`[Containers] Creating container ${containerName} for worktree ${worktreeId}`);
+    if (appInternalPort && appExternalPort) {
+      console.log(`[Containers] Exposing app port ${appExternalPort} -> ${appInternalPort}`);
+    }
 
     try {
       // Build docker create command
@@ -157,6 +185,8 @@ export class WorktreeContainersService {
         '-v', `${repoPath}:/repo:rw`,
         // Expose SSH port
         '-p', `${sshPort}:22`,
+        // Expose app port: external (unique per worktree) -> internal (app's actual port)
+        ...(appInternalPort && appExternalPort ? ['-p', `${appExternalPort}:${appInternalPort}`] : []),
         // Restart policy
         '--restart', restartPolicy,
         // Podman-in-Docker: Enable nested containers (for docker-compose via Podman)
@@ -281,9 +311,10 @@ export class WorktreeContainersService {
 
   /**
    * Create a user inside a container
+   * Note: SSH keys are set up separately when terminal is created
    */
   async createUserInContainer(options: CreateUserOptions): Promise<void> {
-    const { containerName, unixUsername, unixUid, unixGid, githubUsername } = options;
+    const { containerName, unixUsername, unixUid, unixGid } = options;
 
     console.log(`[Containers] Creating user ${unixUsername} in container ${containerName}`);
 
@@ -344,11 +375,6 @@ export class WorktreeContainersService {
         `/home/${unixUsername}`,
       ]);
 
-      // Setup SSH keys if GitHub username is available
-      if (githubUsername) {
-        await this.setupUserSSHKeys(containerName, unixUsername, githubUsername);
-      }
-
       console.log(`[Containers] User ${unixUsername} created in ${containerName}`);
     } catch (error) {
       console.error(`[Containers] Failed to create user ${unixUsername} in ${containerName}:`, error);
@@ -372,106 +398,6 @@ export class WorktreeContainersService {
   }
 
   /**
-   * Fetch SSH public keys from GitHub
-   */
-  async fetchGitHubSSHKeys(githubUsername: string): Promise<string[]> {
-    try {
-      const response = await fetch(`https://github.com/${githubUsername}.keys`);
-
-      if (!response.ok) {
-        console.warn(`[Containers] Failed to fetch SSH keys for ${githubUsername}: ${response.status}`);
-        return [];
-      }
-
-      const keys = await response.text();
-      return keys
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0);
-    } catch (error) {
-      console.error(`[Containers] Error fetching SSH keys for ${githubUsername}:`, error);
-      return [];
-    }
-  }
-
-  /**
-   * Setup SSH keys for a user in a container
-   */
-  async setupUserSSHKeys(
-    containerName: string,
-    unixUsername: string,
-    githubUsername: string
-  ): Promise<void> {
-    const keys = await this.fetchGitHubSSHKeys(githubUsername);
-
-    if (keys.length === 0) {
-      console.log(`[Containers] No SSH keys found for ${githubUsername}`);
-      return;
-    }
-
-    const sshDir = `/home/${unixUsername}/.ssh`;
-    const authorizedKeysPath = `${sshDir}/authorized_keys`;
-
-    console.log(`[Containers] Setting up ${keys.length} SSH keys for ${unixUsername} from GitHub (${githubUsername})`);
-
-    try {
-      // Create .ssh directory
-      await this.dockerExec(containerName, ['mkdir', '-p', sshDir]);
-
-      // Write authorized_keys (escape content properly)
-      const authorizedKeysContent = keys.join('\n') + '\n';
-      await this.dockerExec(containerName, [
-        'bash',
-        '-c',
-        `cat > ${authorizedKeysPath} << 'AGOR_SSH_KEYS_EOF'
-${authorizedKeysContent}
-AGOR_SSH_KEYS_EOF`,
-      ]);
-
-      // Set correct permissions
-      await this.dockerExec(containerName, ['chmod', '700', sshDir]);
-      await this.dockerExec(containerName, ['chmod', '600', authorizedKeysPath]);
-      await this.dockerExec(containerName, [
-        'chown',
-        '-R',
-        `${unixUsername}:${unixUsername}`,
-        sshDir,
-      ]);
-
-      console.log(`[Containers] SSH keys configured for ${unixUsername}`);
-    } catch (error) {
-      console.error(`[Containers] Failed to setup SSH keys for ${unixUsername}:`, error);
-    }
-  }
-
-  /**
-   * Refresh SSH keys for a user (re-fetch from GitHub)
-   */
-  async refreshUserSSHKeys(
-    worktreeId: WorktreeID,
-    userId: UserID
-  ): Promise<void> {
-    const containerName = this.generateContainerName(worktreeId);
-    const user = await this.userRepo.findById(userId);
-
-    // Check if container is running
-    const isRunning = await this.isContainerRunning(containerName);
-    if (!isRunning) {
-      throw new Error('Worktree container not running');
-    }
-
-    if (!user?.unix_username || !user.github_username) {
-      throw new Error('User does not have unix_username or github_username configured');
-    }
-
-    await this.setupUserSSHKeys(
-      containerName,
-      user.unix_username,
-      user.github_username
-    );
-  }
-
-  /**
    * Get SSH connection info for a worktree
    */
   async getSSHConnectionInfo(
@@ -485,13 +411,15 @@ AGOR_SSH_KEYS_EOF`,
       throw new Error('Worktree not found');
     }
 
-    if (!user?.unix_username) {
-      throw new Error('User does not have unix_username configured');
+    if (!user) {
+      throw new Error('User not found');
     }
+
+    // Use explicit unix_username or derive from email
+    const username = user.unix_username || deriveUnixUsername(user.email);
 
     const host = this.getSSHHost();
     const port = this.calculateSSHPort(worktree.worktree_unique_id);
-    const username = user.unix_username;
 
     return {
       host,
@@ -525,13 +453,14 @@ AGOR_SSH_KEYS_EOF`,
       for (const owner of owners) {
         const user = await this.userRepo.findById(owner.user_id);
 
-        if (user?.unix_username) {
+        if (user) {
+          // Use explicit unix_username or derive from email
+          const unixUsername = user.unix_username || deriveUnixUsername(user.email);
           await this.createUserInContainer({
             containerName,
-            unixUsername: user.unix_username,
+            unixUsername,
             unixUid: user.unix_uid,
             unixGid: user.unix_gid,
-            githubUsername: user.github_username,
           });
         }
       }

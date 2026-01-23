@@ -754,7 +754,7 @@ const SessionPanel: React.FC<SessionPanelProps> = ({
                 <Button
                   type="text"
                   icon={<CodeOutlined />}
-                  onClick={() => onOpenTerminal([`cd ${worktree.path}`], worktree.worktree_id)}
+                  onClick={() => onOpenTerminal([], worktree.worktree_id)}
                 />
               </Tooltip>
             )}

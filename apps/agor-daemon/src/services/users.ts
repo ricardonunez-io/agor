@@ -45,6 +45,7 @@ interface UpdateUserData {
   emoji?: string;
   role?: 'owner' | 'admin' | 'member' | 'viewer';
   unix_username?: string;
+  ssh_public_keys?: string;
   must_change_password?: boolean;
   avatar?: string;
   preferences?: Record<string, unknown>;
@@ -175,6 +176,7 @@ export class UsersService {
     if (data.emoji !== undefined) updates.emoji = data.emoji;
     if (data.role) updates.role = data.role;
     if (data.unix_username !== undefined) updates.unix_username = data.unix_username;
+    if (data.ssh_public_keys !== undefined) updates.ssh_public_keys = data.ssh_public_keys;
     if (data.onboarding_completed !== undefined)
       updates.onboarding_completed = data.onboarding_completed;
 
@@ -381,6 +383,7 @@ export class UsersService {
       emoji: row.emoji ?? undefined,
       role: row.role as 'owner' | 'admin' | 'member' | 'viewer',
       unix_username: row.unix_username ?? undefined,
+      ssh_public_keys: row.ssh_public_keys ?? undefined,
       avatar: data.avatar,
       preferences: data.preferences,
       onboarding_completed: !!row.onboarding_completed,
@@ -449,6 +452,8 @@ class UsersServiceWithAuth extends UsersService {
       name: row.name ?? undefined,
       emoji: row.emoji ?? undefined,
       role: row.role as 'owner' | 'admin' | 'member' | 'viewer',
+      unix_username: row.unix_username ?? undefined,
+      ssh_public_keys: row.ssh_public_keys ?? undefined,
       avatar: data.avatar,
       preferences: data.preferences,
       onboarding_completed: !!row.onboarding_completed,

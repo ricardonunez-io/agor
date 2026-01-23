@@ -92,6 +92,7 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
         emoji: userData.emoji,
         role: userData.role,
         unix_username: userData.unix_username,
+        ssh_public_keys: userData.ssh_public_keys,
         eventStreamEnabled: userData.preferences?.eventStream?.enabled ?? true,
         must_change_password: userData.must_change_password ?? false,
       });
@@ -180,7 +181,7 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
     if (!user) return;
 
     form
-      .validateFields(['email', 'name', 'emoji', 'role', 'unix_username'])
+      .validateFields(['email', 'name', 'emoji', 'role', 'unix_username', 'ssh_public_keys'])
       .then(() => {
         const values = form.getFieldsValue();
         const updates: UpdateUserInput = {
@@ -189,6 +190,7 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
           emoji: values.emoji,
           role: values.role,
           unix_username: values.unix_username,
+          ssh_public_keys: values.ssh_public_keys,
           preferences: {
             ...user.preferences,
             eventStream: {
@@ -517,6 +519,18 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
                 placeholder="johnsmith"
                 maxLength={32}
                 disabled={currentUser?.role !== 'admin'}
+              />
+            </Form.Item>
+
+            <Form.Item
+              label="SSH Public Keys"
+              name="ssh_public_keys"
+              help="One key per line (e.g., ssh-ed25519 AAAA... user@host)"
+            >
+              <Input.TextArea
+                placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... user@host"
+                rows={3}
+                style={{ fontFamily: 'monospace', fontSize: 12 }}
               />
             </Form.Item>
 

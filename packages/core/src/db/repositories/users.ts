@@ -41,6 +41,7 @@ export class UsersRepository implements BaseRepository<User, Partial<User>> {
       unix_uid: row.unix_uid ?? undefined,
       unix_gid: row.unix_gid ?? undefined,
       github_username: row.github_username ?? undefined,
+      ssh_public_keys: row.ssh_public_keys ?? undefined,
       onboarding_completed: row.onboarding_completed,
       must_change_password: row.must_change_password,
       avatar: row.data.avatar,

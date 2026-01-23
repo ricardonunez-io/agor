@@ -37,6 +37,7 @@ import {
   validateResolvedUnixUser,
 } from '@agor/core/unix';
 import { deriveUnixUsername, ensureContainerUser } from '../utils/container-user.js';
+import { extractPortFromUrl } from '../utils/container-utils.js';
 import { generateSessionToken, spawnExecutorFireAndForget } from '../utils/spawn-executor.js';
 
 interface CreateTerminalData {
@@ -299,6 +300,7 @@ export class TerminalsService {
 
     let impersonatedUser: string | null = null;
     let userUnixUid: number | undefined;
+    let userSshPublicKeys: string | undefined;
     let containerUsername: string = 'developer'; // Default for container execution
     const usersRepo = new UsersRepository(this.db);
     try {
@@ -313,6 +315,9 @@ export class TerminalsService {
       }
       if (user?.unix_uid) {
         userUnixUid = user.unix_uid;
+      }
+      if (user?.ssh_public_keys) {
+        userSshPublicKeys = user.ssh_public_keys;
       }
     } catch (error) {
       console.warn(`⚠️ Failed to load user ${userId}:`, error);
@@ -365,11 +370,17 @@ export class TerminalsService {
             try {
               const repo = await this.app.service('repos').get(worktree.repo_id);
               const sshPort = containersService.calculateSSHPort(worktree.worktree_unique_id);
+              const appInternalPort = extractPortFromUrl(worktree.app_url);
+              const appExternalPort = appInternalPort
+                ? containersService.calculateAppExternalPort(worktree.worktree_unique_id)
+                : undefined;
               await containersService.createContainer({
                 worktreeId: worktree.worktree_id,
                 worktreePath: worktree.path,
                 repoPath: repo.local_path,
                 sshPort,
+                appInternalPort,
+                appExternalPort,
               });
               containerRunning = true;
             } catch (error) {
@@ -405,15 +416,53 @@ export class TerminalsService {
     if (containerIsolationEnabled && containerName && containerRunning) {
       const runtime = config.execution?.containers?.runtime || 'docker';
       const createUserCmd = ensureContainerUser(containerUsername, userUnixUid);
+      const userStartTime = Date.now();
       console.log(`[Terminals] Ensuring user '${containerUsername}' exists in container ${containerName}`);
       try {
         execSync(`${runtime} exec ${containerName} sh -c "${createUserCmd}"`, {
-          stdio: 'inherit',
+          stdio: 'pipe', // Don't inherit - faster
           timeout: 10000,
         });
+        console.log(`[Terminals] User creation took ${Date.now() - userStartTime}ms`);
+
+        // Setup SSH keys if user has them configured
+        if (userSshPublicKeys) {
+          const sshDir = `/home/${containerUsername}/.ssh`;
+          const keys = userSshPublicKeys
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0 && line.startsWith('ssh-'));
+
+          if (keys.length > 0) {
+            console.log(`[Terminals] Setting up ${keys.length} SSH key(s) for ${containerUsername}`);
+            try {
+              // Create .ssh directory
+              execSync(`${runtime} exec ${containerName} mkdir -p ${sshDir}`, { stdio: 'pipe', timeout: 5000 });
+              execSync(`${runtime} exec ${containerName} chmod 700 ${sshDir}`, { stdio: 'pipe', timeout: 5000 });
+
+              // Write each key using printf (more portable than echo -e)
+              const authorizedKeysPath = `${sshDir}/authorized_keys`;
+              // Clear the file first
+              execSync(`${runtime} exec ${containerName} sh -c "true > ${authorizedKeysPath}"`, { stdio: 'pipe', timeout: 5000 });
+              // Append each key
+              for (const key of keys) {
+                // Escape single quotes in the key
+                const escapedKey = key.replace(/'/g, "'\\''");
+                execSync(`${runtime} exec ${containerName} sh -c "printf '%s\\n' '${escapedKey}' >> ${authorizedKeysPath}"`, { stdio: 'pipe', timeout: 5000 });
+              }
+
+              // Set permissions
+              execSync(`${runtime} exec ${containerName} chmod 600 ${authorizedKeysPath}`, { stdio: 'pipe', timeout: 5000 });
+              execSync(`${runtime} exec ${containerName} chown -R ${containerUsername}:${containerUsername} ${sshDir}`, { stdio: 'pipe', timeout: 5000 });
+
+              console.log(`[Terminals] SSH keys configured for ${containerUsername}`);
+            } catch (sshError) {
+              console.warn(`[Terminals] SSH key setup failed for ${containerUsername}:`, sshError);
+            }
+          }
+        }
       } catch (error) {
-        console.warn(`[Terminals] Failed to create user in container (may already exist):`, error);
-        // Continue anyway - user might already exist
+        console.warn(`[Terminals] User creation failed after ${Date.now() - userStartTime}ms (may already exist)`);
       }
     }
 
@@ -439,6 +488,7 @@ export class TerminalsService {
     // Get executor process environment (includes system vars)
     const executorEnv = await createUserProcessEnvironment(userId, this.db);
 
+    const spawnStartTime = Date.now();
     console.log(`[Terminals] Spawning executor: container=${containerName || 'none'}, daemonUrl=${daemonUrl}, cwd=${cwd}`);
 
     // Spawn executor with zellij.attach command
@@ -484,6 +534,8 @@ export class TerminalsService {
       activeWorktrees: new Set([data.worktreeId || 'default']),
       startedAt: new Date(),
     });
+
+    console.log(`[Terminals] Executor spawned in ${Date.now() - spawnStartTime}ms, returning response`);
 
     return {
       userId,

@@ -21,12 +21,18 @@ export interface ContainerInfo {
   name: string;
   status: ContainerStatus;
   sshPort: number;
+  appPort: number;
 }
 
 /**
  * Default SSH base port
  */
 const DEFAULT_SSH_BASE_PORT = 2222;
+
+/**
+ * Default app base port for exposing applications
+ */
+const DEFAULT_APP_BASE_PORT = 16000;
 
 /**
  * Generate container name from worktree ID
@@ -42,6 +48,15 @@ export function getContainerName(worktreeId: WorktreeID): string {
  */
 export function calculateSSHPort(worktreeUniqueId: number, basePort?: number): number {
   return (basePort || DEFAULT_SSH_BASE_PORT) + worktreeUniqueId;
+}
+
+/**
+ * Calculate app port for a worktree
+ * This port is exposed on the host and can be forwarded to any app inside the container
+ * Deterministic: same worktree unique ID always produces same port
+ */
+export function calculateAppPort(worktreeUniqueId: number, basePort?: number): number {
+  return (basePort || DEFAULT_APP_BASE_PORT) + worktreeUniqueId;
 }
 
 /**
@@ -74,13 +89,15 @@ export function getContainerInfo(
   worktreeId: WorktreeID,
   worktreeUniqueId: number,
   runtime: 'docker' | 'podman' = 'docker',
-  sshBasePort?: number
+  sshBasePort?: number,
+  appBasePort?: number
 ): ContainerInfo {
   const name = getContainerName(worktreeId);
   const status = getContainerStatus(name, runtime);
   const sshPort = calculateSSHPort(worktreeUniqueId, sshBasePort);
+  const appPort = calculateAppPort(worktreeUniqueId, appBasePort);
 
-  return { name, status, sshPort };
+  return { name, status, sshPort, appPort };
 }
 
 /**
@@ -103,4 +120,27 @@ export async function stopContainer(containerName: string, runtime: 'docker' | '
 export async function removeContainer(containerName: string, runtime: 'docker' | 'podman' = 'docker', force = false): Promise<void> {
   const forceFlag = force ? '-f' : '';
   execSync(`${runtime} rm ${forceFlag} ${containerName}`, { timeout: 30000 });
+}
+
+/**
+ * Extract port from a URL string
+ * Returns undefined if no port is found or URL is invalid
+ *
+ * Examples:
+ * - "http://localhost:5003" → 5003
+ * - "http://localhost:5003/health" → 5003
+ * - "http://example.com" → undefined (uses default port)
+ */
+export function extractPortFromUrl(url: string | undefined): number | undefined {
+  if (!url) return undefined;
+
+  try {
+    const parsed = new URL(url);
+    const port = parsed.port;
+    return port ? parseInt(port, 10) : undefined;
+  } catch {
+    // Try regex fallback for malformed URLs
+    const match = url.match(/:(\d+)/);
+    return match ? parseInt(match[1], 10) : undefined;
+  }
 }

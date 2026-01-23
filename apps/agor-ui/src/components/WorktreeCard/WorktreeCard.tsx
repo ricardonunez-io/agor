@@ -8,12 +8,13 @@ import {
   DragOutlined,
   EditOutlined,
   ForkOutlined,
+  LoginOutlined,
   PlusOutlined,
   PushpinFilled,
   SubnodeOutlined,
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
-import { Badge, Button, Card, Collapse, Space, Spin, Tree, Typography, theme } from 'antd';
+import { Badge, Button, Card, Collapse, message, Space, Spin, Tree, Typography, theme } from 'antd';
 import { AggregationColor } from 'antd/es/color-picker/color';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useConnectionDisabled } from '../../contexts/ConnectionContext';
@@ -29,6 +30,21 @@ import { ToolIcon } from '../ToolIcon';
 import { buildSessionTree, type SessionTreeNode } from './buildSessionTree';
 
 const _WORKTREE_CARD_MAX_WIDTH = 600;
+
+/**
+ * Derive Unix username from email (matches backend logic)
+ */
+function deriveUnixUsername(email: string): string {
+  let username = email.split('@')[0];
+  username = username.replace(/\./g, '_');
+  username = username.toLowerCase();
+  username = username.replace(/[^a-z0-9_-]/g, '_');
+  if (/^[0-9-]/.test(username)) {
+    username = 'u_' + username;
+  }
+  username = username.slice(0, 32);
+  return username || 'agor_user';
+}
 
 // Inject CSS animation for pulsing glow effect
 if (typeof document !== 'undefined' && !document.getElementById('worktree-card-animations')) {
@@ -548,9 +564,26 @@ const WorktreeCardComponent = ({
                 icon={<CodeOutlined />}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onOpenTerminal([`cd ${worktree.path}`], worktree.worktree_id);
+                  onOpenTerminal([], worktree.worktree_id);
                 }}
                 title="Open terminal in worktree directory"
+              />
+            )}
+            {/* SSH copy button - only show if container isolation is enabled (worktree has ssh_host/ssh_port) */}
+            {worktree.ssh_host && worktree.ssh_port && currentUserId && (
+              <Button
+                type="text"
+                size="small"
+                icon={<LoginOutlined />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const currentUser = userById.get(currentUserId);
+                  const username = currentUser?.unix_username || (currentUser?.email ? deriveUnixUsername(currentUser.email) : 'agor');
+                  const sshCommand = `ssh -p ${worktree.ssh_port} ${username}@${worktree.ssh_host}`;
+                  navigator.clipboard.writeText(sshCommand);
+                  message.success('SSH command copied to clipboard');
+                }}
+                title="Copy SSH command"
               />
             )}
             {onOpenSettings && (

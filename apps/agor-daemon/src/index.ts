@@ -99,6 +99,7 @@ import {
   spawnExecutorFireAndForget,
 } from './utils/spawn-executor.js';
 import { deriveUnixUsername, ensureContainerUser } from './utils/container-user.js';
+import { extractPortFromUrl } from './utils/container-utils.js';
 
 // ============================================================================
 // GLOBAL ERROR HANDLERS
@@ -1988,6 +1989,10 @@ async function main() {
                     // Get repo for the repo path
                     const repo = await context.app.service('repos').get(worktree.repo_id);
                     const sshPort = worktreeContainersService.calculateSSHPort(worktree.worktree_unique_id);
+                    const appInternalPort = extractPortFromUrl(worktree.app_url);
+                    const appExternalPort = appInternalPort
+                      ? worktreeContainersService.calculateAppExternalPort(worktree.worktree_unique_id)
+                      : undefined;
 
                     // Create container (fire-and-forget)
                     worktreeContainersService
@@ -1996,6 +2001,8 @@ async function main() {
                         worktreePath: worktree.path,
                         repoPath: repo.local_path,
                         sshPort,
+                        appInternalPort,
+                        appExternalPort,
                       })
                       .then(async (createdContainerName) => {
                         console.log(`[Containers] Container ${createdContainerName} created for worktree ${worktree.worktree_id.substring(0, 8)}`);

@@ -582,6 +582,9 @@ export const users = sqliteTable(
     // GitHub username for SSH key fetching (optional)
     github_username: text('github_username'),
 
+    // User's SSH public keys for container access (one key per line, optional)
+    ssh_public_keys: text('ssh_public_keys'),
+
     // Onboarding state
     onboarding_completed: t.bool('onboarding_completed').notNull().default(false),
 

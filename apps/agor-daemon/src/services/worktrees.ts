@@ -25,6 +25,7 @@ import type {
 import { getNextRunTime, validateCron } from '@agor/core/utils/cron';
 import { DrizzleService } from '../adapters/drizzle';
 import { deriveUnixUsername, ensureContainerUser } from '../utils/container-user.js';
+import { extractPortFromUrl } from '../utils/container-utils.js';
 import { getDaemonUrl, spawnExecutor } from '../utils/spawn-executor.js';
 
 /**
@@ -94,6 +95,60 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       };
     }
     return this.boardObjectsService;
+  }
+
+  /**
+   * Transform worktree for container isolation:
+   * - app_url: use external host and port
+   * - ssh_host/ssh_port: add SSH connection info
+   */
+  private transformForContainerIsolation(worktree: Worktree): Worktree {
+    const containerIsolationEnabled = this.config.execution?.container_isolation === true;
+    const containersService = (this.app as any).worktreeContainersService;
+
+    if (!containerIsolationEnabled || !containersService) {
+      return worktree;
+    }
+
+    let transformed = { ...worktree };
+
+    // Add SSH connection info
+    const sshPort = containersService.calculateSSHPort(worktree.worktree_unique_id);
+    const sshHost = containersService.getSSHHost();
+    transformed.ssh_port = sshPort;
+    transformed.ssh_host = sshHost;
+
+    // Transform app_url if present
+    if (worktree.app_url) {
+      const internalPort = extractPortFromUrl(worktree.app_url);
+      if (internalPort) {
+        const externalPort = containersService.calculateAppExternalPort(worktree.worktree_unique_id);
+        const externalHost = containersService.getAppHost();
+
+        // Parse and rebuild URL with external host and port
+        try {
+          const url = new URL(worktree.app_url);
+          url.hostname = externalHost;
+          url.port = String(externalPort);
+          transformed.app_url = url.toString();
+        } catch {
+          // Fallback: simple string replacement
+          transformed.app_url = worktree.app_url
+            .replace(/localhost|127\.0\.0\.1/, externalHost)
+            .replace(`:${internalPort}`, `:${externalPort}`);
+        }
+      }
+    }
+
+    return transformed;
+  }
+
+  /**
+   * Override get to transform app_url with external port
+   */
+  async get(id: WorktreeID, params?: WorktreeParams): Promise<Worktree> {
+    const worktree = await super.get(id, params);
+    return this.transformForContainerIsolation(worktree);
   }
 
   /**
@@ -180,11 +235,11 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       }
     }
 
-    return updatedWorktree;
+    return this.transformForContainerIsolation(updatedWorktree);
   }
 
   /**
-   * Override find to support repo_id filter
+   * Override find to support repo_id filter and transform app_url with external port
    */
   async find(params?: WorktreeParams) {
     const { repo_id } = params?.query || {};
@@ -192,22 +247,32 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     // If repo_id filter is provided, use repository method
     if (repo_id) {
       const worktrees = await this.worktreeRepo.findAll({ repo_id });
+      const transformedWorktrees = worktrees.map((w) => this.transformForContainerIsolation(w));
 
       // Return with pagination if enabled
       if (this.paginate) {
         return {
-          total: worktrees.length,
+          total: transformedWorktrees.length,
           limit: params?.query?.$limit || this.paginate.default || 50,
           skip: params?.query?.$skip || 0,
-          data: worktrees,
+          data: transformedWorktrees,
         };
       }
 
-      return worktrees;
+      return transformedWorktrees;
     }
 
-    // Otherwise, use default find
-    return super.find(params);
+    // Otherwise, use default find and transform results
+    const result = await super.find(params);
+
+    if (Array.isArray(result)) {
+      return result.map((w) => this.transformForContainerIsolation(w));
+    }
+
+    return {
+      ...result,
+      data: result.data.map((w) => this.transformForContainerIsolation(w)),
+    };
   }
 
   /**
@@ -629,11 +694,17 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
         try {
           const repo = await this.app.service('repos').get(worktree.repo_id);
           const sshPort = containersService.calculateSSHPort(worktree.worktree_unique_id);
+          const appInternalPort = extractPortFromUrl(worktree.app_url);
+          const appExternalPort = appInternalPort
+            ? containersService.calculateAppExternalPort(worktree.worktree_unique_id)
+            : undefined;
           await containersService.createContainer({
             worktreeId: worktree.worktree_id,
             worktreePath: worktree.path,
             repoPath: repo.local_path,
             sshPort,
+            appInternalPort,
+            appExternalPort,
           });
           containerRunning = true;
         } catch (error) {
@@ -744,9 +815,34 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       });
 
       // Use static app_url (initialized from template at worktree creation)
+      // When container isolation is enabled, rewrite URL to use external port
       let access_urls: Array<{ name: string; url: string }> | undefined;
       if (worktree.app_url) {
-        access_urls = [{ name: 'App', url: worktree.app_url }];
+        let appUrl = worktree.app_url;
+
+        // Rewrite URL with external host and port when using container isolation
+        if (useContainerExecution && containersService) {
+          const internalPort = extractPortFromUrl(worktree.app_url);
+          if (internalPort) {
+            const externalPort = containersService.calculateAppExternalPort(worktree.worktree_unique_id);
+            const externalHost = containersService.getAppHost();
+
+            // Parse and rebuild URL with external host and port
+            try {
+              const url = new URL(worktree.app_url);
+              url.hostname = externalHost;
+              url.port = String(externalPort);
+              appUrl = url.toString();
+            } catch {
+              // Fallback: simple string replacement
+              appUrl = worktree.app_url
+                .replace(/localhost|127\.0\.0\.1/, externalHost)
+                .replace(`:${internalPort}`, `:${externalPort}`);
+            }
+          }
+        }
+
+        access_urls = [{ name: 'App', url: appUrl }];
       }
 
       // Keep status as 'starting' - let health checks transition to 'running'
