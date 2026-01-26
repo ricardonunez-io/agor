@@ -320,9 +320,7 @@ function spawnExecutorLocal(payload: Record<string, unknown>, options: SpawnExec
 
   if (asUser) {
     console.log(`${logPrefix} Spawning executor as user: ${asUser}`);
-    console.log(`${logPrefix} DAEMON_URL being passed: ${envWithDaemonUrl.DAEMON_URL}`);
     console.log(`${logPrefix} Env vars being passed: ${Object.keys(envWithDaemonUrl).join(', ')}`);
-    console.log(`${logPrefix} Full command: ${cmd} ${args.join(' ')}`);
   }
   console.log(`${logPrefix} Spawning executor at: ${executorPath}`);
   console.log(`${logPrefix} Command: ${payload.command}`);
@@ -438,7 +436,6 @@ function spawnExecutorInContainer(
   console.log(`${logPrefix} User: ${containerUser || 'root'}`);
   console.log(`${logPrefix} Working directory: ${containerCwd}`);
   console.log(`${logPrefix} Command: ${payload.command}`);
-  console.log(`${logPrefix} Full command: ${runtime} ${dockerArgs.join(' ')}`);
 
   const executorProcess = spawn(runtime, dockerArgs, {
     stdio: ['pipe', 'inherit', 'inherit'],

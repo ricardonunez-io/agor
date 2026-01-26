@@ -757,21 +757,21 @@ async function main() {
         ?.replace('localhost', 'host.docker.internal')
         .replace('127.0.0.1', 'host.docker.internal');
 
-      // Add environment variables
+      // Get user-defined env var keys from profile (ANTHROPIC_API_KEY, GITHUB_TOKEN, etc.)
+      // Don't leak host environment (73 vars!) into container - only pass user profile vars
+      const userDefinedKeys = (executorEnv.AGOR_USER_ENV_KEYS || '').split(',').filter(Boolean);
+
+      // Add environment variables - essential system vars
       dockerArgs.push('-e', `DAEMON_URL=${containerDaemonUrl}`);
       dockerArgs.push('-e', 'TERM=xterm-256color');
-      if (executorEnv.ANTHROPIC_API_KEY) {
-        dockerArgs.push('-e', `ANTHROPIC_API_KEY=${executorEnv.ANTHROPIC_API_KEY}`);
-      }
-      if (executorEnv.OPENAI_API_KEY) {
-        dockerArgs.push('-e', `OPENAI_API_KEY=${executorEnv.OPENAI_API_KEY}`);
-      }
-      if (executorEnv.GOOGLE_API_KEY) {
-        dockerArgs.push('-e', `GOOGLE_API_KEY=${executorEnv.GOOGLE_API_KEY}`);
-      }
-
-      // Set HOME to container user's home directory (prevents Claude Code from trying to use host HOME)
       dockerArgs.push('-e', `HOME=/home/${containerUser}`);
+
+      // Add all user-defined env vars from profile
+      for (const key of userDefinedKeys) {
+        if (executorEnv[key]) {
+          dockerArgs.push('-e', `${key}=${executorEnv[key]}`);
+        }
+      }
 
       // Working directory inside container
       dockerArgs.push('-w', '/workspace');
@@ -789,9 +789,18 @@ async function main() {
       // Update daemonUrl in payload for container execution (executor reads from payload, not env)
       (executorPayload as any).daemonUrl = containerDaemonUrl;
 
+      // Filter env in payload for container execution - only user-defined vars
+      // Docker exec already passes these via -e flags, but executor also reads from payload.env
+      const containerPayloadEnv: Record<string, string> = { DAEMON_URL: containerDaemonUrl };
+      for (const key of userDefinedKeys) {
+        if (executorEnv[key]) {
+          containerPayloadEnv[key] = executorEnv[key];
+        }
+      }
+      (executorPayload as any).env = containerPayloadEnv;
+
       console.log(`[Daemon] Container execution mode: ${containerRuntime} exec ${containerName}`);
       console.log(`[Daemon] Container user: ${containerUser || 'root'}`);
-      console.log(`[Daemon] Full command: ${containerRuntime} ${dockerArgs.join(' ')}`);
 
       executorProcess = spawn(containerRuntime, dockerArgs, {
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -806,11 +815,7 @@ async function main() {
 
       if (executorUnixUser) {
         console.log(`[Daemon] Spawning executor as user: ${executorUnixUser}`);
-        console.log(`[Daemon] DAEMON_URL: ${executorEnv.DAEMON_URL}`);
-        console.log(
-          `[Daemon] Env vars (${Object.keys(executorEnv).length}): ${Object.keys(executorEnv).join(', ')}`
-        );
-        console.log(`[Daemon] Full command: ${cmd} ${args.join(' ')}`);
+        console.log(`[Daemon] Env vars (${Object.keys(executorEnv).length}): ${Object.keys(executorEnv).join(', ')}`);
       } else {
         console.log(`[Daemon] Spawning executor as current user (no impersonation)`);
       }
