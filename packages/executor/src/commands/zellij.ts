@@ -1,21 +1,22 @@
 /**
- * Zellij Command Handlers for Executor
+ * Terminal Command Handlers for Executor
  *
- * These handlers manage Zellij terminal sessions for users.
+ * These handlers manage terminal sessions for users via PTY.
+ * Supports two modes:
+ * - 'zellij': Session persistence, tabs, splits (requires Zellij installed)
+ * - 'shell': Direct shell spawn, simpler but no persistence
  *
  * Architecture:
- * - One executor per user (spawned when user opens first terminal)
- * - Executor owns a single PTY running `zellij attach`
- * - Zellij manages multiple tabs (one per worktree)
+ * - One executor per user+worktree (spawned when user opens terminal)
+ * - Executor owns a single PTY
  * - PTY I/O streams over Feathers channel: user/${userId}/terminal
  *
  * Lifecycle:
  * 1. User opens terminal modal → daemon spawns executor with zellij.attach
  * 2. Executor connects to daemon, joins user's terminal channel
- * 3. Executor spawns PTY with zellij attach
+ * 3. Executor spawns PTY with zellij or shell
  * 4. PTY output → channel → browser; browser input → channel → PTY
- * 5. User opens another worktree → daemon sends zellij.tab command
- * 6. User closes all terminals → daemon kills executor
+ * 5. User closes terminal → PTY exits → executor exits
  */
 
 import { spawn } from 'node:child_process';
@@ -54,7 +55,9 @@ export async function handleZellijAttach(
   payload: ZellijAttachPayload,
   options: CommandOptions
 ): Promise<ExecutorResult> {
-  const { userId, worktreeId, sessionName, cwd, tabName, cols, rows, envFile } = payload.params;
+  const { userId, worktreeId, sessionName, cwd, tabName, cols, rows, envFile, mode = 'zellij' } = payload.params;
+
+  console.log(`[zellij.attach] Terminal mode: ${mode} (from payload: ${payload.params.mode})`);
 
   // Dry run mode
   if (options.dryRun) {
@@ -183,40 +186,54 @@ export async function handleZellijAttach(
     }
     logTime(`User info resolved: home=${actualHome}, shell=${userShell}`);
 
-    // Ensure Zellij cache directory exists - useradd -m creates home but not .cache/zellij
-    // Zellij needs this for plugin data, session info, and session serialization
-    const zellijCacheDir = `${actualHome}/.cache/zellij`;
-    if (!fs.existsSync(zellijCacheDir)) {
-      logTime('Creating Zellij cache directory');
-      fs.mkdirSync(zellijCacheDir, { recursive: true });
-      logTime('Cache directory created');
+    // Spawn PTY based on mode
+    let pty: IPty;
+    const ptyEnv = {
+      ...cleanEnv,
+      TERM: 'xterm-256color',
+      SHELL: userShell,
+      HOME: actualHome,
+      XDG_CACHE_HOME: `${actualHome}/.cache`,
+      XDG_CONFIG_HOME: `${actualHome}/.config`,
+    };
+
+    if (mode === 'shell') {
+      // Shell mode: spawn shell directly (no Zellij)
+      logTime(`Spawning PTY: ${userShell} (shell mode)`);
+      console.log(`[terminal.attach] Shell mode - CWD: ${cwd}, Size: ${cols}x${rows}`);
+
+      pty = nodePty.spawn(userShell, ['-l'], {
+        name: 'xterm-256color',
+        cols: cols || 80,
+        rows: rows || 24,
+        cwd,
+        env: ptyEnv,
+      });
+    } else {
+      // Zellij mode: spawn zellij attach (default)
+      // Ensure Zellij cache directory exists
+      const zellijCacheDir = `${actualHome}/.cache/zellij`;
+      if (!fs.existsSync(zellijCacheDir)) {
+        logTime('Creating Zellij cache directory');
+        fs.mkdirSync(zellijCacheDir, { recursive: true });
+        logTime('Cache directory created');
+      }
+
+      logTime(`Spawning PTY: zellij ${zellijArgs.join(' ')}`);
+      console.log(`[zellij.attach] CWD: ${cwd}, Size: ${cols}x${rows}`);
+
+      pty = nodePty.spawn('zellij', zellijArgs, {
+        name: 'xterm-256color',
+        cols: cols || 80,
+        rows: rows || 24,
+        cwd,
+        env: ptyEnv,
+      });
+
+      currentSessionName = sessionName; // Store for tab management (Zellij only)
     }
 
-    // Zellij will use ~/.config/zellij/config.kdl by default
-    // The docker entrypoint copies Agor's default config there on user creation
-    // Users can customize their config as needed
-
-    logTime(`Spawning PTY: zellij ${zellijArgs.join(' ')}`);
-    console.log(`[zellij.attach] CWD: ${cwd}, Size: ${cols}x${rows}`);
-
-    // Spawn PTY with zellij
-    const pty = nodePty.spawn('zellij', zellijArgs, {
-      name: 'xterm-256color',
-      cols: cols || 80,
-      rows: rows || 24,
-      cwd,
-      env: {
-        ...cleanEnv,
-        TERM: 'xterm-256color',
-        SHELL: userShell, // Explicit shell - Zellij needs this to spawn terminal panes
-        HOME: actualHome, // Ensure Zellij uses correct home for cache/config
-        XDG_CACHE_HOME: `${actualHome}/.cache`, // Explicit cache dir
-        XDG_CONFIG_HOME: `${actualHome}/.config`, // Explicit config dir
-      },
-    });
-
     ptyProcess = pty;
-    currentSessionName = sessionName; // Store for tab management
     currentPtyCols = cols || 80;
     currentPtyRows = rows || 24;
 
@@ -226,7 +243,7 @@ export async function handleZellijAttach(
     let firstOutputLogged = false;
     pty.onData((data) => {
       if (!firstOutputLogged) {
-        logTime('First PTY output received (Zellij ready)');
+        logTime(`First PTY output received (${mode === 'shell' ? 'shell' : 'Zellij'} ready)`);
         firstOutputLogged = true;
       }
       socket.emit('terminal:output', {
@@ -278,52 +295,71 @@ export async function handleZellijAttach(
       }
     });
 
-    // Listen for tab commands (from daemon when user switches worktrees)
-    socket.on('terminal:tab', async (data: { action: string; tabName: string; cwd?: string }) => {
-      await handleTabAction(data.action, data.tabName, data.cwd);
-    });
+    // Listen for tab commands (from daemon when user switches worktrees) - Zellij only
+    if (mode === 'zellij') {
+      socket.on('terminal:tab', async (data: { action: string; tabName: string; cwd?: string }) => {
+        await handleTabAction(data.action, data.tabName, data.cwd);
+      });
+    }
 
     // Listen for redraw requests (when client reconnects)
-    // Trigger resize to force Zellij to redraw via SIGWINCH
+    // Trigger resize to force redraw via SIGWINCH
     socket.on('terminal:redraw', (data: { userId: string; worktreeId?: string }) => {
       if (data.userId !== userId) return;
       if (worktreeId && data.worktreeId !== worktreeId) return;
       if (ptyProcess) {
-        // Toggle size to force Zellij full redraw (including tab bar and status)
+        // Toggle size to force redraw via SIGWINCH
         ptyProcess.resize(currentPtyCols, currentPtyRows - 1);
         setTimeout(() => {
           if (ptyProcess) {
             ptyProcess.resize(currentPtyCols, currentPtyRows);
-            // Send Enter to show prompt (creates new line but confirms connection)
-            setTimeout(() => {
-              if (ptyProcess) {
-                ptyProcess.write('\r');
-              }
-            }, 100);
+            // For Zellij, send Enter to refresh prompt after redraw
+            // For shell mode, resize is enough - no need for extra enter
+            if (mode === 'zellij') {
+              setTimeout(() => {
+                if (ptyProcess) {
+                  ptyProcess.write('\r');
+                }
+              }, 100);
+            }
           }
         }, 50);
       }
     });
 
-    // Create initial tab if specified
-    if (tabName) {
-      // Wait a moment for zellij to initialize
-      setTimeout(() => {
-        handleTabAction('create', tabName, cwd);
-      }, 500);
-    }
+    // Zellij-specific setup
+    if (mode === 'zellij') {
+      // Create initial tab if specified
+      if (tabName) {
+        // Wait a moment for zellij to initialize
+        setTimeout(() => {
+          handleTabAction('create', tabName, cwd);
+        }, 500);
+      }
 
-    // Source env file after Zellij initializes (user env vars like API keys)
-    if (envFile && ptyProcess) {
-      // Wait for shell to be ready, then source env file
-      setTimeout(() => {
-        if (ptyProcess) {
-          // Source the env file silently (suppress output, ignore errors if file doesn't exist)
-          const sourceCmd = `[ -f '${envFile}' ] && source '${envFile}' 2>/dev/null; clear\r`;
-          ptyProcess.write(sourceCmd);
-          console.log(`[zellij.attach] Sourced env file: ${envFile}`);
-        }
-      }, 800); // Wait longer than tab creation to ensure shell is ready
+      // Source env file after Zellij initializes (user env vars like API keys)
+      if (envFile && ptyProcess) {
+        // Wait for shell to be ready, then source env file
+        setTimeout(() => {
+          if (ptyProcess) {
+            // Source the env file silently (suppress output, ignore errors if file doesn't exist)
+            const sourceCmd = `[ -f '${envFile}' ] && source '${envFile}' 2>/dev/null; clear\r`;
+            ptyProcess.write(sourceCmd);
+            console.log(`[zellij.attach] Sourced env file: ${envFile}`);
+          }
+        }, 800); // Wait longer than tab creation to ensure shell is ready
+      }
+    } else {
+      // Shell mode: source env file if provided
+      if (envFile && ptyProcess) {
+        setTimeout(() => {
+          if (ptyProcess) {
+            const sourceCmd = `[ -f '${envFile}' ] && source '${envFile}' 2>/dev/null; clear\r`;
+            ptyProcess.write(sourceCmd);
+            console.log(`[terminal.attach] Sourced env file: ${envFile}`);
+          }
+        }, 300); // Shorter wait for direct shell
+      }
     }
 
     // Return success - executor stays running until PTY exits
@@ -331,7 +367,8 @@ export async function handleZellijAttach(
       success: true,
       data: {
         pid: pty.pid,
-        sessionName,
+        sessionName: mode === 'zellij' ? sessionName : undefined,
+        mode,
         userId,
         channel: `user/${userId}/terminal`,
       },

@@ -88,10 +88,19 @@ export interface EventStreamPreferences {
 }
 
 /**
+ * Terminal preferences
+ */
+export interface TerminalPreferences {
+  /** Terminal mode: 'zellij' (session persistence) or 'shell' (simple, no persistence) */
+  mode: 'zellij' | 'shell';
+}
+
+/**
  * User preferences structure
  */
 export interface UserPreferences {
   audio?: AudioPreferences;
+  terminal?: TerminalPreferences;
   eventStream?: EventStreamPreferences;
   // Future preferences can be added here
   [key: string]: unknown;

@@ -423,10 +423,17 @@ export type UnixSyncUserPayload = z.infer<typeof UnixSyncUserPayloadSchema>;
 // ═══════════════════════════════════════════════════════════
 
 /**
- * Zellij attach payload - attach to or create Zellij session
+ * Terminal mode - Zellij (session persistence, tabs) or shell (simple, no persistence)
+ */
+export const TerminalModeSchema = z.enum(['zellij', 'shell']);
+export type TerminalMode = z.infer<typeof TerminalModeSchema>;
+
+/**
+ * Terminal attach payload - attach to Zellij session or spawn shell directly
  *
- * This spawns a PTY, runs zellij attach, and streams I/O over Feathers channels.
- * One executor per user - handles all tabs for that user.
+ * This spawns a PTY and streams I/O over Feathers channels.
+ * Mode 'zellij': runs zellij attach, supports tabs/persistence
+ * Mode 'shell': spawns shell directly (bash/zsh/ash/sh), simpler but no persistence
  */
 export const ZellijAttachPayloadSchema = BasePayloadSchema.extend({
   command: z.literal('zellij.attach'),
@@ -441,13 +448,13 @@ export const ZellijAttachPayloadSchema = BasePayloadSchema.extend({
     /** Worktree ID (for channel isolation) */
     worktreeId: z.string().uuid().optional(),
 
-    /** Zellij session name (e.g., "agor-max") */
+    /** Zellij session name (e.g., "agor-max") - only used in zellij mode */
     sessionName: z.string(),
 
     /** Initial working directory */
     cwd: z.string(),
 
-    /** Initial tab name (worktree name) */
+    /** Initial tab name (worktree name) - only used in zellij mode */
     tabName: z.string().optional(),
 
     /** Terminal dimensions */
@@ -456,6 +463,9 @@ export const ZellijAttachPayloadSchema = BasePayloadSchema.extend({
 
     /** Path to env file for shell to source (user env vars like API keys) */
     envFile: z.string().nullable().optional(),
+
+    /** Terminal mode: 'zellij' (default) or 'shell' */
+    mode: TerminalModeSchema.optional().default('zellij'),
   }),
 });
 

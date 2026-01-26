@@ -94,6 +94,7 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
         unix_username: userData.unix_username,
         ssh_public_keys: userData.ssh_public_keys,
         eventStreamEnabled: userData.preferences?.eventStream?.enabled ?? true,
+        useZellij: (userData.preferences?.terminal?.mode ?? 'zellij') === 'zellij',
         must_change_password: userData.must_change_password ?? false,
       });
 
@@ -195,6 +196,9 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
             ...user.preferences,
             eventStream: {
               enabled: values.eventStreamEnabled ?? true,
+            },
+            terminal: {
+              mode: values.useZellij !== false ? 'zellij' : 'shell',
             },
           },
         };
@@ -550,6 +554,15 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
               name="eventStreamEnabled"
               valuePropName="checked"
               tooltip="Show/hide the event stream icon in the navbar. When enabled, you can view live WebSocket events for debugging."
+            >
+              <Switch />
+            </Form.Item>
+
+            <Form.Item
+              label="Use Zellij Terminal"
+              name="useZellij"
+              valuePropName="checked"
+              tooltip="Zellij provides session persistence and tabs. When disabled, spawns a simple shell without persistence."
             >
               <Switch />
             </Form.Item>

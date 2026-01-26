@@ -351,6 +351,19 @@ export interface AgorCredentials {
 }
 
 /**
+ * Terminal settings
+ */
+export interface AgorTerminalSettings {
+  /**
+   * Terminal mode: 'zellij' or 'shell'
+   * - 'zellij': Session persistence, tabs, splits (requires Zellij installed)
+   * - 'shell': Direct shell spawn, simpler but no persistence
+   * @default 'zellij'
+   */
+  mode?: 'zellij' | 'shell';
+}
+
+/**
  * Complete Agor configuration
  */
 export interface AgorConfig {
@@ -383,6 +396,9 @@ export interface AgorConfig {
 
   /** Tool credentials (API keys, tokens) */
   credentials?: AgorCredentials;
+
+  /** Terminal settings */
+  terminal?: AgorTerminalSettings;
 }
 
 /**
@@ -398,4 +414,5 @@ export type ConfigKey =
   | `codex.${keyof AgorCodexSettings}`
   | `execution.${keyof AgorExecutionSettings}`
   | `paths.${keyof AgorPathSettings}`
-  | `credentials.${keyof AgorCredentials}`;
+  | `credentials.${keyof AgorCredentials}`
+  | `terminal.${keyof AgorTerminalSettings}`;

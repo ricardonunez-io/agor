@@ -180,6 +180,21 @@ export class ConfigService {
       }
     }
 
+    // Allow updating terminal configuration
+    if (data.terminal) {
+      if (!config.terminal) {
+        config.terminal = {};
+      }
+
+      if (data.terminal.mode !== undefined) {
+        if (data.terminal.mode === 'zellij' || data.terminal.mode === 'shell') {
+          config.terminal.mode = data.terminal.mode;
+        } else {
+          throw new Error('terminal.mode must be "zellij" or "shell"');
+        }
+      }
+    }
+
     await saveConfig(config);
     console.log('[Config Service] Config saved successfully');
 

@@ -250,37 +250,59 @@ export class TerminalsService {
     // Key by user+worktree so each worktree gets its own executor (important for container isolation)
     const executorKey = `${userId}:${data.worktreeId || 'default'}`;
 
+    // Load config early to check container isolation
+    const config = await loadConfig();
+    const containerIsolationEnabled = config.execution?.container_isolation === true;
+
     // Check if this user+worktree already has an executor running
+    // For container execution, we need to verify the container is still running
+    // since container restarts kill the executor but we don't get notified
     const existing = this.executorTerminals.get(executorKey);
     if (existing) {
-      // Request screen redraw after a short delay to let client join channel first
-      setTimeout(() => {
-        this.app.io?.to(`user/${userId}/terminal`).emit('terminal:redraw', {
-          userId,
-          worktreeId: data.worktreeId
-        });
-      }, 200);
-
-      // Get worktree name for display
-      let worktreeName: string | undefined;
-      if (data.worktreeId) {
-        const worktreeRepo = new WorktreeRepository(this.db);
-        const worktree = await worktreeRepo.findById(data.worktreeId);
-        worktreeName = worktree?.name;
+      // For container isolation, verify container is still running before reusing
+      let containerStillValid = true;
+      if (containerIsolationEnabled && data.worktreeId) {
+        const containersService = (this.app as any).worktreeContainersService;
+        if (containersService) {
+          const containerName = containersService.generateContainerName(data.worktreeId);
+          containerStillValid = await containersService.isContainerRunning(containerName);
+          if (!containerStillValid) {
+            console.log(`[Terminals] Container ${containerName} not running, clearing stale executor tracking`);
+            this.executorTerminals.delete(executorKey);
+          }
+        }
       }
 
-      return {
-        userId,
-        worktreeId: data.worktreeId,
-        channel: `user/${userId}/terminal`,
-        sessionName: existing.sessionName,
-        isNew: false,
-        worktreeName,
-      };
+      if (containerStillValid) {
+        console.log(`[Terminals] Reusing existing executor for ${executorKey} (session: ${existing.sessionName}). Close terminal to apply mode changes.`);
+        // Request screen redraw after a short delay to let client join channel first
+        setTimeout(() => {
+          this.app.io?.to(`user/${userId}/terminal`).emit('terminal:redraw', {
+            userId,
+            worktreeId: data.worktreeId
+          });
+        }, 200);
+
+        // Get worktree name for display
+        let worktreeName: string | undefined;
+        if (data.worktreeId) {
+          const worktreeRepo = new WorktreeRepository(this.db);
+          const worktree = await worktreeRepo.findById(data.worktreeId);
+          worktreeName = worktree?.name;
+        }
+
+        return {
+          userId,
+          worktreeId: data.worktreeId,
+          channel: `user/${userId}/terminal`,
+          sessionName: existing.sessionName,
+          isNew: false,
+          worktreeName,
+        };
+      }
     }
 
     // Resolve Unix user for impersonation
-    const config = await loadConfig();
     const unixUserMode = config.execution?.unix_user_mode ?? 'simple';
     const executorUser = config.execution?.executor_unix_user;
 
@@ -288,6 +310,7 @@ export class TerminalsService {
     let userUnixUid: number | undefined;
     let userSshPublicKeys: string | undefined;
     let containerUsername: string = 'developer'; // Default for container execution
+    let terminalMode: 'zellij' | 'shell' = 'zellij'; // Default terminal mode
     const usersRepo = new UsersRepository(this.db);
     try {
       const user = await usersRepo.findById(userId);
@@ -305,6 +328,11 @@ export class TerminalsService {
       if (user?.ssh_public_keys) {
         userSshPublicKeys = user.ssh_public_keys;
       }
+      // Get terminal mode from user preferences
+      if (user?.preferences?.terminal?.mode) {
+        terminalMode = user.preferences.terminal.mode as 'zellij' | 'shell';
+      }
+      console.log(`[Terminals] User ${userId.slice(0, 8)} preferences: terminalMode=${terminalMode}, raw=${JSON.stringify(user?.preferences?.terminal)}`);
     } catch (error) {
       console.warn(`⚠️ Failed to load user ${userId}:`, error);
     }
@@ -332,7 +360,6 @@ export class TerminalsService {
     let worktreeName: string | undefined;
     let containerName: string | undefined;
     let containerRunning = false;
-    let containerIsolationEnabled = config.execution?.container_isolation === true;
 
     if (data.worktreeId) {
       const worktreeRepo = new WorktreeRepository(this.db);
@@ -486,7 +513,7 @@ export class TerminalsService {
     const executorEnv = await createUserProcessEnvironment(userId, this.db);
 
     const spawnStartTime = Date.now();
-    console.log(`[Terminals] Spawning executor: container=${containerName || 'none'}, daemonUrl=${daemonUrl}, cwd=${cwd}`);
+    console.log(`[Terminals] Spawning executor: container=${containerName || 'none'}, daemonUrl=${daemonUrl}, cwd=${cwd}, mode=${terminalMode}`);
 
     // Spawn executor with zellij.attach command
     spawnExecutorFireAndForget(
@@ -503,6 +530,7 @@ export class TerminalsService {
           cols: data.cols || 160,
           rows: data.rows || 40,
           envFile: useContainerExecution ? undefined : envFile, // Don't use envFile in container mode
+          mode: terminalMode, // Terminal mode: 'zellij' or 'shell'
         },
       },
       {
