@@ -435,8 +435,11 @@ export const ZellijAttachPayloadSchema = BasePayloadSchema.extend({
   sessionToken: z.string(),
 
   params: z.object({
-    /** User ID (for channel: user/${userId}/terminal) */
+    /** User ID (for channel isolation) */
     userId: z.string().uuid(),
+
+    /** Worktree ID (for channel isolation) */
+    worktreeId: z.string().uuid().optional(),
 
     /** Zellij session name (e.g., "agor-max") */
     sessionName: z.string(),

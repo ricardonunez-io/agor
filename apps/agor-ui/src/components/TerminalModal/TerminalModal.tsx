@@ -120,20 +120,22 @@ export const TerminalModal: React.FC<TerminalModalProps> = ({
     };
 
     // Channel-based event handlers
-    const handleChannelOutput = (payload: { userId: string; data: string }) => {
+    // Filter by userId AND worktreeId for isolation
+    const handleChannelOutput = (payload: { userId: string; worktreeId?: string; data: string }) => {
       if (!terminalRef.current) return;
-      if (payload.userId === user?.user_id) {
-        terminalRef.current.write(transformData(payload.data));
-      }
+      if (payload.userId !== user?.user_id) return;
+      // Filter by worktreeId if this terminal is for a specific worktree
+      if (worktreeId && payload.worktreeId !== worktreeId) return;
+      terminalRef.current.write(transformData(payload.data));
     };
 
-    const handleChannelExit = (payload: { userId: string; exitCode: number }) => {
+    const handleChannelExit = (payload: { userId: string; worktreeId?: string; exitCode: number }) => {
       if (!terminalRef.current) return;
-      if (payload.userId === user?.user_id) {
-        terminalRef.current.writeln(`\r\n\r\n[Terminal exited with code ${payload.exitCode}]`);
-        terminalRef.current.writeln('[Close and reopen terminal to start a new session]');
-        setIsConnected(false);
-      }
+      if (payload.userId !== user?.user_id) return;
+      if (worktreeId && payload.worktreeId !== worktreeId) return;
+      terminalRef.current.writeln(`\r\n\r\n[Terminal exited with code ${payload.exitCode}]`);
+      terminalRef.current.writeln('[Close and reopen terminal to start a new session]');
+      setIsConnected(false);
     };
 
     // Create xterm instance with common configuration
@@ -244,6 +246,7 @@ export const TerminalModal: React.FC<TerminalModalProps> = ({
         terminal.onData((data) => {
           socket.emit('terminal:input', {
             userId: user?.user_id,
+            worktreeId,
             input: data,
           });
         });
@@ -252,6 +255,7 @@ export const TerminalModal: React.FC<TerminalModalProps> = ({
         terminal.onResize(({ cols, rows }) => {
           socket.emit('terminal:resize', {
             userId: user?.user_id,
+            worktreeId,
             cols,
             rows,
           });
@@ -261,6 +265,7 @@ export const TerminalModal: React.FC<TerminalModalProps> = ({
         // This ensures the tab bar and status bar are properly rendered
         socket.emit('terminal:resize', {
           userId: user?.user_id,
+          worktreeId,
           cols: terminal.cols,
           rows: terminal.rows,
         });
@@ -270,6 +275,7 @@ export const TerminalModal: React.FC<TerminalModalProps> = ({
           for (const cmd of initialCommands) {
             socket.emit('terminal:input', {
               userId: user?.user_id,
+              worktreeId,
               input: `${cmd}\r`,
             });
           }

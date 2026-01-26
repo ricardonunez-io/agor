@@ -54,7 +54,7 @@ export async function handleZellijAttach(
   payload: ZellijAttachPayload,
   options: CommandOptions
 ): Promise<ExecutorResult> {
-  const { userId, sessionName, cwd, tabName, cols, rows, envFile } = payload.params;
+  const { userId, worktreeId, sessionName, cwd, tabName, cols, rows, envFile } = payload.params;
 
   // Dry run mode
   if (options.dryRun) {
@@ -231,6 +231,7 @@ export async function handleZellijAttach(
       }
       socket.emit('terminal:output', {
         userId,
+        worktreeId,
         data,
       });
     });
@@ -243,6 +244,7 @@ export async function handleZellijAttach(
       // Notify daemon that terminal ended
       socket.emit('terminal:exit', {
         userId,
+        worktreeId,
         exitCode,
         signal,
       });
@@ -257,15 +259,19 @@ export async function handleZellijAttach(
     });
 
     // Listen for input from browser via channel
-    socket.on('terminal:input', (data: { userId: string; input: string }) => {
-      if (data.userId === userId && ptyProcess) {
+    socket.on('terminal:input', (data: { userId: string; worktreeId?: string; input: string }) => {
+      if (data.userId !== userId) return;
+      if (worktreeId && data.worktreeId !== worktreeId) return;
+      if (ptyProcess) {
         ptyProcess.write(data.input);
       }
     });
 
     // Listen for resize events
-    socket.on('terminal:resize', (data: { userId: string; cols: number; rows: number }) => {
-      if (data.userId === userId && ptyProcess) {
+    socket.on('terminal:resize', (data: { userId: string; worktreeId?: string; cols: number; rows: number }) => {
+      if (data.userId !== userId) return;
+      if (worktreeId && data.worktreeId !== worktreeId) return;
+      if (ptyProcess) {
         currentPtyCols = data.cols;
         currentPtyRows = data.rows;
         ptyProcess.resize(data.cols, data.rows);
@@ -279,9 +285,23 @@ export async function handleZellijAttach(
 
     // Listen for redraw requests (when client reconnects)
     // Trigger resize to force Zellij to redraw via SIGWINCH
-    socket.on('terminal:redraw', (data: { userId: string }) => {
-      if (data.userId === userId && ptyProcess) {
-        ptyProcess.resize(currentPtyCols, currentPtyRows);
+    socket.on('terminal:redraw', (data: { userId: string; worktreeId?: string }) => {
+      if (data.userId !== userId) return;
+      if (worktreeId && data.worktreeId !== worktreeId) return;
+      if (ptyProcess) {
+        // Toggle size to force Zellij full redraw (including tab bar and status)
+        ptyProcess.resize(currentPtyCols, currentPtyRows - 1);
+        setTimeout(() => {
+          if (ptyProcess) {
+            ptyProcess.resize(currentPtyCols, currentPtyRows);
+            // Send Enter to show prompt (creates new line but confirms connection)
+            setTimeout(() => {
+              if (ptyProcess) {
+                ptyProcess.write('\r');
+              }
+            }, 100);
+          }
+        }, 50);
       }
     });
 

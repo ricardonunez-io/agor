@@ -174,6 +174,7 @@ export class TerminalsService {
     params?: AuthenticatedParams
   ): Promise<{
     userId: UserID;
+    worktreeId?: WorktreeID;
     channel: string;
     sessionName: string;
     isNew: boolean;
@@ -205,14 +206,14 @@ export class TerminalsService {
   }
 
   /**
-   * Active executor processes per user
-   * Key: userId, Value: { process pid, sessionName, worktrees }
+   * Active executor processes per user+worktree
+   * Key: `${userId}:${worktreeId}` - each worktree gets its own executor
+   * This ensures container isolation works (each container has its own executor)
    */
   private executorTerminals: Map<
-    UserID,
+    string,
     {
       sessionName: string;
-      activeWorktrees: Set<WorktreeID | 'default'>;
       startedAt: Date;
     }
   > = new Map();
@@ -235,6 +236,7 @@ export class TerminalsService {
     params?: AuthenticatedParams
   ): Promise<{
     userId: UserID;
+    worktreeId?: WorktreeID;
     channel: string;
     sessionName: string;
     isNew: boolean;
@@ -245,51 +247,35 @@ export class TerminalsService {
       throw new Error('Authentication required for executor terminal');
     }
 
-    // Check if user already has an executor running
-    const existing = this.executorTerminals.get(userId);
-    if (existing) {
-      // Add worktree to active set
-      const worktreeKey = data.worktreeId || 'default';
-      existing.activeWorktrees.add(worktreeKey);
+    // Key by user+worktree so each worktree gets its own executor (important for container isolation)
+    const executorKey = `${userId}:${data.worktreeId || 'default'}`;
 
-      // If worktree specified, tell executor to create/focus tab
+    // Check if this user+worktree already has an executor running
+    const existing = this.executorTerminals.get(executorKey);
+    if (existing) {
+      // Request screen redraw after a short delay to let client join channel first
+      setTimeout(() => {
+        this.app.io?.to(`user/${userId}/terminal`).emit('terminal:redraw', {
+          userId,
+          worktreeId: data.worktreeId
+        });
+      }, 200);
+
+      // Get worktree name for display
+      let worktreeName: string | undefined;
       if (data.worktreeId) {
         const worktreeRepo = new WorktreeRepository(this.db);
         const worktree = await worktreeRepo.findById(data.worktreeId);
-        if (worktree) {
-          // Emit tab command via channel - executor will handle it
-          this.app.io?.to(`user/${userId}/terminal`).emit('terminal:tab', {
-            userId,
-            action: 'create',
-            tabName: worktree.name,
-            cwd: worktree.path,
-          });
-
-          // Request screen redraw after a short delay to let client join channel first
-          setTimeout(() => {
-            this.app.io?.to(`user/${userId}/terminal`).emit('terminal:redraw', { userId });
-          }, 200);
-
-          return {
-            userId,
-            channel: `user/${userId}/terminal`,
-            sessionName: existing.sessionName,
-            isNew: false,
-            worktreeName: worktree.name,
-          };
-        }
+        worktreeName = worktree?.name;
       }
-
-      // Request screen redraw after a short delay to let client join channel first
-      setTimeout(() => {
-        this.app.io?.to(`user/${userId}/terminal`).emit('terminal:redraw', { userId });
-      }, 200);
 
       return {
         userId,
+        worktreeId: data.worktreeId,
         channel: `user/${userId}/terminal`,
         sessionName: existing.sessionName,
         isNew: false,
+        worktreeName,
       };
     }
 
@@ -476,9 +462,10 @@ export class TerminalsService {
       }
     }
 
-    // Build Zellij session name
+    // Build Zellij session name - include worktreeId for isolation
     const userSessionSuffix = formatShortId(userId);
-    const sessionName = `agor-${userSessionSuffix}`;
+    const worktreeSessionSuffix = data.worktreeId ? formatShortId(data.worktreeId) : 'default';
+    const sessionName = `agor-${userSessionSuffix}-${worktreeSessionSuffix}`;
 
     // Determine spawn options based on container isolation
     const useContainerExecution = containerIsolationEnabled && containerName;
@@ -509,6 +496,7 @@ export class TerminalsService {
         daemonUrl,
         params: {
           userId,
+          worktreeId: data.worktreeId, // For event filtering
           sessionName,
           cwd,
           tabName: worktreeName,
@@ -534,14 +522,13 @@ export class TerminalsService {
             }
           : undefined,
         // Clean up map when executor exits (handles crashes too)
-        onExit: () => this.handleExecutorExit(userId),
+        onExit: () => this.handleExecutorExit(executorKey),
       }
     );
 
-    // Track the executor
-    this.executorTerminals.set(userId, {
+    // Track the executor by user+worktree
+    this.executorTerminals.set(executorKey, {
       sessionName,
-      activeWorktrees: new Set([data.worktreeId || 'default']),
       startedAt: new Date(),
     });
 
@@ -549,6 +536,7 @@ export class TerminalsService {
 
     return {
       userId,
+      worktreeId: data.worktreeId,
       channel: `user/${userId}/terminal`,
       sessionName,
       isNew: true,
@@ -558,9 +546,6 @@ export class TerminalsService {
 
   /**
    * Close executor terminal for a worktree
-   *
-   * If this is the last active worktree, the executor will exit naturally
-   * when the user detaches from Zellij.
    */
   async closeExecutorTerminal(
     data: { worktreeId?: WorktreeID },
@@ -571,20 +556,12 @@ export class TerminalsService {
       throw new Error('Authentication required');
     }
 
-    const executor = this.executorTerminals.get(userId);
-    if (!executor) {
+    const executorKey = `${userId}:${data.worktreeId || 'default'}`;
+    if (!this.executorTerminals.has(executorKey)) {
       return { closed: false };
     }
 
-    const worktreeKey = data.worktreeId || 'default';
-    executor.activeWorktrees.delete(worktreeKey);
-
-    // If no more active worktrees, mark executor for cleanup
-    // The executor will exit when Zellij detaches
-    if (executor.activeWorktrees.size === 0) {
-      this.executorTerminals.delete(userId);
-    }
-
+    this.executorTerminals.delete(executorKey);
     return { closed: true };
   }
 
@@ -600,8 +577,8 @@ export class TerminalsService {
   /**
    * Handle executor terminal exit (called from channel event)
    */
-  handleExecutorExit(userId: UserID): void {
-    this.executorTerminals.delete(userId);
-    console.log(`[TerminalsService] Executor terminal exited for user ${userId.slice(0, 8)}`);
+  handleExecutorExit(executorKey: string): void {
+    this.executorTerminals.delete(executorKey);
+    console.log(`[TerminalsService] Executor terminal exited: ${executorKey}`);
   }
 }
