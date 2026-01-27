@@ -47,6 +47,33 @@ interface CreateTerminalData {
 }
 
 /**
+ * Build filtered environment variables for container execution
+ * Only includes user-defined vars from DB + standard API keys from host
+ * This avoids passing 70+ system env vars to docker
+ */
+function buildContainerEnvVars(executorEnv: Record<string, string>): Record<string, string> {
+  const containerEnv: Record<string, string> = {};
+
+  // 1. Add user-defined vars from database (tracked in AGOR_USER_ENV_KEYS)
+  const userDefinedKeys = (executorEnv.AGOR_USER_ENV_KEYS || '').split(',').filter(Boolean);
+  for (const key of userDefinedKeys) {
+    if (executorEnv[key]) {
+      containerEnv[key] = executorEnv[key];
+    }
+  }
+
+  // 2. Add standard API keys from host environment (always pass these if present)
+  const apiKeyNames = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY', 'GITHUB_TOKEN'];
+  for (const key of apiKeyNames) {
+    if (executorEnv[key] && !containerEnv[key]) {
+      containerEnv[key] = executorEnv[key];
+    }
+  }
+
+  return containerEnv;
+}
+
+/**
  * Check if Zellij is installed
  */
 function isZellijAvailable(): boolean {
@@ -430,11 +457,16 @@ export class TerminalsService {
       }
     }
 
+    // Build executor environment early (needed for user creation in container)
+    const executorEnv = await createUserProcessEnvironment(userId, this.db);
+    const containerEnvVars = containerIsolationEnabled ? buildContainerEnvVars(executorEnv) : undefined;
+
     // Ensure user exists in container before spawning terminal
     // Uses the centralized createUserInContainer() which sets up:
     // - User account with home directory
     // - Shared AI session directory (~/.claude -> /workspace/.agor/claude/)
     // - Podman socket access
+    // - User-specific env vars (API keys for SSH sessions)
     if (containerIsolationEnabled && containerName && containerRunning) {
       const containersService = (this.app as any).worktreeContainersService;
       const runtime = config.execution?.containers?.runtime || 'docker';
@@ -445,6 +477,7 @@ export class TerminalsService {
           containerName,
           unixUsername: containerUsername,
           unixUid: userUnixUid,
+          envVars: containerEnvVars,
         });
         console.log(`[Terminals] User creation took ${Date.now() - userStartTime}ms`);
 
@@ -494,33 +527,42 @@ export class TerminalsService {
     const worktreeSessionSuffix = data.worktreeId ? formatShortId(data.worktreeId) : 'default';
     const sessionName = `agor-${userSessionSuffix}-${worktreeSessionSuffix}`;
 
-    // Determine spawn options based on container isolation
-    const useContainerExecution = containerIsolationEnabled && containerName;
+    // Determine if using container execution
+    const useContainerExecution = containerIsolationEnabled && containerName && containerRunning;
 
-    // Generate session token for executor
-    // For container execution, use host.docker.internal to reach the host daemon
+    // Generate session token for executor (executor always runs on host now)
     const daemonPort = config.daemon?.port || 3030;
-    const daemonUrl = useContainerExecution
-      ? `http://host.docker.internal:${daemonPort}`
-      : `http://localhost:${daemonPort}`;
+    const daemonUrl = `http://localhost:${daemonPort}`;
     const sessionToken = generateSessionToken(this.app);
 
-    // Get user environment and write env file for shell sourcing
+    // Get user environment and write env file for shell sourcing (local mode only)
     const userEnv = await resolveUserEnvironment(userId, this.db);
-    const envFile = writeEnvFile(userId, userEnv, finalUnixUser);
+    const envFile = useContainerExecution ? null : writeEnvFile(userId, userEnv, finalUnixUser);
 
-    // Get executor process environment (includes system vars)
-    const executorEnv = await createUserProcessEnvironment(userId, this.db);
+    // executorEnv and containerEnvVars were already created earlier (before user creation)
 
     const spawnStartTime = Date.now();
-    console.log(`[Terminals] Spawning executor: container=${containerName || 'none'}, daemonUrl=${daemonUrl}, cwd=${cwd}, mode=${terminalMode}`);
+    console.log(`[Terminals] Spawning executor on HOST: container=${containerName || 'none'}, mode=${terminalMode}`);
 
-    // Spawn executor with zellij.attach command
+    // Build container options if using container execution
+    const containerOptions = useContainerExecution
+      ? {
+          name: containerName!,
+          runtime: (config.execution?.containers?.runtime || 'docker') as 'docker' | 'podman',
+          user: userUnixUid ? String(userUnixUid) : containerUsername,
+          workdir: cwd,
+        }
+      : undefined;
+
+    // Spawn executor on HOST with zellij.attach command
+    // Executor handles docker exec internally when container is specified
+    // Env vars are passed via docker exec -e flags (user-level, not container-level)
     spawnExecutorFireAndForget(
       {
         command: 'zellij.attach',
         sessionToken,
         daemonUrl,
+        env: containerEnvVars, // Pass env vars in payload for container mode
         params: {
           userId,
           worktreeId: data.worktreeId, // For event filtering
@@ -529,26 +571,15 @@ export class TerminalsService {
           tabName: worktreeName,
           cols: data.cols || 160,
           rows: data.rows || 40,
-          envFile: useContainerExecution ? undefined : envFile, // Don't use envFile in container mode
+          envFile, // Only set for local mode
           mode: terminalMode, // Terminal mode: 'zellij' or 'shell'
+          container: containerOptions, // Container info for docker exec
         },
       },
       {
         logPrefix: `[TerminalsService.executor ${userId.slice(0, 8)}]`,
-        asUser: useContainerExecution ? undefined : (finalUnixUser || undefined), // Don't use asUser in container mode
+        asUser: useContainerExecution ? undefined : (finalUnixUser || undefined), // Only impersonate for local mode
         env: executorEnv,
-        // Container execution options (only when worktree has a running container)
-        containerExecution: useContainerExecution
-          ? {
-              containerName: containerName!,
-              // Prefer UID for permission matching (consistent with NFS)
-              // Fall back to derived/configured username
-              containerUid: userUnixUid,
-              containerUser: userUnixUid ? undefined : containerUsername,
-              containerCwd: cwd,
-              runtime: config.execution?.containers?.runtime || 'docker',
-            }
-          : undefined,
         // Clean up map when executor exits (handles crashes too)
         onExit: () => this.handleExecutorExit(executorKey),
       }

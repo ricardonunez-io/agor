@@ -55,9 +55,9 @@ export async function handleZellijAttach(
   payload: ZellijAttachPayload,
   options: CommandOptions
 ): Promise<ExecutorResult> {
-  const { userId, worktreeId, sessionName, cwd, tabName, cols, rows, envFile, mode = 'zellij' } = payload.params;
+  const { userId, worktreeId, sessionName, cwd, tabName, cols, rows, envFile, mode = 'zellij', container } = payload.params;
 
-  console.log(`[zellij.attach] Terminal mode: ${mode} (from payload: ${payload.params.mode})`);
+  console.log(`[zellij.attach] Terminal mode: ${mode}, container: ${container?.name || 'none'}`);
 
   // Dry run mode
   if (options.dryRun) {
@@ -186,7 +186,7 @@ export async function handleZellijAttach(
     }
     logTime(`User info resolved: home=${actualHome}, shell=${userShell}`);
 
-    // Spawn PTY based on mode
+    // Spawn PTY based on mode and container setting
     let pty: IPty;
     const ptyEnv = {
       ...cleanEnv,
@@ -197,8 +197,62 @@ export async function handleZellijAttach(
       XDG_CONFIG_HOME: `${actualHome}/.config`,
     };
 
-    if (mode === 'shell') {
-      // Shell mode: spawn shell directly (no Zellij)
+    if (container) {
+      // Container mode: spawn via docker exec
+      const runtime = container.runtime || 'docker';
+      const containerUser = container.user;
+      const containerWorkdir = container.workdir || '/workspace';
+
+      // Build docker exec command
+      const dockerArgs: string[] = ['exec', '-it'];
+
+      // Add user if specified
+      if (containerUser) {
+        dockerArgs.push('-u', containerUser);
+      }
+
+      // Add working directory
+      dockerArgs.push('-w', containerWorkdir);
+
+      // Add environment variables
+      dockerArgs.push('-e', 'TERM=xterm-256color');
+
+      // Pass env vars from payload (API keys, etc.)
+      if (payload.env && Object.keys(payload.env).length > 0) {
+        console.log(`[zellij.attach] Passing ${Object.keys(payload.env).length} env vars to container`);
+        for (const [key, value] of Object.entries(payload.env)) {
+          // Skip HOME - container has its own home directory
+          if (key !== 'HOME' && value) {
+            dockerArgs.push('-e', `${key}=${value}`);
+          }
+        }
+      }
+
+      // Add container name
+      dockerArgs.push(container.name);
+
+      // Add shell command (always use shell in container mode for now)
+      // Zellij inside container requires zellij to be installed in the image
+      if (mode === 'zellij') {
+        dockerArgs.push('zellij', 'attach', sessionName, '--create');
+        currentSessionName = sessionName;
+      } else {
+        // Shell mode - use bash or sh
+        dockerArgs.push('bash', '-l');
+      }
+
+      logTime(`Spawning PTY via ${runtime}: ${dockerArgs.join(' ')}`);
+      console.log(`[terminal.attach] Container mode - Container: ${container.name}, Size: ${cols}x${rows}`);
+
+      pty = nodePty.spawn(runtime, dockerArgs, {
+        name: 'xterm-256color',
+        cols: cols || 80,
+        rows: rows || 24,
+        cwd: process.cwd(), // CWD is inside container via -w flag
+        env: ptyEnv,
+      });
+    } else if (mode === 'shell') {
+      // Local shell mode: spawn shell directly (no Zellij)
       logTime(`Spawning PTY: ${userShell} (shell mode)`);
       console.log(`[terminal.attach] Shell mode - CWD: ${cwd}, Size: ${cols}x${rows}`);
 
@@ -210,7 +264,7 @@ export async function handleZellijAttach(
         env: ptyEnv,
       });
     } else {
-      // Zellij mode: spawn zellij attach (default)
+      // Local Zellij mode: spawn zellij attach (default)
       // Ensure Zellij cache directory exists
       const zellijCacheDir = `${actualHome}/.cache/zellij`;
       if (!fs.existsSync(zellijCacheDir)) {
@@ -295,8 +349,9 @@ export async function handleZellijAttach(
       }
     });
 
-    // Listen for tab commands (from daemon when user switches worktrees) - Zellij only
-    if (mode === 'zellij') {
+    // Listen for tab commands (from daemon when user switches worktrees) - Zellij local mode only
+    // In container mode, zellij runs inside container and can't be controlled from host
+    if (mode === 'zellij' && !container) {
       socket.on('terminal:tab', async (data: { action: string; tabName: string; cwd?: string }) => {
         await handleTabAction(data.action, data.tabName, data.cwd);
       });
@@ -327,9 +382,9 @@ export async function handleZellijAttach(
       }
     });
 
-    // Zellij-specific setup
-    if (mode === 'zellij') {
-      // Create initial tab if specified
+    // Zellij-specific setup (skip tab creation in container mode - zellij runs inside container)
+    if (mode === 'zellij' && !container) {
+      // Create initial tab if specified (only in local mode)
       if (tabName) {
         // Wait a moment for zellij to initialize
         setTimeout(() => {

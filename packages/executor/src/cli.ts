@@ -111,6 +111,8 @@ async function handlePromptPayload(
   payload: PromptPayload,
   options: { dryRun: boolean }
 ): Promise<void> {
+  const container = payload.params.container;
+
   if (options.dryRun) {
     console.log(
       JSON.stringify({
@@ -122,6 +124,7 @@ async function handlePromptPayload(
           taskId: payload.params.taskId,
           tool: payload.params.tool,
           cwd: payload.params.cwd,
+          container: container?.name || 'none',
           envVars: payload.env ? Object.keys(payload.env).length : 0,
         },
       })
@@ -130,15 +133,19 @@ async function handlePromptPayload(
   }
 
   // =========================================================================
-  // APPLY ENVIRONMENT VARIABLES FROM PAYLOAD
-  //
-  // When executor is spawned via impersonation (sudo su -), the parent
-  // process environment is lost. The daemon passes env vars in the payload,
-  // and we apply them here before starting the SDK.
-  //
-  // IMPORTANT: Skip HOME - in container execution, docker exec sets the correct
-  // HOME for the container user. The payload contains the HOST's HOME which is wrong.
+  // CONTAINER MODE: Spawn AI agent CLI via docker exec
   // =========================================================================
+  if (container) {
+    console.log(`[executor] Container mode: spawning ${payload.params.tool} in ${container.name}`);
+    await handlePromptInContainer(payload, container);
+    return;
+  }
+
+  // =========================================================================
+  // LOCAL MODE: Use SDK directly
+  // =========================================================================
+
+  // Apply environment variables from payload
   if (payload.env && Object.keys(payload.env).length > 0) {
     const skipKeys = ['HOME']; // Don't overwrite HOME set by docker exec
     const filteredEnv = Object.entries(payload.env).filter(([key]) => !skipKeys.includes(key));
@@ -167,10 +174,130 @@ async function handlePromptPayload(
     tool: payload.params.tool,
     permissionMode: payload.params.permissionMode,
     daemonUrl: payload.daemonUrl || 'http://localhost:3030',
-    cwd: payload.params.cwd, // Override CWD for container execution
+    cwd: payload.params.cwd,
   });
 
   await executor.start();
+}
+
+/**
+ * Handle prompt execution inside a container via docker exec
+ *
+ * Spawns the AI agent CLI directly inside the container and streams output
+ * back to the daemon via WebSocket.
+ */
+async function handlePromptInContainer(
+  payload: PromptPayload,
+  container: { name: string; runtime?: 'docker' | 'podman'; user?: string; workdir?: string }
+): Promise<void> {
+  const nodePty = await import('node-pty');
+  const { createFeathersClient } = await import('./services/feathers-client.js');
+
+  const runtime = container.runtime || 'docker';
+  const workdir = container.workdir || '/workspace';
+  const tool = payload.params.tool;
+
+  // Map tool to CLI command (same flags as SDK mode)
+  const toolCommands: Record<string, { cmd: string; args: string[] }> = {
+    'claude-code': { cmd: 'claude', args: ['--print', '--output-format', 'stream-json'] },
+    'gemini': { cmd: 'gemini', args: ['--print'] },
+    'codex': { cmd: 'codex', args: ['--print'] },
+    'opencode': { cmd: 'opencode', args: ['--print'] },
+  };
+
+  const toolConfig = toolCommands[tool];
+  if (!toolConfig) {
+    console.error(`[executor] Unknown tool: ${tool}`);
+    process.exit(1);
+  }
+
+  // Build docker exec -it command (same as terminals)
+  const dockerArgs: string[] = ['exec', '-it'];
+  if (container.user) dockerArgs.push('-u', container.user);
+  dockerArgs.push('-w', workdir);
+  dockerArgs.push('-e', 'TERM=xterm-256color');
+
+  // Add env vars
+  if (payload.env) {
+    for (const [key, value] of Object.entries(payload.env)) {
+      if (key !== 'HOME' && value) dockerArgs.push('-e', `${key}=${value}`);
+    }
+  }
+
+  // Add permission mode
+  if (payload.params.permissionMode) {
+    toolConfig.args.push('--permission-mode', payload.params.permissionMode);
+  }
+
+  dockerArgs.push(container.name, toolConfig.cmd, ...toolConfig.args, payload.params.prompt);
+
+  console.log(`[executor] Spawning PTY: ${runtime} exec -it ... ${toolConfig.cmd} --print`);
+
+  // Connect to daemon
+  const client = await createFeathersClient(payload.daemonUrl || 'http://localhost:3030', payload.sessionToken);
+
+  const broadcastEvent = async (event: string, data: Record<string, unknown>) => {
+    try {
+      await client.service('/messages/streaming').create({ event, data });
+    } catch (err) {
+      console.error(`[executor] Failed to broadcast ${event}:`, err);
+    }
+  };
+
+  // Spawn with node-pty (same as terminals - provides real TTY)
+  const pty = nodePty.spawn(runtime, dockerArgs, {
+    name: 'xterm-256color',
+    cols: 120,
+    rows: 40,
+  });
+
+  const messageId = `msg-${Date.now()}`;
+
+  // Start streaming
+  console.log(`[executor] Starting stream for session ${payload.params.sessionId}, task ${payload.params.taskId}`);
+  await broadcastEvent('streaming:start', {
+    message_id: messageId,
+    session_id: payload.params.sessionId,
+    task_id: payload.params.taskId,
+    role: 'assistant',
+    timestamp: new Date().toISOString(),
+  });
+
+  pty.onData((data) => {
+    console.log(`[executor] PTY data (${data.length} bytes): ${data.substring(0, 50).replace(/\n/g, '\\n')}...`);
+    broadcastEvent('streaming:chunk', {
+      message_id: messageId,
+      session_id: payload.params.sessionId,
+      chunk: data,
+    });
+  });
+
+  // Wait for exit
+  await new Promise<void>((resolve, reject) => {
+    pty.onExit(async ({ exitCode }) => {
+      await broadcastEvent('streaming:end', {
+        message_id: messageId,
+        session_id: payload.params.sessionId,
+      });
+
+      try {
+        await client.service('tasks').patch(payload.params.taskId, {
+          status: exitCode === 0 ? 'completed' : 'failed',
+          completed_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error('[executor] Failed to update task:', err);
+      }
+
+      if (exitCode === 0) {
+        console.log('[executor] Container prompt completed');
+        resolve();
+      } else {
+        console.error(`[executor] Container prompt failed (code ${exitCode})`);
+        reject(new Error(`Exit code ${exitCode}`));
+      }
+    });
+  });
 }
 
 /**

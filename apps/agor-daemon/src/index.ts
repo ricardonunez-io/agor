@@ -688,34 +688,16 @@ async function main() {
     // - Security: Uses sudo -u (not sudo su) to avoid whitelisting /usr/bin/su
     // =========================================================================
 
-    // Build JSON payload for executor (Phase 2 --stdin mode)
-    // Note: asUser is NOT in payload - impersonation happens at spawn time
-    const executorPayload = {
-      command: 'prompt' as const,
-      sessionToken,
-      daemonUrl,
-      env: executorEnv,
-      params: {
-        sessionId,
-        taskId,
-        prompt: data.prompt,
-        tool: session.agentic_tool as 'claude-code' | 'gemini' | 'codex' | 'opencode',
-        permissionMode: permissionModeForPayload as 'ask' | 'auto' | 'allow-all' | undefined,
-        cwd,
-      },
-    };
-
-    // Spawn executor - use container execution if available, otherwise local
-    let executorProcess: import('node:child_process').ChildProcess;
+    // =========================================================================
+    // BUILD CONTAINER OPTIONS (if using container execution)
+    // =========================================================================
+    let containerOptions: { name: string; runtime: 'docker' | 'podman'; user: string; workdir: string } | undefined;
 
     if (useContainerExecution && worktreeForExecution && containerNameForExecution) {
-      // Container execution mode: spawn via docker exec
-      const containerRuntime = config.execution?.containers?.runtime || 'docker';
+      const containerRuntime = (config.execution?.containers?.runtime || 'docker') as 'docker' | 'podman';
       const containerName = containerNameForExecution;
 
       // Derive container username from session creator
-      // Each user gets their own Unix account for credential isolation (SSH keys, etc.)
-      // But AI session data (~/.claude/) is symlinked to shared location
       let containerUser = sessionUnixUser || 'developer';
       if (!sessionUnixUser && session.created_by) {
         try {
@@ -730,102 +712,105 @@ async function main() {
         }
       }
 
+      // Build filtered env vars for container (API keys + user-defined vars)
+      const containerEnvVars: Record<string, string> = {};
+      const userDefinedKeys = (executorEnv.AGOR_USER_ENV_KEYS || '').split(',').filter(Boolean);
+      for (const key of userDefinedKeys) {
+        if (executorEnv[key]) containerEnvVars[key] = executorEnv[key];
+      }
+      const apiKeyNames = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY', 'GITHUB_TOKEN'];
+      for (const key of apiKeyNames) {
+        if (executorEnv[key] && !containerEnvVars[key]) containerEnvVars[key] = executorEnv[key];
+      }
+
       // Ensure user exists in container before spawning executor
-      // Uses the centralized createUserInContainer() which sets up:
-      // - User account with home directory
-      // - Shared AI session directory (~/.claude -> /workspace/.agor/claude/)
-      // - Podman socket access
+      // Also writes env vars to user's ~/.agor-env for SSH access
       console.log(`[Daemon] Ensuring user '${containerUser}' exists in container ${containerName}`);
       try {
         await worktreeContainersService!.createUserInContainer({
           containerName,
           unixUsername: containerUser,
+          envVars: Object.keys(containerEnvVars).length > 0 ? containerEnvVars : undefined,
         });
       } catch (error) {
         console.warn(`[Daemon] Failed to create user in container (may already exist):`, error);
       }
 
-      // Build docker exec command
-      const dockerArgs: string[] = ['exec', '-i'];
-
-      // Add user flag
-      dockerArgs.push('-u', containerUser);
-
-      // Transform DAEMON_URL for container: localhost/127.0.0.1 -> host.docker.internal
-      // This allows the executor inside the container to reach the daemon on the host
-      const containerDaemonUrl = executorEnv.DAEMON_URL
-        ?.replace('localhost', 'host.docker.internal')
-        .replace('127.0.0.1', 'host.docker.internal');
-
-      // Get user-defined env var keys from profile (ANTHROPIC_API_KEY, GITHUB_TOKEN, etc.)
-      // Don't leak host environment (73 vars!) into container - only pass user profile vars
-      const userDefinedKeys = (executorEnv.AGOR_USER_ENV_KEYS || '').split(',').filter(Boolean);
-
-      // Add environment variables - essential system vars
-      dockerArgs.push('-e', `DAEMON_URL=${containerDaemonUrl}`);
-      dockerArgs.push('-e', 'TERM=xterm-256color');
-      dockerArgs.push('-e', `HOME=/home/${containerUser}`);
-
-      // Add all user-defined env vars from profile
-      for (const key of userDefinedKeys) {
-        if (executorEnv[key]) {
-          dockerArgs.push('-e', `${key}=${executorEnv[key]}`);
-        }
-      }
-
-      // Working directory inside container
-      dockerArgs.push('-w', '/workspace');
-
-      // Container name
-      dockerArgs.push(containerName);
-
-      // Executor path inside container (installed globally via Dockerfile.workspace)
-      const containerExecutorPath = '/usr/local/lib/node_modules/@agor/executor/dist/cli.js';
-      dockerArgs.push('node', containerExecutorPath, '--stdin');
-
-      // Update cwd in payload for container execution
-      executorPayload.params.cwd = '/workspace';
-
-      // Update daemonUrl in payload for container execution (executor reads from payload, not env)
-      (executorPayload as any).daemonUrl = containerDaemonUrl;
-
-      // Filter env in payload for container execution - only user-defined vars
-      // Docker exec already passes these via -e flags, but executor also reads from payload.env
-      const containerPayloadEnv: Record<string, string> = { DAEMON_URL: containerDaemonUrl };
-      for (const key of userDefinedKeys) {
-        if (executorEnv[key]) {
-          containerPayloadEnv[key] = executorEnv[key];
-        }
-      }
-      (executorPayload as any).env = containerPayloadEnv;
-
-      console.log(`[Daemon] Container execution mode: ${containerRuntime} exec ${containerName}`);
-      console.log(`[Daemon] Container user: ${containerUser || 'root'}`);
-
-      executorProcess = spawn(containerRuntime, dockerArgs, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-    } else {
-      // Local execution mode: spawn directly on host
-      // Build spawn command - handles impersonation via sudo -u when executorUnixUser is set
-      const { cmd, args } = buildSpawnArgs('node', [executorPath, '--stdin'], {
-        asUser: executorUnixUser || undefined,
-        env: executorUnixUser ? executorEnv : undefined, // Only inject env when impersonating
-      });
-
-      if (executorUnixUser) {
-        console.log(`[Daemon] Spawning executor as user: ${executorUnixUser}`);
-        console.log(`[Daemon] Env vars (${Object.keys(executorEnv).length}): ${Object.keys(executorEnv).join(', ')}`);
-      } else {
-        console.log(`[Daemon] Spawning executor as current user (no impersonation)`);
-      }
-
-      executorProcess = spawn(cmd, args, {
-        cwd,
-        env: executorUnixUser ? undefined : executorEnv, // When impersonating, env is in the command
-        stdio: ['pipe', 'pipe', 'pipe'], // Enable stdin for JSON payload
-      });
+      containerOptions = {
+        name: containerName,
+        runtime: containerRuntime,
+        user: containerUser,
+        workdir: '/workspace',
+      };
     }
+
+    // =========================================================================
+    // BUILD EXECUTOR PAYLOAD
+    // Executor runs on HOST and handles docker exec internally when container is specified
+    // =========================================================================
+
+    // For container mode, filter env vars to only essential ones (API keys + user-defined)
+    // This avoids passing 70+ system env vars to docker exec
+    let payloadEnv = executorEnv;
+    if (containerOptions) {
+      const filteredEnv: Record<string, string> = {};
+      // User-defined vars from database
+      const userDefinedKeys = (executorEnv.AGOR_USER_ENV_KEYS || '').split(',').filter(Boolean);
+      for (const key of userDefinedKeys) {
+        if (executorEnv[key]) filteredEnv[key] = executorEnv[key];
+      }
+      // Standard API keys
+      const apiKeyNames = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY', 'GITHUB_TOKEN'];
+      for (const key of apiKeyNames) {
+        if (executorEnv[key] && !filteredEnv[key]) filteredEnv[key] = executorEnv[key];
+      }
+      payloadEnv = filteredEnv;
+      console.log(`[Daemon] Filtered env vars for container: ${Object.keys(payloadEnv).join(', ') || '(none)'}`);
+    }
+
+    const executorPayload = {
+      command: 'prompt' as const,
+      sessionToken,
+      daemonUrl, // Executor on host connects to localhost
+      env: payloadEnv,
+      params: {
+        sessionId,
+        taskId,
+        prompt: data.prompt,
+        tool: session.agentic_tool as 'claude-code' | 'gemini' | 'codex' | 'opencode',
+        permissionMode: permissionModeForPayload as 'ask' | 'auto' | 'allow-all' | undefined,
+        cwd: containerOptions ? '/workspace' : cwd,
+        container: containerOptions, // Executor handles docker exec when this is set
+      },
+    };
+
+    // =========================================================================
+    // SPAWN EXECUTOR ON HOST
+    // Executor handles docker exec internally when container is specified
+    // =========================================================================
+    let executorProcess: import('node:child_process').ChildProcess;
+
+    // Build spawn command - handles impersonation via sudo -u when executorUnixUser is set
+    // For container execution, we don't impersonate - executor runs on host and docker exec handles user
+    const shouldImpersonate = !containerOptions && executorUnixUser;
+    const { cmd, args } = buildSpawnArgs('node', [executorPath, '--stdin'], {
+      asUser: shouldImpersonate ? executorUnixUser : undefined,
+      env: shouldImpersonate ? executorEnv : undefined,
+    });
+
+    if (containerOptions) {
+      console.log(`[Daemon] Container mode: executor on HOST will docker exec into ${containerOptions.name}`);
+    } else if (shouldImpersonate) {
+      console.log(`[Daemon] Spawning executor as user: ${executorUnixUser}`);
+    } else {
+      console.log(`[Daemon] Spawning executor as current user (no impersonation)`);
+    }
+
+    executorProcess = spawn(cmd, args, {
+      cwd: containerOptions ? undefined : cwd,
+      env: shouldImpersonate ? undefined : executorEnv,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
 
     // Write JSON payload to stdin
     executorProcess.stdin?.write(JSON.stringify(executorPayload));

@@ -14,9 +14,31 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { type Database, type WorktreeRepository, type UsersRepository, formatShortId } from '@agor/core/db';
 import type { Application } from '@agor/core/feathers';
-import type { AgorConfig } from '@agor/core/config';
+import { type AgorConfig, createUserProcessEnvironment } from '@agor/core/config';
 import type { User, UserID, Worktree, WorktreeID } from '@agor/core/types';
 import { deriveUnixUsername } from '../utils/container-user.js';
+
+/**
+ * Build filtered environment variables for container execution
+ * Only includes user-defined vars from DB + standard API keys from host
+ */
+function buildContainerEnvVars(env: Record<string, string>): Record<string, string> {
+  const containerEnv: Record<string, string> = {};
+
+  // User-defined vars from database (tracked in AGOR_USER_ENV_KEYS)
+  const userDefinedKeys = (env.AGOR_USER_ENV_KEYS || '').split(',').filter(Boolean);
+  for (const key of userDefinedKeys) {
+    if (env[key]) containerEnv[key] = env[key];
+  }
+
+  // Standard API keys from host environment
+  const apiKeyNames = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY', 'GITHUB_TOKEN'];
+  for (const key of apiKeyNames) {
+    if (env[key] && !containerEnv[key]) containerEnv[key] = env[key];
+  }
+
+  return containerEnv;
+}
 
 /**
  * Container status
@@ -60,6 +82,7 @@ interface CreateUserOptions {
   unixUsername: string;
   unixUid?: number;
   unixGid?: number;
+  envVars?: Record<string, string>; // User-specific env vars (API keys, etc.)
 }
 
 /**
@@ -424,7 +447,7 @@ DOCKERWRAPPER`,
    * Note: SSH keys are set up separately when terminal is created
    */
   async createUserInContainer(options: CreateUserOptions): Promise<void> {
-    const { containerName, unixUsername, unixUid, unixGid } = options;
+    const { containerName, unixUsername, unixUid, unixGid, envVars } = options;
 
     console.log(`[Containers] Creating user ${unixUsername} in container ${containerName}`);
 
@@ -549,6 +572,39 @@ DOCKERWRAPPER`,
         ]).catch((error) => {
           console.warn(`[Containers] Failed to setup shared ${tool} directory for ${unixUsername}:`, error);
         });
+      }
+
+      // =========================================================================
+      // USER-SPECIFIC ENVIRONMENT VARIABLES
+      //
+      // Write env vars to user's ~/.agor-env (sourced by ~/.profile)
+      // This makes API keys available in SSH sessions and login shells.
+      // =========================================================================
+      if (envVars && Object.keys(envVars).length > 0) {
+        const envFile = `${userHome}/.agor-env`;
+        const exportLines = Object.entries(envVars)
+          .map(([key, value]) => `export ${key}="${value.replace(/"/g, '\\"')}"`)
+          .join('\n');
+
+        // Write env file
+        await this.dockerExec(containerName, [
+          'sh',
+          '-c',
+          `printf '%s\\n' '${exportLines.replace(/'/g, "'\\''")}' > ${envFile} && chown ${unixUsername}:${unixUsername} ${envFile} && chmod 600 ${envFile}`,
+        ]).catch((error) => {
+          console.warn(`[Containers] Failed to write env vars for ${unixUsername}:`, error);
+        });
+
+        // Add source line to .profile if not already present
+        await this.dockerExec(containerName, [
+          'sh',
+          '-c',
+          `grep -q 'source.*\\.agor-env' ${userHome}/.profile 2>/dev/null || echo '[ -f ~/.agor-env ] && source ~/.agor-env' >> ${userHome}/.profile`,
+        ]).catch((error) => {
+          console.warn(`[Containers] Failed to update .profile for ${unixUsername}:`, error);
+        });
+
+        console.log(`[Containers] Wrote ${Object.keys(envVars).length} env vars to ${envFile}`);
       }
 
       console.log(`[Containers] User ${unixUsername} created in ${containerName} (with shared session setup for ${sharedTools.join(', ')})`);
@@ -684,6 +740,10 @@ DOCKERWRAPPER`,
     // Ensure container is running
     const running = await this.isContainerRunning(containerName);
     if (running) {
+      // Build user's env vars for SSH access
+      const fullEnv = await createUserProcessEnvironment(userId, this.db);
+      const envVars = buildContainerEnvVars(fullEnv);
+
       // Create user and setup SSH keys when SSH info is requested
       console.log(`[Containers] Setting up user ${username} for SSH access`);
       await this.createUserInContainer({
@@ -691,6 +751,7 @@ DOCKERWRAPPER`,
         unixUsername: username,
         unixUid: user.unix_uid,
         unixGid: user.unix_gid,
+        envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
       });
       await this.setupUserSSHKeys(containerName, username, user.ssh_public_keys);
     }

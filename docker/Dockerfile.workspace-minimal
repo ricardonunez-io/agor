@@ -1,0 +1,72 @@
+# Minimal Agor Workspace Container
+#
+# Executor runs on HOST and uses docker exec to spawn commands in container.
+# Container only needs: shell, SSH, git, zellij, and AI agents.
+# NO executor needed in container!
+#
+# Build:
+#   docker build -t agor/workspace:minimal -f docker/Dockerfile.workspace-minimal docker/
+
+FROM node:20-alpine
+
+# Essential packages only
+RUN apk add --no-cache \
+    bash \
+    zsh \
+    git \
+    openssh-server \
+    sudo \
+    curl \
+    jq \
+    less \
+    # Build tools for native modules (removed after npm install)
+    python3 \
+    make \
+    g++
+
+# SSH setup
+RUN mkdir -p /run/sshd && \
+    ssh-keygen -A && \
+    sed -i 's/#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
+    sed -i 's/#PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
+    sed -i 's/#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+
+# Zellij terminal multiplexer
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        curl -L "https://github.com/zellij-org/zellij/releases/download/v0.43.1/zellij-x86_64-unknown-linux-musl.tar.gz" | \
+        tar -xz -C /usr/local/bin; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        curl -L "https://github.com/zellij-org/zellij/releases/download/v0.43.1/zellij-aarch64-unknown-linux-musl.tar.gz" | \
+        tar -xz -C /usr/local/bin; \
+    fi
+
+# GitHub CLI
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then ARCH="amd64"; \
+    elif [ "$ARCH" = "aarch64" ]; then ARCH="arm64"; fi && \
+    curl -L "https://github.com/cli/cli/releases/download/v2.63.2/gh_2.63.2_linux_${ARCH}.tar.gz" | \
+    tar -xz -C /tmp && \
+    mv /tmp/gh_*/bin/gh /usr/local/bin/ && \
+    rm -rf /tmp/gh_*
+
+# AI Coding Agents (executor spawns these via docker exec)
+RUN npm install -g \
+    @anthropic-ai/claude-code \
+    @google/gemini-cli \
+    @openai/codex && \
+    # Remove build tools to reduce image size
+    apk del python3 make g++
+
+# Shared directory for AI sessions
+RUN mkdir -p /home/shared && chmod 777 /home/shared
+
+# Zellij config skeleton
+RUN mkdir -p /etc/skel/.config/zellij
+COPY zellij-config.kdl /etc/skel/.config/zellij/config.kdl
+
+WORKDIR /workspace
+EXPOSE 22
+
+# Simple entrypoint - just SSH
+CMD ["/usr/sbin/sshd", "-D", "-e"]

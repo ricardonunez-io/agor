@@ -121,11 +121,34 @@ export const BasePayloadSchema = z.object({
 });
 
 // ═══════════════════════════════════════════════════════════
+// Container Options (shared by Prompt and Terminal payloads)
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Container execution options - when set, executor runs commands via docker exec
+ */
+export const ContainerOptionsSchema = z.object({
+  /** Container name to exec into */
+  name: z.string(),
+  /** Container runtime (docker or podman) */
+  runtime: z.enum(['docker', 'podman']).optional().default('docker'),
+  /** User to run as inside container (username or UID) */
+  user: z.string().optional(),
+  /** Working directory inside container */
+  workdir: z.string().optional().default('/workspace'),
+});
+
+export type ContainerOptions = z.infer<typeof ContainerOptionsSchema>;
+
+// ═══════════════════════════════════════════════════════════
 // Prompt Payload
 // ═══════════════════════════════════════════════════════════
 
 /**
  * Prompt execution payload - execute agent SDK
+ *
+ * When container is specified, executor runs on HOST and uses docker exec
+ * to spawn the AI agent inside the container.
  */
 export const PromptPayloadSchema = BasePayloadSchema.extend({
   command: z.literal('prompt'),
@@ -140,6 +163,8 @@ export const PromptPayloadSchema = BasePayloadSchema.extend({
     tool: ToolTypeSchema,
     permissionMode: PermissionModeSchema.optional(),
     cwd: z.string(),
+    /** Container options - when set, spawn AI agent inside container via docker exec */
+    container: ContainerOptionsSchema.optional(),
   }),
 });
 
@@ -434,6 +459,9 @@ export type TerminalMode = z.infer<typeof TerminalModeSchema>;
  * This spawns a PTY and streams I/O over Feathers channels.
  * Mode 'zellij': runs zellij attach, supports tabs/persistence
  * Mode 'shell': spawns shell directly (bash/zsh/ash/sh), simpler but no persistence
+ *
+ * When container is specified, executor runs on HOST and uses docker exec
+ * to spawn the shell/zellij inside the container.
  */
 export const ZellijAttachPayloadSchema = BasePayloadSchema.extend({
   command: z.literal('zellij.attach'),
@@ -466,6 +494,9 @@ export const ZellijAttachPayloadSchema = BasePayloadSchema.extend({
 
     /** Terminal mode: 'zellij' (default) or 'shell' */
     mode: TerminalModeSchema.optional().default('zellij'),
+
+    /** Container options - when set, spawn inside container via docker exec */
+    container: ContainerOptionsSchema.optional(),
   }),
 });
 
