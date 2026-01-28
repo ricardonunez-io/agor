@@ -17,6 +17,9 @@
 
 import { parseArgs } from 'node:util';
 
+import { generateId } from '@agor/core';
+import { MessageRole } from '@agor/core/types';
+import type { MessageID, SessionID, TaskID } from '@agor/core/types';
 import { executeCommand, getRegisteredCommands } from './commands/index.js';
 import { AgorExecutor } from './index.js';
 import {
@@ -192,17 +195,74 @@ async function handlePromptInContainer(
 ): Promise<void> {
   const nodePty = await import('node-pty');
   const { createFeathersClient } = await import('./services/feathers-client.js');
+  const { generateId } = await import('@agor/core/db');
 
   const runtime = container.runtime || 'docker';
   const workdir = container.workdir || '/workspace';
   const tool = payload.params.tool;
 
-  // Map tool to CLI command (same flags as SDK mode)
+  // Connect to daemon early so we can create user message
+  console.log(`[executor] Connecting to daemon at ${payload.daemonUrl || 'http://localhost:3030'}`);
+  const client = await createFeathersClient(payload.daemonUrl || 'http://localhost:3030', payload.sessionToken);
+
+  // NOTE: Codex CLI doesn't support true conversation continuity via API.
+  // The 'resume' command only loads local history, not API threads.
+  // We still extract and store thread_id for potential future use (SDK or history injection).
+
+  // Create user message (SDK does this, but CLI mode needs to do it explicitly)
+  // Get next message index
+  let nextIndex = 0;
+  try {
+    const existingMessages = await client.service('messages').find({
+      query: { session_id: payload.params.sessionId, $limit: 1000 }
+    }) as { data: unknown[] };
+    nextIndex = existingMessages.data?.length || 0;
+  } catch (err) {
+    console.warn('[executor] Failed to get message count, using index 0');
+  }
+
+  try {
+    const userMessageId = generateId() as MessageID;
+    await client.service('messages').create({
+      message_id: userMessageId,
+      session_id: payload.params.sessionId as SessionID,
+      task_id: payload.params.taskId as TaskID,
+      type: 'user',
+      role: MessageRole.USER,
+      index: nextIndex,
+      timestamp: new Date().toISOString(),
+      content_preview: payload.params.prompt.substring(0, 200),
+      content: payload.params.prompt,
+    });
+    nextIndex++; // Increment for assistant message
+    console.log(`[executor] Created user message: ${userMessageId.substring(0, 8)}`);
+  } catch (err) {
+    console.error('[executor] Failed to create user message:', err);
+    // Continue anyway - assistant response is more important
+  }
+
+  // Map tool to CLI command with JSON output (each CLI has different flags)
+  // Claude: --print (non-interactive) + --output-format stream-json + --verbose (required with stream-json)
+  // Gemini: --output-format stream-json (positional prompt for one-shot mode)
+  // Codex: exec subcommand (non-interactive) + --json (JSONL output)
+  // OpenCode: run subcommand (non-interactive) + --format json
+  // Codex API config flags (shared between exec and resume)
+  const codexApiConfig = [
+    '-c', 'model_provider=openai-api',
+    '-c', 'model_providers.openai-api.name=OpenAI',
+    '-c', 'model_providers.openai-api.base_url=https://api.openai.com/v1',
+    '-c', 'model_providers.openai-api.env_key=OPENAI_API_KEY',
+    '-c', 'model_providers.openai-api.wire_api=chat',
+  ];
+
   const toolCommands: Record<string, { cmd: string; args: string[] }> = {
-    'claude-code': { cmd: 'claude', args: ['--print', '--output-format', 'stream-json'] },
-    'gemini': { cmd: 'gemini', args: ['--print'] },
-    'codex': { cmd: 'codex', args: ['--print'] },
-    'opencode': { cmd: 'opencode', args: ['--print'] },
+    'claude-code': { cmd: 'claude', args: ['--print', '--output-format', 'stream-json', '--verbose'] },
+    'gemini': { cmd: 'gemini', args: ['--output-format', 'stream-json'] },
+    // Codex: Configure to use OpenAI API directly (not ChatGPT backend which requires login)
+    // NOTE: Codex CLI 'resume' doesn't actually continue API threads - it only loads local history
+    // Each prompt starts a fresh API thread. True continuity would require SDK or injecting history.
+    'codex': { cmd: 'codex', args: ['exec', '--json', ...codexApiConfig] },
+    'opencode': { cmd: 'opencode', args: ['run', '--format', 'json'] },
   };
 
   const toolConfig = toolCommands[tool];
@@ -211,7 +271,7 @@ async function handlePromptInContainer(
     process.exit(1);
   }
 
-  // Build docker exec -it command (same as terminals)
+  // Build docker exec -it command
   const dockerArgs: string[] = ['exec', '-it'];
   if (container.user) dockerArgs.push('-u', container.user);
   dockerArgs.push('-w', workdir);
@@ -219,22 +279,64 @@ async function handlePromptInContainer(
 
   // Add env vars
   if (payload.env) {
+    const envKeys = Object.keys(payload.env).filter(k => k !== 'HOME' && payload.env![k]);
+    console.log(`[executor] Passing ${envKeys.length} env vars to container: ${envKeys.join(', ') || '(none)'}`);
     for (const [key, value] of Object.entries(payload.env)) {
       if (key !== 'HOME' && value) dockerArgs.push('-e', `${key}=${value}`);
     }
+  } else {
+    console.log('[executor] No env vars in payload');
   }
 
-  // Add permission mode
+  // Add permission mode (each CLI has different flag names and values)
   if (payload.params.permissionMode) {
-    toolConfig.args.push('--permission-mode', payload.params.permissionMode);
+    const mode = payload.params.permissionMode;
+    if (tool === 'claude-code') {
+      // Claude: --permission-mode (default, plan, acceptEdits, bypassPermissions, etc.)
+      toolConfig.args.push('--permission-mode', mode);
+    } else if (tool === 'gemini') {
+      // Gemini: --approval-mode (default, auto_edit, yolo)
+      // Map Agor modes to Gemini modes
+      const geminiMode = mode === 'autoEdit' ? 'auto_edit' : mode === 'yolo' ? 'yolo' : 'default';
+      toolConfig.args.push('--approval-mode', geminiMode);
+    } else if (tool === 'codex') {
+      // Codex: Use danger-full-access since container already provides isolation
+      // --full-auto uses workspace-write sandbox which blocks network access
+      if (mode === 'allow-all' || mode === 'auto' || mode === 'autoEdit') {
+        toolConfig.args.push('--dangerously-bypass-approvals-and-sandbox');
+      }
+    }
+    // OpenCode: doesn't seem to have approval mode flags
   }
 
+  // Add model flag (from session config or default for each tool)
+  const sessionModel = payload.params.modelConfig?.model;
+  const defaultModels: Record<string, string> = {
+    'claude-code': 'claude-sonnet-4-5-latest',
+    'gemini': 'gemini-2.5-flash',
+    'codex': 'gpt-4o', // Using chat API, so use a chat model
+    'opencode': 'anthropic/claude-sonnet-4-5', // OpenCode uses provider/model format
+  };
+  const modelToUse = sessionModel || defaultModels[tool];
+
+  if (modelToUse) {
+    if (tool === 'claude-code') {
+      toolConfig.args.push('--model', modelToUse);
+    } else if (tool === 'gemini') {
+      toolConfig.args.push('--model', modelToUse);
+    } else if (tool === 'codex') {
+      toolConfig.args.push('--model', modelToUse);
+    } else if (tool === 'opencode') {
+      // OpenCode uses --model with provider/model format
+      toolConfig.args.push('--model', modelToUse);
+    }
+    console.log(`[executor] Using model: ${modelToUse}${sessionModel ? ' (from session)' : ' (default)'}`);
+  }
+
+  // Pass prompt as argument
   dockerArgs.push(container.name, toolConfig.cmd, ...toolConfig.args, payload.params.prompt);
 
-  console.log(`[executor] Spawning PTY: ${runtime} exec -it ... ${toolConfig.cmd} --print`);
-
-  // Connect to daemon
-  const client = await createFeathersClient(payload.daemonUrl || 'http://localhost:3030', payload.sessionToken);
+  console.log(`[executor] Spawning PTY: ${runtime} exec -it ... ${toolConfig.cmd} ${toolConfig.args.join(' ')}`);
 
   const broadcastEvent = async (event: string, data: Record<string, unknown>) => {
     try {
@@ -244,14 +346,18 @@ async function handlePromptInContainer(
     }
   };
 
-  // Spawn with node-pty (same as terminals - provides real TTY)
+  // Spawn with node-pty (provides real TTY)
   const pty = nodePty.spawn(runtime, dockerArgs, {
     name: 'xterm-256color',
     cols: 120,
     rows: 40,
   });
 
-  const messageId = `msg-${Date.now()}`;
+  const messageId = generateId() as MessageID;
+  let buffer = '';
+  let assistantContent = ''; // Collect full content for DB persistence
+  let extractedModel: string | undefined; // Model extracted from CLI output (init event)
+  let extractedThreadId: string | undefined; // Thread ID for Codex session continuity
 
   // Start streaming
   console.log(`[executor] Starting stream for session ${payload.params.sessionId}, task ${payload.params.taskId}`);
@@ -264,29 +370,168 @@ async function handlePromptInContainer(
   });
 
   pty.onData((data) => {
-    console.log(`[executor] PTY data (${data.length} bytes): ${data.substring(0, 50).replace(/\n/g, '\\n')}...`);
-    broadcastEvent('streaming:chunk', {
-      message_id: messageId,
-      session_id: payload.params.sessionId,
-      chunk: data,
-    });
+    // Buffer and parse JSON lines
+    buffer += data;
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith('{')) continue;
+
+      try {
+        const event = JSON.parse(trimmed);
+        console.log(`[executor] JSON event: ${event.type || 'unknown'}`);
+
+        // Extract text content from assistant messages
+        // Each CLI has different JSON format:
+
+        // Claude: {"type":"assistant","message":{"content":[{"type":"text","text":"Hi!"}]}}
+        if (event.type === 'assistant' && event.message?.content) {
+          for (const block of event.message.content) {
+            if (block.type === 'text' && block.text) {
+              assistantContent += block.text;
+              broadcastEvent('streaming:chunk', {
+                message_id: messageId,
+                session_id: payload.params.sessionId,
+                chunk: block.text,
+              });
+            }
+          }
+        }
+        // Gemini: {"type":"message","role":"assistant","content":"Hi!"}
+        else if (event.type === 'message' && event.role === 'assistant' && event.content) {
+          console.log(`[executor] Gemini assistant content: ${event.content.substring(0, 50)}...`);
+          assistantContent += event.content;
+          broadcastEvent('streaming:chunk', {
+            message_id: messageId,
+            session_id: payload.params.sessionId,
+            chunk: event.content,
+          });
+        }
+        // Gemini user message - skip
+        else if (event.type === 'message' && event.role === 'user') {
+          console.log(`[executor] Skipping Gemini user message`);
+        }
+        // Codex: {"type":"item.completed","item":{"type":"agent_message","text":"Hello!"}}
+        else if (event.type === 'item.completed' && event.item?.text) {
+          console.log(`[executor] Codex item.completed: ${event.item.text.substring(0, 50)}...`);
+          assistantContent += event.item.text;
+          broadcastEvent('streaming:chunk', {
+            message_id: messageId,
+            session_id: payload.params.sessionId,
+            chunk: event.item.text,
+          });
+        }
+        // Codex/OpenCode: {"type":"text","content":"Hi!"} or similar
+        else if (event.type === 'text' && event.content) {
+          assistantContent += event.content;
+          broadcastEvent('streaming:chunk', {
+            message_id: messageId,
+            session_id: payload.params.sessionId,
+            chunk: event.content,
+          });
+        }
+        // Handle result message (final response text)
+        else if (event.type === 'result') {
+          console.log(`[executor] Result event: status=${event.status}, is_error=${event.is_error}`);
+          if (event.result && typeof event.result === 'string' && !event.is_error) {
+            console.log(`[executor] Result text: ${event.result.substring(0, 50)}...`);
+          }
+          // Gemini result has status field
+          if (event.status && event.status !== 'success') {
+            console.log(`[executor] Result error: ${JSON.stringify(event).substring(0, 200)}`);
+          }
+        }
+        // Extract model from init event (Claude and Gemini both use this)
+        else if (event.type === 'init') {
+          // Log full init event to debug model extraction
+          console.log(`[executor] Init event: ${JSON.stringify(event).substring(0, 300)}`);
+          if (event.model) {
+            extractedModel = event.model;
+            console.log(`[executor] Extracted model from init.model: ${extractedModel}`);
+          } else if (event.session?.model) {
+            // Gemini might have model nested in session object
+            extractedModel = event.session.model;
+            console.log(`[executor] Extracted model from init.session.model: ${extractedModel}`);
+          }
+        }
+        // Codex: Extract thread_id for session continuity
+        // {"type":"thread.started","thread_id":"019c05f8-e016-7340-bfee-d770c719bce6"}
+        else if (event.type === 'thread.started' && event.thread_id) {
+          extractedThreadId = event.thread_id;
+          console.log(`[executor] Extracted thread_id: ${extractedThreadId}`);
+        }
+        // Log error events with details
+        else if (event.type === 'error') {
+          const errorMsg = event.message || event.error || JSON.stringify(event).substring(0, 200);
+          console.error(`[executor] Error event: ${errorMsg}`);
+        }
+        // Log other event types for debugging
+        else if (event.type !== 'system' && event.type !== 'turn.started' && event.type !== 'turn.completed') {
+          console.log(`[executor] Skipping event type: ${event.type}`);
+        }
+      } catch {
+        // Not valid JSON, might be CLI output - forward as-is
+        console.log(`[executor] Non-JSON data: ${trimmed.substring(0, 50)}...`);
+      }
+    }
   });
 
   // Wait for exit
   await new Promise<void>((resolve, reject) => {
     pty.onExit(async ({ exitCode }) => {
+      // Create assistant message in database (persists the streamed content)
+      if (assistantContent) {
+        try {
+          await client.service('messages').create({
+            message_id: messageId,
+            session_id: payload.params.sessionId as SessionID,
+            task_id: payload.params.taskId as TaskID,
+            type: 'assistant',
+            role: MessageRole.ASSISTANT,
+            index: nextIndex,
+            timestamp: new Date().toISOString(),
+            content_preview: assistantContent.substring(0, 200),
+            content: assistantContent,
+          });
+          console.log(`[executor] Created assistant message: ${messageId.substring(0, 8)} (${assistantContent.length} chars)`);
+        } catch (err) {
+          console.error('[executor] Failed to create assistant message:', err);
+        }
+      }
+
       await broadcastEvent('streaming:end', {
         message_id: messageId,
         session_id: payload.params.sessionId,
       });
 
       try {
-        await client.service('tasks').patch(payload.params.taskId, {
+        // Build patch data with status, completion time, and extracted model
+        const taskPatch: Record<string, unknown> = {
           status: exitCode === 0 ? 'completed' : 'failed',
           completed_at: new Date().toISOString(),
-        });
+        };
+        if (extractedModel) {
+          taskPatch.model = extractedModel;
+          console.log(`[executor] Setting task model to: ${extractedModel}`);
+        }
+        await client.service('tasks').patch(payload.params.taskId, taskPatch);
       } catch (err) {
         console.error('[executor] Failed to update task:', err);
+      }
+
+      // Store thread_id in session for potential future use (Codex)
+      // NOTE: Currently not used for resume since Codex CLI doesn't support true API thread continuity
+      if (extractedThreadId) {
+        try {
+          await client.service('sessions').patch(payload.params.sessionId, {
+            sdk_session_id: extractedThreadId,
+          });
+          console.log(`[executor] Stored thread_id in session: ${extractedThreadId.substring(0, 8)}...`);
+        } catch (err) {
+          console.error('[executor] Failed to store thread_id in session:', err);
+        }
       }
 
       if (exitCode === 0) {

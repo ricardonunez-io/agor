@@ -165,6 +165,13 @@ export const PromptPayloadSchema = BasePayloadSchema.extend({
     cwd: z.string(),
     /** Container options - when set, spawn AI agent inside container via docker exec */
     container: ContainerOptionsSchema.optional(),
+    /** Model configuration from session - used to pass --model flag to CLI */
+    modelConfig: z
+      .object({
+        mode: z.enum(['alias', 'exact']).optional(),
+        model: z.string().optional(),
+      })
+      .optional(),
   }),
 });
 

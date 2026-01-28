@@ -1,7 +1,7 @@
 import { AVAILABLE_CLAUDE_MODEL_ALIASES, GEMINI_MODELS, type GeminiModel } from '@agor/core/models';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { Input, Radio, Select, Space, Tooltip, Typography } from 'antd';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { type OpenCodeModelConfig, OpenCodeModelSelector } from './OpenCodeModelSelector';
 
 const { Link } = Typography;
@@ -112,6 +112,19 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
   // IMPORTANT: Call hooks unconditionally before any early returns (React rules of hooks)
   const [mode, setMode] = useState<'alias' | 'exact'>(initialMode);
+
+  // Auto-populate default value if none provided (fixes form not having value when user doesn't interact)
+  useEffect(() => {
+    if (!value?.model && onChange && effectiveTool !== 'opencode') {
+      const defaultModel = modelList[0]?.id || '';
+      if (defaultModel) {
+        onChange({
+          mode: 'alias',
+          model: defaultModel,
+        });
+      }
+    }
+  }, [value?.model, onChange, effectiveTool, modelList]);
 
   // OpenCode uses a different UI (2 dropdowns: provider + model)
   if (effectiveTool === 'opencode') {

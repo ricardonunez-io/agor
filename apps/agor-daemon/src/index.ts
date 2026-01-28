@@ -781,6 +781,7 @@ async function main() {
         permissionMode: permissionModeForPayload as 'ask' | 'auto' | 'allow-all' | undefined,
         cwd: containerOptions ? '/workspace' : cwd,
         container: containerOptions, // Executor handles docker exec when this is set
+        modelConfig: session.model_config, // Pass model config to CLI
       },
     };
 
