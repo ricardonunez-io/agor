@@ -740,7 +740,7 @@ async function main() {
         name: containerName,
         runtime: containerRuntime,
         user: containerUser,
-        workdir: '/workspace',
+        workdir: config.execution?.containers?.workspace_path || '/workspace',
       };
     }
 
@@ -768,10 +768,17 @@ async function main() {
       console.log(`[Daemon] Filtered env vars for container: ${Object.keys(payloadEnv).join(', ') || '(none)'}`);
     }
 
+    // Determine daemon URL for executor
+    // Container mode: use host.docker.internal to reach daemon on host
+    // Host mode: use localhost
+    const executorDaemonUrl = containerOptions
+      ? `http://host.docker.internal:${config.daemon?.port || 3030}`
+      : daemonUrl;
+
     const executorPayload = {
       command: 'prompt' as const,
       sessionToken,
-      daemonUrl, // Executor on host connects to localhost
+      daemonUrl: executorDaemonUrl,
       env: payloadEnv,
       params: {
         sessionId,
@@ -779,39 +786,82 @@ async function main() {
         prompt: data.prompt,
         tool: session.agentic_tool as 'claude-code' | 'gemini' | 'codex' | 'opencode',
         permissionMode: permissionModeForPayload as 'ask' | 'auto' | 'allow-all' | undefined,
-        cwd: containerOptions ? '/workspace' : cwd,
-        container: containerOptions, // Executor handles docker exec when this is set
+        cwd: config.execution?.containers?.workspace_path || '/workspace', // Container workspace mount path
+        // NOTE: container option removed - executor now runs inside container directly
+        // and uses SDKs instead of docker exec to CLI tools
         modelConfig: session.model_config, // Pass model config to CLI
       },
     };
 
     // =========================================================================
-    // SPAWN EXECUTOR ON HOST
-    // Executor handles docker exec internally when container is specified
+    // SPAWN EXECUTOR - INSIDE CONTAINER (SDK mode) OR ON HOST
     // =========================================================================
     let executorProcess: import('node:child_process').ChildProcess;
 
-    // Build spawn command - handles impersonation via sudo -u when executorUnixUser is set
-    // For container execution, we don't impersonate - executor runs on host and docker exec handles user
-    const shouldImpersonate = !containerOptions && executorUnixUser;
-    const { cmd, args } = buildSpawnArgs('node', [executorPath, '--stdin'], {
-      asUser: shouldImpersonate ? executorUnixUser : undefined,
-      env: shouldImpersonate ? executorEnv : undefined,
-    });
-
     if (containerOptions) {
-      console.log(`[Daemon] Container mode: executor on HOST will docker exec into ${containerOptions.name}`);
-    } else if (shouldImpersonate) {
-      console.log(`[Daemon] Spawning executor as user: ${executorUnixUser}`);
-    } else {
-      console.log(`[Daemon] Spawning executor as current user (no impersonation)`);
-    }
+      // =====================================================================
+      // CONTAINER MODE: Spawn executor INSIDE container via docker exec
+      // Executor uses SDKs directly (not CLI tools)
+      // =====================================================================
+      const containerExecutorPath = '/app/packages/executor/dist/cli.js';
 
-    executorProcess = spawn(cmd, args, {
-      cwd: containerOptions ? undefined : cwd,
-      env: shouldImpersonate ? undefined : executorEnv,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+      // Build docker exec command
+      // We use sh -c to first create the symlink structure for @agor/core resolution,
+      // then run the executor. The symlink is needed because pnpm workspace symlinks
+      // use relative paths that break when mounted inside the container.
+      const containerWorkspace = config.execution?.containers?.workspace_path || '/workspace';
+      const dockerArgs = [
+        'exec', '-i',
+        '-u', containerOptions.user || 'root',
+        '-w', containerWorkspace,
+        '-e', 'TERM=xterm-256color',
+      ];
+
+      // Pass env vars to container
+      for (const [key, value] of Object.entries(payloadEnv)) {
+        if (value) {
+          dockerArgs.push('-e', `${key}=${value}`);
+        }
+      }
+
+      // Create symlink for @agor/core module resolution and run executor
+      // The symlink makes the mounted /app/packages/core available as @agor/core
+      const setupAndRun = `
+        mkdir -p /app/packages/executor/node_modules/@agor && \
+        ln -sf /app/packages/core /app/packages/executor/node_modules/@agor/core && \
+        exec node ${containerExecutorPath} --stdin
+      `.trim().replace(/\s+/g, ' ');
+
+      dockerArgs.push(containerOptions.name, 'sh', '-c', setupAndRun);
+
+      console.log(`[Daemon] Container mode: spawning executor INSIDE ${containerOptions.name}`);
+      console.log(`[Daemon] Docker exec: docker ${dockerArgs.slice(0, 5).join(' ')} ... node ${containerExecutorPath}`);
+
+      executorProcess = spawn('docker', dockerArgs, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    } else {
+      // =====================================================================
+      // HOST MODE: Spawn executor on host (with optional impersonation)
+      // =====================================================================
+      const shouldImpersonate = executorUnixUser;
+      const { cmd, args } = buildSpawnArgs('node', [executorPath, '--stdin'], {
+        asUser: shouldImpersonate ? executorUnixUser : undefined,
+        env: shouldImpersonate ? executorEnv : undefined,
+      });
+
+      if (shouldImpersonate) {
+        console.log(`[Daemon] Host mode: spawning executor as user: ${executorUnixUser}`);
+      } else {
+        console.log(`[Daemon] Host mode: spawning executor as current user`);
+      }
+
+      executorProcess = spawn(cmd, args, {
+        cwd,
+        env: shouldImpersonate ? undefined : executorEnv,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    }
 
     // Write JSON payload to stdin
     executorProcess.stdin?.write(JSON.stringify(executorPayload));

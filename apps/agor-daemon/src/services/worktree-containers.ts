@@ -12,11 +12,29 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
 import { type Database, type WorktreeRepository, type UsersRepository, formatShortId } from '@agor/core/db';
 import type { Application } from '@agor/core/feathers';
 import { type AgorConfig, createUserProcessEnvironment } from '@agor/core/config';
 import type { User, UserID, Worktree, WorktreeID } from '@agor/core/types';
 import { deriveUnixUsername } from '../utils/container-user.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+/**
+ * Find the packages directory for mounting into containers
+ * This allows executor to run inside container with SDK access
+ */
+function findPackagesPath(): string | undefined {
+  const possiblePaths = [
+    path.join(__dirname, '../../../../packages'), // From apps/agor-daemon/src/services
+    path.join(__dirname, '../../../../../packages'), // Fallback
+  ];
+  return possiblePaths.find((p) => existsSync(p));
+}
 
 /**
  * Build filtered environment variables for container execution
@@ -93,6 +111,8 @@ const DEFAULTS = {
   SSH_BASE_PORT: 2222,
   APP_BASE_PORT: 16000,
   RESTART_POLICY: 'unless-stopped' as const,
+  WORKSPACE_PATH: '/workspace',
+  REPO_PATH: '/repo',
 };
 
 /**
@@ -180,6 +200,20 @@ export class WorktreeContainersService {
   }
 
   /**
+   * Get workspace mount path inside container
+   */
+  getWorkspacePath(): string {
+    return this.config.execution?.containers?.workspace_path || DEFAULTS.WORKSPACE_PATH;
+  }
+
+  /**
+   * Get repo mount path inside container
+   */
+  getRepoPath(): string {
+    return this.config.execution?.containers?.repo_path || DEFAULTS.REPO_PATH;
+  }
+
+  /**
    * Generate container name from worktree ID
    */
   generateContainerName(worktreeId: WorktreeID): string {
@@ -207,19 +241,24 @@ export class WorktreeContainersService {
       // Build docker create command
       // Note: We mount the entire repo dir to support git operations.
       // Git worktrees have a .git file pointing to the main repo's .git/worktrees/<name>
-      // By mounting the repo at /repo, git can follow the reference.
+      // By mounting the repo at the repo mount path, git can follow the reference.
       // Container is fully isolated - no host agor access, tools installed in image.
       //
       // SSH PORT: Dynamic assignment (-p 0:22) - Docker picks available port
       // APP PORT: Static assignment - uses calculated port from worktree_unique_id
+      const workspaceMount = this.getWorkspacePath();
+      const repoMount = this.getRepoPath();
+
       const args = [
         'create',
         '--name', containerName,
         '--hostname', containerName,
-        // Mount worktree at /workspace
-        '-v', `${worktreePath}:/workspace:rw`,
+        // Mount worktree at workspace path
+        '-v', `${worktreePath}:${workspaceMount}:rw`,
         // Mount main repo for git operations (worktree's .git file references this)
-        '-v', `${repoPath}:/repo:rw`,
+        '-v', `${repoPath}:${repoMount}:rw`,
+        // Mount packages for executor SDK access (executor runs inside container)
+        ...(findPackagesPath() ? ['-v', `${findPackagesPath()}:/app/packages:ro`] : []),
         // Expose SSH port - Docker picks available port (dynamic)
         '-p', '0:22',
         // Expose app port if configured - uses calculated external port (static)
@@ -231,6 +270,8 @@ export class WorktreeContainersService {
         // Podman-in-Docker: Enable nested containers (for docker-compose via Podman)
         // These capabilities allow rootless Podman to create namespaces and cgroups
         '--privileged',
+        // Allow container to reach host services (daemon) via host.docker.internal
+        '--add-host=host.docker.internal:host-gateway',
         // Labels for identification
         '--label', `agor.worktree_id=${worktreeId}`,
         '--label', 'agor.managed=true',
@@ -261,6 +302,19 @@ export class WorktreeContainersService {
       const sshPort = this.parsePortOutput(sshPortOutput);
 
       console.log(`[Containers] Container ${containerName} created with SSH port ${sshPort}`);
+
+      // Fix git worktree .git file to use container paths instead of host paths
+      // The .git file in worktrees contains: gitdir: /host/path/.git/worktrees/<name>
+      // We need to rewrite it to: gitdir: <repoMount>/.git/worktrees/<name>
+      const worktreeName = path.basename(worktreePath);
+      await this.dockerExec(containerName, [
+        'sh',
+        '-c',
+        `echo "gitdir: ${repoMount}/.git/worktrees/${worktreeName}" > ${workspaceMount}/.git`,
+      ]).catch((error) => {
+        console.warn(`[Containers] Failed to fix .git file in ${containerName}:`, error);
+      });
+      console.log(`[Containers] Fixed .git file to point to ${repoMount}/.git/worktrees/${worktreeName}`);
 
       // Fix the docker wrapper script to not use sudo (socket is world-writable)
       // Using single-quoted heredoc so $ signs are preserved literally in the script
@@ -420,6 +474,22 @@ DOCKERWRAPPER`,
     if (!isRunning) {
       console.log(`[Containers] Starting stopped container ${containerName}`);
       await this.runDocker(['start', containerName]);
+
+      // Fix git worktree .git file after container restart
+      // The .git file may have stale host paths if container was recreated
+      const worktree = await this.worktreeRepo.findById(worktreeId);
+      if (worktree?.path) {
+        const worktreeName = path.basename(worktree.path);
+        const workspaceMount = this.getWorkspacePath();
+        const repoMount = this.getRepoPath();
+        await this.dockerExec(containerName, [
+          'sh',
+          '-c',
+          `echo "gitdir: ${repoMount}/.git/worktrees/${worktreeName}" > ${workspaceMount}/.git`,
+        ]).catch((error) => {
+          console.warn(`[Containers] Failed to fix .git file in ${containerName}:`, error);
+        });
+      }
     }
 
     return containerName;
@@ -521,6 +591,20 @@ DOCKERWRAPPER`,
         `getent group docker && usermod -aG docker ${unixUsername} || true`,
       ]).catch(() => {
         // Group might not exist
+      });
+
+      // Add workspace and repo to git safe.directory for this user
+      // Required because mounted volumes may have different ownership
+      const workspaceMount = this.getWorkspacePath();
+      const repoMount = this.getRepoPath();
+      await this.dockerExec(containerName, [
+        'su',
+        '-',
+        unixUsername,
+        '-c',
+        `git config --global --add safe.directory ${workspaceMount} && git config --global --add safe.directory ${repoMount}`,
+      ]).catch((error) => {
+        console.warn(`[Containers] Failed to set git safe.directory for ${unixUsername}:`, error);
       });
 
       // =========================================================================
@@ -739,30 +823,52 @@ DOCKERWRAPPER`,
 
     // Ensure container is running
     const running = await this.isContainerRunning(containerName);
-    if (running) {
-      // Build user's env vars for SSH access
-      const fullEnv = await createUserProcessEnvironment(userId, this.db);
-      const envVars = buildContainerEnvVars(fullEnv);
+    if (!running) {
+      throw new Error('Container is not running. Start the container first.');
+    }
 
-      // Create user and setup SSH keys when SSH info is requested
-      console.log(`[Containers] Setting up user ${username} for SSH access`);
-      await this.createUserInContainer({
-        containerName,
-        unixUsername: username,
-        unixUid: user.unix_uid,
-        unixGid: user.unix_gid,
-        envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
-      });
+    // Query the actual SSH port from Docker (in case container was restarted)
+    let port: number;
+    try {
+      const sshPortOutput = await this.runDocker(['port', containerName, '22']);
+      port = this.parsePortOutput(sshPortOutput);
+
+      // Update worktree record if port changed
+      if (port !== worktree.ssh_port) {
+        console.log(`[Containers] SSH port changed from ${worktree.ssh_port} to ${port}, updating record`);
+        await this.worktreeRepo.update(worktreeId, { ssh_port: port });
+      }
+    } catch (error) {
+      // Fall back to stored port if query fails
+      if (worktree.ssh_port) {
+        port = worktree.ssh_port;
+      } else {
+        throw new Error('SSH port not configured and could not query container');
+      }
+    }
+
+    // Build user's env vars for SSH access
+    const fullEnv = await createUserProcessEnvironment(userId, this.db);
+    const envVars = buildContainerEnvVars(fullEnv);
+
+    // Create user and setup SSH keys when SSH info is requested
+    console.log(`[Containers] Setting up user ${username} for SSH access`);
+    await this.createUserInContainer({
+      containerName,
+      unixUsername: username,
+      unixUid: user.unix_uid,
+      unixGid: user.unix_gid,
+      envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
+    });
+
+    // Setup SSH keys (only if user has keys configured)
+    if (user.ssh_public_keys && user.ssh_public_keys.length > 0) {
       await this.setupUserSSHKeys(containerName, username, user.ssh_public_keys);
+    } else {
+      console.warn(`[Containers] User ${username} has no SSH public keys configured`);
     }
 
     const host = this.getSSHHost();
-    // Use stored port from worktree record (dynamically assigned when container was created)
-    const port = worktree.ssh_port;
-
-    if (!port) {
-      throw new Error('SSH port not configured for this worktree. Container may not have been created yet.');
-    }
 
     return {
       host,

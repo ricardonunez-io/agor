@@ -398,7 +398,7 @@ function spawnExecutorInContainer(
     DAEMON_URL: hostDaemonUrl,
     TERM: 'xterm-256color',
     // Set HOME to workspace when using UID (no guaranteed home dir in container)
-    HOME: containerUid !== undefined ? containerCwd : (containerUser ? `/home/${containerUser}` : '/workspace'),
+    HOME: containerUid !== undefined ? containerCwd : (containerUser ? `/home/${containerUser}` : containerCwd),
   };
 
   // Add API keys if present

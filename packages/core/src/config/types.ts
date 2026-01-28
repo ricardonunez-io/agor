@@ -184,6 +184,12 @@ export interface AgorContainerSettings {
   /** Restart policy (default: 'unless-stopped') */
   restart_policy?: 'no' | 'always' | 'unless-stopped' | 'on-failure';
 
+  /** Mount path for worktree inside container (default: '/workspace') */
+  workspace_path?: string;
+
+  /** Mount path for repo inside container (default: '/repo') */
+  repo_path?: string;
+
   /** Resource limits (optional) */
   resources?: {
     /** Memory limit (e.g., '4g', '2048m') */

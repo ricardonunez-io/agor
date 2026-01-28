@@ -73,7 +73,7 @@ export class TaskRepository implements BaseRepository<Task, Partial<Task>> {
           start_timestamp: new Date(now).toISOString(),
         },
         git_state,
-        model: task.model, // No default - let SDK/CLI set the actual model
+        model: task.model ?? 'unknown', // Default to 'unknown' - SDK/CLI will patch with actual model
         tool_use_count: task.tool_use_count ?? 0,
         duration_ms: task.duration_ms, // Task execution duration
         agent_session_id: task.agent_session_id, // SDK session ID

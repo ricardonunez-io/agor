@@ -50,13 +50,19 @@ RUN ARCH=$(uname -m) && \
     mv /tmp/gh_*/bin/gh /usr/local/bin/ && \
     rm -rf /tmp/gh_*
 
-# AI Coding Agents (executor spawns these via docker exec)
+# AI Coding Agents - Both CLI tools AND SDK dependencies
+# CLI tools: for fallback/manual use
+# SDKs: installed with executor at runtime (mounted volume)
 RUN npm install -g \
     @anthropic-ai/claude-code \
     @google/gemini-cli \
     @openai/codex && \
     # Remove build tools to reduce image size
     apk del python3 make g++
+
+# Executor mount point - daemon mounts packages/{core,executor} here at runtime
+# This allows executor to run inside container with full SDK access
+RUN mkdir -p /app/packages
 
 # Shared directory for AI sessions
 RUN mkdir -p /home/shared && chmod 777 /home/shared

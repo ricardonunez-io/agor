@@ -445,9 +445,9 @@ export class TerminalsService {
           }
         }
 
-        // For container execution, cwd is always /workspace inside the container
+        // For container execution, cwd is the configured workspace path inside the container
         if (containerIsolationEnabled && containerName && containerRunning) {
-          cwd = '/workspace';
+          cwd = config.execution?.containers?.workspace_path || '/workspace';
         } else if (finalUnixUser) {
           const symlinkPath = `/home/${finalUnixUser}/agor/worktrees/${worktree.name}`;
           cwd = fs.existsSync(symlinkPath) ? symlinkPath : worktree.path;

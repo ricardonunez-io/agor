@@ -30,9 +30,11 @@ import { getDaemonUrl, spawnExecutor } from '../utils/spawn-executor.js';
 
 /**
  * Build log file path for a worktree
+ * Uses /tmp to avoid polluting the worktree directory
  */
 function getBuildLogPath(worktreePath: string): string {
-  return join(worktreePath, '.agor', 'build.log');
+  const worktreeName = worktreePath.split('/').pop() || 'unknown';
+  return `/tmp/agor-build-${worktreeName}.log`;
 }
 
 /**
@@ -876,9 +878,10 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
           // Run as root inside container - container is isolated so this is safe
           // This ensures Podman containers are visible to all users (same namespace)
           console.log(`[Worktrees] Running start command inside container ${containerName}`);
+          const containerWorkspace = this.config.execution?.containers?.workspace_path || '/workspace';
           const dockerArgs = [
             'exec',
-            '-w', '/workspace',
+            '-w', containerWorkspace,
             containerName!,
             'sh', '-c', command,
           ];
@@ -1060,9 +1063,10 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
             // Podman socket is started at container boot, DOCKER_HOST is set via ENV
             // Run as root inside container - container is isolated so this is safe
             console.log(`[Worktrees] Running stop command inside container ${containerName}`);
+            const containerWorkspace = this.config.execution?.containers?.workspace_path || '/workspace';
             const dockerArgs = [
               'exec',
-              '-w', '/workspace',
+              '-w', containerWorkspace,
               containerName!,
               'sh', '-c', command,
             ];
@@ -1547,9 +1551,10 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
         if (useContainerExecution) {
           // Run logs command inside the worktree container
           console.log(`[Worktrees] Running logs command inside container ${containerName}`);
+          const containerWorkspace = this.config.execution?.containers?.workspace_path || '/workspace';
           const dockerArgs = [
             'exec',
-            '-w', '/workspace',
+            '-w', containerWorkspace,
             containerName!,
             'sh', '-c', command,
           ];
