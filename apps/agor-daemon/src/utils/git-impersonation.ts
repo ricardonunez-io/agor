@@ -6,8 +6,7 @@
  */
 
 import type { Database } from '@agor/core/db';
-import type { UserID } from '@agor/core/types';
-import type { Worktree } from '@agor/core/types/worktree';
+import type { UserID, Worktree } from '@agor/core/types';
 import {
   resolveUnixUserForImpersonation,
   type UnixUserMode,
