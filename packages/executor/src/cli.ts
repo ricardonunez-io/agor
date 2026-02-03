@@ -15,6 +15,11 @@
  * impersonation - it's already running as the correct user.
  */
 
+// Set umask 002 to ensure files created by Claude Code SDK are group-writable
+// This must be done BEFORE any file operations occur
+// umask 002 means: new files get 664 (rw-rw-r--), directories get 775 (rwxrwxr-x)
+process.umask(0o002);
+
 import { parseArgs } from 'node:util';
 
 import { executeCommand, getRegisteredCommands } from './commands/index.js';
