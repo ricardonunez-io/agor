@@ -15,9 +15,43 @@
  * impersonation - it's already running as the correct user.
  */
 
-// Set umask 002 to ensure files created by Claude Code SDK are group-writable
-// This must be done BEFORE any file operations occur
-// umask 002 means: new files get 664 (rw-rw-r--), directories get 775 (rwxrwxr-x)
+// Monkey-patch fs.writeFile to ensure files are group-writable
+// Claude Code SDK explicitly passes mode to fs.writeFile which bypasses umask
+// We wrap writeFile to chmod files to 664 after creation
+import * as fs from 'node:fs';
+const originalWriteFile = fs.writeFile;
+const originalWriteFileSync = fs.writeFileSync;
+
+// Async writeFile wrapper
+(fs.writeFile as any) = function (path: any, data: any, options: any, callback: any) {
+  const cb = typeof options === 'function' ? options : callback;
+  const opts = typeof options === 'function' ? {} : options;
+
+  return originalWriteFile.call(fs, path, data, opts, (err: any) => {
+    if (!err && typeof path === 'string') {
+      fs.chmod(path, 0o664, (chmodErr) => {
+        if (chmodErr) {
+          console.warn(`[executor] Failed to chmod ${path}:`, chmodErr.message);
+        }
+      });
+    }
+    if (cb) cb(err);
+  });
+};
+
+// Sync writeFile wrapper
+(fs.writeFileSync as any) = function (path: any, data: any, options?: any) {
+  originalWriteFileSync.call(fs, path, data, options);
+  if (typeof path === 'string') {
+    try {
+      fs.chmodSync(path, 0o664);
+    } catch (err: any) {
+      console.warn(`[executor] Failed to chmod ${path}:`, err.message);
+    }
+  }
+};
+
+// Set umask 002 as well (for other file operations)
 process.umask(0o002);
 
 import { parseArgs } from 'node:util';
