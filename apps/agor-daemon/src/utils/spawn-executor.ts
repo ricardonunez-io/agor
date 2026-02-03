@@ -274,10 +274,15 @@ function spawnExecutorLocal(payload: Record<string, unknown>, options: SpawnExec
   const envWithDaemonUrl = essentialEnv;
 
   // Build spawn command - handles impersonation via sudo -u when asUser is set
-  const { cmd, args } = buildSpawnArgs('node', [executorPath, '--stdin'], {
-    asUser,
-    env: asUser ? envWithDaemonUrl : undefined, // Only inject env when impersonating (sudo -u needs env passed explicitly)
-  });
+  // Wrap in bash to set umask 002 so files created by Claude Code are group-writable
+  const { cmd, args } = buildSpawnArgs(
+    'bash',
+    ['-c', `umask 002 && exec node ${executorPath} --stdin`],
+    {
+      asUser,
+      env: asUser ? envWithDaemonUrl : undefined, // Only inject env when impersonating (sudo -u needs env passed explicitly)
+    }
+  );
 
   if (asUser) {
     console.log(`${logPrefix} Spawning executor as user: ${asUser}`);
