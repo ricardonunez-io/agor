@@ -1,5 +1,5 @@
 export default {
-  openclaw: 'Is Agor the OpenClaw for Developers?',
+  openclaw: 'Agor vs. OpenClaw (ClawdBot)',
   announcement: 'Agor Announcement',
   'agor-platform': 'Agor Platform',
   'making-of-agor': 'Making of Agor',
