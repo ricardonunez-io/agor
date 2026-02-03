@@ -1,0 +1,196 @@
+---
+title: 'Is Agor the OpenClaw for Developers?'
+description: 'What the fastest-growing open-source project teaches us about agentic AI, and how Agor brings similar capabilities to developer workflows with structured orchestration.'
+date: 2026-02-03
+---
+
+# Is Agor the OpenClaw for Developers?
+
+*What the fastest-growing open-source project teaches us about agentic AI*
+
+---
+
+## The Breakthrough
+
+OpenClaw (née ClawdBot, briefly MoltBot—trademark lawyers move fast) just became the fastest-growing open-source project in GitHub history. 90,000+ stars in weeks. Cloudflare stock up 20%. Mac Minis selling out globally.
+
+This isn't hype. This is a market screaming that it wants AI that actually *does things*.
+
+For a decade, big tech promised us AI assistants and delivered glorified timers. Siri in its walled garden. Alexa controlling lights. Google Assistant knowing everything and doing nothing with it. OpenClaw exposed how timid those efforts were—and proved the demand for real agency was always there, waiting.
+
+One story captures it perfectly: a user asked OpenClaw to make a restaurant reservation. OpenTable didn't have availability. So the agent found voice AI software, downloaded it, called the restaurant directly, and secured the reservation over the phone. Zero human intervention.
+
+That's not automation. That's problem-solving. That's an agent recognizing the initial approach failed and autonomously finding a different solution.
+
+*That's* what 90,000 stars are about.
+
+I've been building [Agor](https://agor.live)—a spatial workspace for orchestrating AI coding agents ([GitHub](https://github.com/preset-io/agor)). Watching OpenClaw explode has been fascinating because we're solving adjacent problems with different architectures, but we share the same core belief: **AI should actually do things.**
+
+---
+
+## What We're All Learning
+
+The OpenClaw moment is teaching the entire industry several things at once:
+
+**1. The demand is real and massive.** People don't want assistants that suggest—they want assistants that *do*. The pent-up frustration with neutered AI helpers just got quantified.
+
+**2. Local-first resonates.** Your conversation history on your machine. Your credentials under your control. Privacy-first architecture isn't just a nice-to-have; it's a core value prop.
+
+**3. Extensibility is everything.** OpenClaw's "skills" ecosystem—50+ bundled, infinite customization—shows that agents need hands and feet. Browser automation, file system access, shell commands, calendar integration. The more an agent can touch, the more useful it becomes.
+
+**4. Security is hard.** The vulnerabilities researchers found were serious. But more importantly, they're *inherent* to the architecture. Broad permissions create attack surface. Prompt injection remains unsolved. These aren't OpenClaw-specific problems—they're agentic AI problems we're all grappling with.
+
+The honest framing isn't "OpenClaw is dangerous." It's "OpenClaw is showing us the frontier, and the frontier has sharp edges."
+
+---
+
+## Where Agor Fits
+
+The differences between OpenClaw and Agor are real:
+
+| | OpenClaw | Agor |
+|---|---|---|
+| **Primary use case** | Personal digital life | Developer workflows |
+| **Agent model** | One agent, many integrations | Many agents, coordinated |
+| **Interface** | Chat (WhatsApp, Telegram, etc.) | Spatial canvas + mobile |
+| **Extensibility** | Skills marketplace | MCP servers + git repos |
+| **Collaboration** | Single-player | Multiplayer with real-time presence |
+
+But the similarities matter more:
+
+- Both believe in agents that take action, not just advise
+- Both are local-first / self-hosted
+- Both embrace extensibility as core to the value prop
+- Both let you run against Claude, GPT-4, local models
+- Both have scheduling capabilities
+- Both have mobile access for prompting on the go
+
+We're exploring the same territory from different starting points.
+
+---
+
+## Agor's Security Model
+
+Let's be honest: agents fundamentally need access to things to be useful. That's the whole point. And prompt injection is a real concern that nobody has fully solved. Any system that lets an LLM read external content and take actions is exposed to some degree.
+
+The question isn't whether to give agents access—it's how to *structure* that access in a controlled environment.
+
+Agor approaches this differently than OpenClaw. Instead of one agent with broad permissions across your digital life, Agor provides layered isolation with explicit boundaries:
+
+**Git-native scoping.** Each worktree is an isolated environment. An agent working on `feature-auth` doesn't have access to `feature-payments` unless you explicitly grant it. The attack surface is constrained to what you've put in that worktree.
+
+**MCP as the permission layer.** Rather than implicit access to everything, capabilities are explicitly connected through MCP servers. You decide which tools each session can reach. It's opt-in, not opt-out.
+
+**RBAC at the worktree level.** In multi-user environments, permissions are granular. Who can see which worktrees? Who can spawn agents? Who can modify zone triggers? Role-based access control lets teams collaborate without everyone having root.
+
+**Unix-level isolation.** This is where Agor's architecture diverges most sharply. Each user can have a Unix user attached, and each user only has access to their home directory. We're not reinventing isolation—we're relying on battle-tested Unix permissions that have been hardened for decades.
+
+**Agent impersonation.** Agents run as the user who spawned them, inheriting that user's permissions. No privilege escalation. No ambient authority. The agent can do exactly what the user could do, nothing more.
+
+The vision for Agor is true Unix-level multi-tenancy: admins control the boundaries, users operate within them, and agents inherit their spawner's constraints. We're building toward a model where **Agor offers as much—or as little—guardrails as the administrator wants to provide.**
+
+Some environments want agents sandboxed to specific repos with read-only access. Others want full autonomy. Agor's job isn't to impose a single security posture—it's to give you the primitives to implement yours.
+
+This is still evolving. Multi-user isolation, agent supervision, audit trails—there's more to build. But the foundation is a clean architecture designed for controllable access, not retrofitted security on top of "let the agent do anything."
+
+---
+
+## Can Agor Do What OpenClaw Does?
+
+This is the interesting question. And the answer is: *yes, but differently.*
+
+OpenClaw's magic is connecting to everything—email, messaging, calendars, travel, whatever you want. The "skills" abstraction makes any API accessible to your agent.
+
+Agor's architecture can do the same thing, but through a pattern I've been calling the **personal assistant repo**.
+
+Here's how it works:
+
+**1. Create a private repo on GitHub called `personal_assistant`**
+
+This becomes your agent's toolkit. Structure it however you want:
+
+```
+personal_assistant/
+├── skills/
+│   ├── gmail/
+│   ├── gcal/
+│   ├── slack/
+│   ├── hubspot/
+│   └── travel/
+├── workflows/
+│   ├── morning_briefing.md
+│   ├── inbox_triage.md
+│   └── expense_reports.md
+└── CLAUDE.md
+```
+
+**2. Store credentials in GitHub Secrets**
+
+Your API keys for Gmail, calendar, Slack, whatever—secured properly, not in plaintext config files.
+
+**3. Add your skills as simple utilities**
+
+These can be Claude-style skill definitions, Python scripts, shell wrappers—whatever makes sense. The agent has full access to the repo, so it can use any tooling you put there.
+
+**4. Pop a worktree in Agor and start prompting**
+
+Now you have an agent with access to:
+- All your personal assistant skills
+- The ability to write new skills on the fly
+- Agor's scheduler for recurring tasks ("morning briefing at 7am")
+- Agor's mobile interface for prompting from anywhere
+- The full MCP layer for connecting to other services
+
+**5. Scale horizontally**
+
+Here's where Agor diverges: you're not limited to one agent. You can have a `personal_assistant` worktree handling your life stuff while other agents work on your actual repos. The spatial canvas lets you see everything at once. Agents can even coordinate through Agor's internal MCP service.
+
+The architectural difference is subtle but meaningful: instead of one agent with keys to everything, you have *structured access* through git repos with proper credential management and Unix-level isolation underneath.
+
+---
+
+## The MCP Bridge
+
+Model Context Protocol is the real unlock here. OpenClaw has its skills. Agor has deep MCP integration.
+
+But MCP is becoming the lingua franca for agent capabilities. The same MCP servers that work with Claude Desktop work with Agor. The ecosystem is converging.
+
+This means the "skills vs MCP" distinction is increasingly artificial. If someone builds a killer Gmail MCP server, both OpenClaw and Agor can use it. The underlying capability layer is standardizing even as the orchestration layers differ.
+
+---
+
+## Different Entry Points, Same Destination
+
+I think what OpenClaw and Agor represent are two valid entry points to the same future:
+
+**OpenClaw says:** "Start with your personal life. Connect everything. Let the agent figure it out."
+
+**Agor says:** "Start with your development workflow. Structure the orchestration. Expand from there."
+
+Neither is wrong. They're optimized for different users and different trust models.
+
+If you're a technically sophisticated individual who understands network isolation and credential rotation, OpenClaw offers a glimpse of where personal computing is headed. The power is real.
+
+If you're a developer or team who wants to orchestrate multiple AI agents on parallel tasks with proper isolation, Agor provides the spatial layer to make that manageable.
+
+And increasingly, with patterns like the personal assistant repo, you can get OpenClaw-style capabilities within Agor's structured paradigm—with the security model you actually want underneath.
+
+---
+
+## The Frontier Has Sharp Edges
+
+OpenClaw's security incidents—the trademark scramble, the scam tokens, the exposed instances—aren't indictments. They're the inevitable friction of moving fast on a frontier.
+
+The researchers who found vulnerabilities are doing important work. The patches that followed show a responsive community. The conversation about prompt injection and attack surface is one the entire industry needs to have.
+
+What OpenClaw proved is that the demand for agentic AI is so strong it can move markets overnight. What it's teaching us is that building agents safely is genuinely hard—not because anyone is careless, but because the problems are new.
+
+We're all figuring this out together. OpenClaw in the personal assistant space. Agor in the developer orchestration space. Enterprise players building behind closed doors. Researchers probing the edges.
+
+The 90,000 stars aren't just validation for one project. They're a signal about where computing is headed. AI that actually does things isn't a novelty—it's the new baseline expectation.
+
+The question isn't whether we get there. It's how we build the guardrails without killing the magic.
+
+---
+
+**[Try Agor →](https://agor.live)** | **[GitHub →](https://github.com/preset-io/agor)**
