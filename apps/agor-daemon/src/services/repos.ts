@@ -34,6 +34,11 @@ import type {
   UserID,
   Worktree,
 } from '@agor/core/types';
+import {
+  resolveUnixUserForImpersonation,
+  type UnixUserMode,
+  validateResolvedUnixUser,
+} from '@agor/core/unix';
 import { DrizzleService } from '../adapters/drizzle';
 import { getDaemonUrl, spawnExecutorFireAndForget } from '../utils/spawn-executor.js';
 
@@ -107,6 +112,50 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
     this.repoRepo = repoRepo;
     this.app = app;
     this.db = db;
+  }
+
+  /**
+   * Resolve Unix user for git operations (clone/worktree.add) based on impersonation mode
+   *
+   * Uses the same logic as worktree service:
+   * - simple mode: no impersonation (daemon user)
+   * - insulated mode: executor_unix_user from config
+   * - strict mode: user's unix_username
+   *
+   * @param userId - User ID performing the operation
+   * @returns Unix username to impersonate, or undefined for no impersonation
+   */
+  private async resolveGitOperationUser(userId: UserID): Promise<string | undefined> {
+    const { loadConfig } = await import('@agor/core/config');
+    const { UsersRepository } = await import('@agor/core/db');
+
+    const config = await loadConfig();
+    const unixUserMode = (config.execution?.unix_user_mode ?? 'simple') as UnixUserMode;
+    const configExecutorUser = config.execution?.executor_unix_user;
+
+    // For git operations, use the requesting user's unix_username
+    const usersRepo = new UsersRepository(this.db);
+    const user = await usersRepo.findById(userId);
+    const userUnixUsername = user?.unix_username;
+
+    // Use centralized impersonation resolution logic
+    const impersonationResult = resolveUnixUserForImpersonation({
+      mode: unixUserMode,
+      userUnixUsername,
+      executorUnixUser: configExecutorUser,
+    });
+
+    const asUser = impersonationResult.unixUser ?? undefined;
+
+    // Validate Unix user exists for modes that require it
+    if (asUser) {
+      validateResolvedUnixUser(unixUserMode, asUser);
+      console.log(`[Repo Git] Running as user: ${asUser} (${impersonationResult.reason})`);
+    } else {
+      console.log(`[Repo Git] Running as daemon user (${impersonationResult.reason})`);
+    }
+
+    return asUser;
   }
 
   /**
@@ -424,6 +473,9 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
       const { getDaemonUser } = await import('@agor/core/config');
       const daemonUser = getDaemonUser();
 
+      // Resolve Unix user for impersonation (handles simple/insulated/strict modes)
+      const asUser = userId ? await this.resolveGitOperationUser(userId) : undefined;
+
       spawnExecutorFireAndForget(
         {
           command: 'git.worktree.add',
@@ -447,7 +499,10 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
             creatorUnixUsername, // Creator will be added to worktree group
           },
         },
-        { logPrefix: `[ReposService.createWorktree ${data.name}]` }
+        {
+          logPrefix: `[ReposService.createWorktree ${data.name}]`,
+          asUser, // Run as resolved user (fresh groups via sudo -u)
+        }
       );
     } else {
       console.error('Session token service not initialized, cannot spawn executor');
