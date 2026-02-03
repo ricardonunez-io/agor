@@ -25,6 +25,7 @@ import type {
 import {
   resolveUnixUserForImpersonation,
   spawnEnvironmentCommand,
+  type UnixUserMode,
   validateResolvedUnixUser,
 } from '@agor/core/unix';
 import { getNextRunTime, validateCron } from '@agor/core/utils/cron';
@@ -114,10 +115,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     const { UsersRepository } = await import('@agor/core/db');
 
     const config = await loadConfig();
-    const unixUserMode = (config.execution?.unix_user_mode ?? 'simple') as
-      | 'simple'
-      | 'insulated'
-      | 'strict';
+    const unixUserMode = (config.execution?.unix_user_mode ?? 'simple') as UnixUserMode;
     const configExecutorUser = config.execution?.executor_unix_user;
 
     // For git operations, use worktree creator's unix_username
@@ -281,6 +279,9 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     if (deleteFromFilesystem) {
       console.log(`🗑️  Spawning executor to remove worktree from filesystem: ${worktree.path}`);
 
+      // Resolve Unix user for impersonation (handles simple/insulated/strict modes)
+      const asUser = await this.resolveGitOperationUser(worktree);
+
       // Generate session token for executor authentication
       const userId = (params as AuthenticatedParams | undefined)?.user?.user_id as
         | UserID
@@ -306,6 +307,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
             },
             {
               logPrefix: `[WorktreesService.remove ${worktree.name}]`,
+              asUser, // Run as resolved user (fresh groups via sudo -u)
             }
           );
         })

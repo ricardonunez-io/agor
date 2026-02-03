@@ -723,11 +723,9 @@ async function main() {
       UnixUserNotFoundError,
       buildSpawnArgs,
     } = await import('@agor/core/unix');
+    type UnixUserMode = 'simple' | 'insulated' | 'strict';
 
-    const unixUserMode = (config.execution?.unix_user_mode ?? 'simple') as
-      | 'simple'
-      | 'insulated'
-      | 'strict';
+    const unixUserMode = (config.execution?.unix_user_mode ?? 'simple') as UnixUserMode;
     const configExecutorUser = config.execution?.executor_unix_user;
     const sessionUnixUser = session.unix_username;
 
