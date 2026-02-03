@@ -110,7 +110,6 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
     this.db = db;
   }
 
-
   /**
    * Custom method: Find repo by slug
    */

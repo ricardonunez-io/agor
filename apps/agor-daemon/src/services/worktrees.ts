@@ -95,7 +95,6 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     return this.boardObjectsService;
   }
 
-
   /**
    * Override patch to handle board_objects when board_id changes and schedule validation
    */
