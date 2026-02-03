@@ -427,9 +427,7 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
       const daemonUser = getDaemonUser();
 
       // Resolve Unix user for impersonation (handles simple/insulated/strict modes)
-      const asUser = userId
-        ? await resolveGitImpersonationForUser(this.db, userId, '[Repo Git]')
-        : undefined;
+      const asUser = userId ? await resolveGitImpersonationForUser(this.db, userId) : undefined;
 
       spawnExecutorFireAndForget(
         {

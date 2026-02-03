@@ -231,7 +231,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       console.log(`🗑️  Spawning executor to remove worktree from filesystem: ${worktree.path}`);
 
       // Resolve Unix user for impersonation (handles simple/insulated/strict modes)
-      const asUser = await resolveGitImpersonationForWorktree(this.db, worktree, '[Worktree Git]');
+      const asUser = await resolveGitImpersonationForWorktree(this.db, worktree);
 
       // Generate session token for executor authentication
       const userId = (params as AuthenticatedParams | undefined)?.user?.user_id as
@@ -320,7 +320,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       console.log(`🧹 Spawning executor to clean worktree filesystem: ${worktree.path}`);
 
       // Resolve Unix user for impersonation (handles simple/insulated/strict modes)
-      const asUser = await resolveGitImpersonationForWorktree(this.db, worktree, '[Worktree Git]');
+      const asUser = await resolveGitImpersonationForWorktree(this.db, worktree);
 
       appWithToken.sessionTokenService
         ?.generateToken('worktree-clean', userId || 'anonymous')
@@ -350,7 +350,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       console.log(`🗑️  Spawning executor to delete worktree from filesystem: ${worktree.path}`);
 
       // Resolve Unix user for impersonation (handles simple/insulated/strict modes)
-      const asUser = await resolveGitImpersonationForWorktree(this.db, worktree, '[Worktree Git]');
+      const asUser = await resolveGitImpersonationForWorktree(this.db, worktree);
 
       appWithToken.sessionTokenService
         ?.generateToken('worktree-delete', userId || 'anonymous')

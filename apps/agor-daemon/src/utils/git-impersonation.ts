@@ -24,13 +24,11 @@ import {
  *
  * @param db - Database instance for user lookup
  * @param userId - User ID to resolve impersonation for
- * @param logPrefix - Prefix for console logs (e.g., "[Repo Git]")
  * @returns Unix username to impersonate, or undefined for no impersonation
  */
 export async function resolveGitImpersonationForUser(
   db: Database,
-  userId: UserID,
-  logPrefix = '[Git]'
+  userId: UserID
 ): Promise<string | undefined> {
   const { loadConfig } = await import('@agor/core/config');
   const { UsersRepository } = await import('@agor/core/db');
@@ -56,9 +54,6 @@ export async function resolveGitImpersonationForUser(
   // Validate Unix user exists for modes that require it
   if (asUser) {
     validateResolvedUnixUser(unixUserMode, asUser);
-    console.log(`${logPrefix} Running as user: ${asUser} (${impersonationResult.reason})`);
-  } else {
-    console.log(`${logPrefix} Running as daemon user (${impersonationResult.reason})`);
   }
 
   return asUser;
@@ -71,13 +66,11 @@ export async function resolveGitImpersonationForUser(
  *
  * @param db - Database instance for user lookup
  * @param worktree - Worktree to resolve user for
- * @param logPrefix - Prefix for console logs (e.g., "[Worktree Git]")
  * @returns Unix username to impersonate, or undefined for no impersonation
  */
 export async function resolveGitImpersonationForWorktree(
   db: Database,
-  worktree: Worktree,
-  logPrefix = '[Git]'
+  worktree: Worktree
 ): Promise<string | undefined> {
-  return resolveGitImpersonationForUser(db, worktree.created_by, logPrefix);
+  return resolveGitImpersonationForUser(db, worktree.created_by);
 }
