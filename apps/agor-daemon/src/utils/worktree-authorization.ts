@@ -184,15 +184,8 @@ export function ensureWorktreePermission(
 
     const userId = context.params.user.user_id as UUID;
 
-    console.log(
-      `[ensureWorktreePermission] Checking ${action}: worktree=${worktree.worktree_id.substring(0, 8)}, userId=${userId.substring(0, 8)}, isOwner=${isOwner}, requiredLevel=${requiredLevel}, others_can=${worktree.others_can}`
-    );
-
     if (!hasWorktreePermission(worktree, userId, isOwner, requiredLevel)) {
       const effectiveLevel = resolveWorktreePermission(worktree, userId, isOwner);
-      console.error(
-        `[ensureWorktreePermission] PERMISSION DENIED: user ${userId.substring(0, 8)} has '${effectiveLevel}' but needs '${requiredLevel}' to ${action}`
-      );
       throw new Forbidden(
         `You need '${requiredLevel}' permission to ${action}. You have '${effectiveLevel}' permission.`
       );
@@ -658,10 +651,6 @@ export function loadWorktreeFromSession(worktreeRepo: WorktreeRepository) {
     // Check ownership
     const userId = context.params.user?.user_id as UUID | undefined;
     const isOwner = userId ? await worktreeRepo.isOwner(worktree.worktree_id, userId) : false;
-
-    console.log(
-      `[loadWorktreeFromSession] Loaded worktree for session ${session.session_id.substring(0, 8)}: worktree=${worktree.worktree_id.substring(0, 8)}, userId=${userId?.substring(0, 8)}, isOwner=${isOwner}, others_can=${worktree.others_can}`
-    );
 
     // Cache on context for downstream hooks (type-safe via RBACParams)
     context.params.worktree = worktree;
