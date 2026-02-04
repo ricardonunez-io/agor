@@ -100,11 +100,6 @@
       "import": "./dist/utils/permission-mode-mapper.js",
       "require": "./dist/utils/permission-mode-mapper.cjs"
     },
-    "./utils/session-defaults": {
-      "types": "./dist/utils/session-defaults.d.ts",
-      "import": "./dist/utils/session-defaults.js",
-      "require": "./dist/utils/session-defaults.cjs"
-    },
     "./utils/cron": {
       "types": "./dist/utils/cron.d.ts",
       "import": "./dist/utils/cron.js",

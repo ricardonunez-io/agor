@@ -128,7 +128,6 @@ export class SessionsService extends DrizzleService<Session, Partial<Session>, S
 
     let permissionConfig = parent.permission_config;
     let modelConfig = parent.model_config;
-    let mcpServerIds: string[] = [];
 
     // If spawning a different tool and no explicit overrides, fetch user preferences
     if (!isSameTool && !data.permissionMode && !data.modelConfig) {
@@ -136,26 +135,35 @@ export class SessionsService extends DrizzleService<Session, Partial<Session>, S
       if (userId && this.app) {
         try {
           const user = await this.app.service('users').get(userId, params);
-          const { applyUserDefaultsToSessionConfig } = await import(
-            '@agor/core/utils/session-defaults'
-          );
+          const toolDefaults = user?.default_agentic_config?.[targetTool];
 
-          // Apply user defaults with parent session as fallback
-          const resolvedConfig = applyUserDefaultsToSessionConfig({
-            agenticTool: targetTool,
-            user,
-            explicitPermissionMode: data.permissionMode,
-            explicitModelConfig: data.modelConfig,
-            explicitMcpServerIds: data.mcpServerIds,
-            explicitCodexSandboxMode: data.codexSandboxMode,
-            explicitCodexApprovalPolicy: data.codexApprovalPolicy,
-            explicitCodexNetworkAccess: data.codexNetworkAccess,
-            parentSession: parent,
-          });
+          if (toolDefaults) {
+            // Use user's preferred settings for this tool
+            permissionConfig = {
+              mode: toolDefaults.permissionMode,
+              ...(targetTool === 'codex' &&
+              toolDefaults.codexSandboxMode &&
+              toolDefaults.codexApprovalPolicy
+                ? {
+                    codex: {
+                      sandboxMode: toolDefaults.codexSandboxMode,
+                      approvalPolicy: toolDefaults.codexApprovalPolicy,
+                      networkAccess: toolDefaults.codexNetworkAccess,
+                    },
+                  }
+                : {}),
+            };
 
-          permissionConfig = resolvedConfig.permissionConfig;
-          modelConfig = resolvedConfig.modelConfig;
-          mcpServerIds = resolvedConfig.mcpServerIds;
+            if (toolDefaults.modelConfig) {
+              modelConfig = {
+                mode: toolDefaults.modelConfig.mode || 'alias',
+                model: toolDefaults.modelConfig.model || '',
+                updated_at: new Date().toISOString(),
+                thinkingMode: toolDefaults.modelConfig.thinkingMode,
+                manualThinkingTokens: toolDefaults.modelConfig.manualThinkingTokens,
+              };
+            }
+          }
         } catch (error) {
           // If we can't fetch user preferences, fall back to parent settings
           console.warn(
@@ -164,27 +172,34 @@ export class SessionsService extends DrizzleService<Session, Partial<Session>, S
           );
         }
       }
-    } else if (data.permissionMode || data.modelConfig || data.mcpServerIds) {
-      // Apply explicit overrides from SpawnConfig
-      const { applyUserDefaultsToSessionConfig } = await import(
-        '@agor/core/utils/session-defaults'
-      );
+    }
 
-      const resolvedConfig = applyUserDefaultsToSessionConfig({
-        agenticTool: targetTool,
-        user: undefined, // Don't fetch user defaults when explicit overrides are provided
-        explicitPermissionMode: data.permissionMode,
-        explicitModelConfig: data.modelConfig,
-        explicitMcpServerIds: data.mcpServerIds,
-        explicitCodexSandboxMode: data.codexSandboxMode,
-        explicitCodexApprovalPolicy: data.codexApprovalPolicy,
-        explicitCodexNetworkAccess: data.codexNetworkAccess,
-        parentSession: parent,
-      });
+    // Apply explicit overrides from SpawnConfig
+    if (data.permissionMode) {
+      permissionConfig = {
+        mode: data.permissionMode,
+        ...(targetTool === 'codex' && data.codexSandboxMode && data.codexApprovalPolicy
+          ? {
+              codex: {
+                sandboxMode: data.codexSandboxMode,
+                approvalPolicy: data.codexApprovalPolicy,
+                networkAccess: data.codexNetworkAccess,
+              },
+            }
+          : permissionConfig?.codex
+            ? { codex: permissionConfig.codex }
+            : {}),
+      };
+    }
 
-      permissionConfig = resolvedConfig.permissionConfig;
-      modelConfig = resolvedConfig.modelConfig;
-      mcpServerIds = resolvedConfig.mcpServerIds;
+    if (data.modelConfig) {
+      modelConfig = {
+        mode: data.modelConfig.mode || 'alias',
+        model: data.modelConfig.model || '',
+        updated_at: new Date().toISOString(),
+        thinkingMode: data.modelConfig.thinkingMode,
+        manualThinkingTokens: data.modelConfig.manualThinkingTokens,
+      };
     }
 
     // TODO: Handle MCP server attachment from data.mcpServerIds via session_mcp_servers junction table
@@ -230,25 +245,13 @@ export class SessionsService extends DrizzleService<Session, Partial<Session>, S
         model_config: modelConfig,
         callback_config: callbackConfig,
         // Don't copy sdk_session_id - spawn will get its own via forkSession:true
+        // TODO: Handle MCP server attachment via session_mcp_servers junction table
       },
       params
     );
 
     // Cast spawnedSession to Session to handle return type (create returns Session | Session[])
     const session = spawnedSession as Session;
-
-    // Attach MCP servers if specified
-    if (mcpServerIds && mcpServerIds.length > 0 && this.app) {
-      for (const mcpServerId of mcpServerIds) {
-        await this.app.service('session-mcp-servers').create(
-          {
-            session_id: session.session_id,
-            mcp_server_id: mcpServerId,
-          },
-          params
-        );
-      }
-    }
 
     // Update parent's children list
     const parentChildren = parent.genealogy?.children || [];
