@@ -1344,16 +1344,20 @@ export function setupMCPRoutes(app: Application): void {
             };
           }
 
-          // Build model config (if user has defaults for this tool and a model is specified)
+          // Build model config from user defaults if present
+          // Allow thinking-mode defaults even without model override
           let modelConfig: Record<string, unknown> | undefined = undefined;
-          if (userToolDefaults?.modelConfig?.model) {
+          if (userToolDefaults?.modelConfig) {
             modelConfig = {
               mode: userToolDefaults.modelConfig.mode || 'alias',
-              model: userToolDefaults.modelConfig.model,
               updated_at: new Date().toISOString(),
               thinkingMode: userToolDefaults.modelConfig.thinkingMode,
               manualThinkingTokens: userToolDefaults.modelConfig.manualThinkingTokens,
             };
+            // Only set model if explicitly provided (don't force empty string)
+            if (userToolDefaults.modelConfig.model) {
+              modelConfig.model = userToolDefaults.modelConfig.model;
+            }
           }
 
           // Determine MCP server IDs to attach
