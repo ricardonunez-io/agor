@@ -1344,12 +1344,12 @@ export function setupMCPRoutes(app: Application): void {
             };
           }
 
-          // Build model config (if user has defaults for this tool)
+          // Build model config (if user has defaults for this tool and a model is specified)
           let modelConfig: Record<string, unknown> | undefined = undefined;
-          if (userToolDefaults?.modelConfig) {
+          if (userToolDefaults?.modelConfig?.model) {
             modelConfig = {
               mode: userToolDefaults.modelConfig.mode || 'alias',
-              model: userToolDefaults.modelConfig.model || '',
+              model: userToolDefaults.modelConfig.model,
               updated_at: new Date().toISOString(),
               thinkingMode: userToolDefaults.modelConfig.thinkingMode,
               manualThinkingTokens: userToolDefaults.modelConfig.manualThinkingTokens,
