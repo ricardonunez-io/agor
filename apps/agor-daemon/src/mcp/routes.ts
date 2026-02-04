@@ -1311,54 +1311,34 @@ export function setupMCPRoutes(app: Application): void {
           const currentSha = await getGitState(worktree.path);
           const currentRef = await getCurrentBranch(worktree.path);
 
-          // Determine permission mode
-          // Priority: explicit param > user defaults > system defaults
-          const { getDefaultPermissionMode } = await import('@agor/core/types');
+          // Apply user defaults to session config
+          const { applyUserDefaultsToSessionConfig } = await import(
+            '@agor/core/utils/session-defaults'
+          );
           const { mapPermissionMode } = await import('@agor/core/utils/permission-mode-mapper');
           const agenticTool = args.agenticTool as AgenticToolName;
 
-          // Check user's default_agentic_config for this tool
-          const userToolDefaults = user?.default_agentic_config?.[agenticTool];
-          const requestedMode =
-            args.permissionMode ||
-            userToolDefaults?.permissionMode ||
-            getDefaultPermissionMode(agenticTool);
-          const permissionMode = mapPermissionMode(requestedMode, agenticTool);
+          const resolvedConfig = applyUserDefaultsToSessionConfig({
+            agenticTool,
+            user,
+            explicitPermissionMode: args.permissionMode,
+            explicitMcpServerIds: args.mcpServerIds,
+          });
 
-          // Build permission config (including Codex-specific settings if applicable)
-          const permissionConfig: Record<string, unknown> = {
+          // Map permission mode for this tool
+          const permissionMode = mapPermissionMode(
+            resolvedConfig.permissionConfig.mode!,
+            agenticTool
+          );
+
+          // Build final permission config with mapped mode
+          const permissionConfig = {
+            ...resolvedConfig.permissionConfig,
             mode: permissionMode,
-            allowedTools: [],
           };
 
-          // Apply Codex-specific defaults if creating a Codex session
-          if (
-            agenticTool === 'codex' &&
-            userToolDefaults?.codexSandboxMode &&
-            userToolDefaults?.codexApprovalPolicy
-          ) {
-            permissionConfig.codex = {
-              sandboxMode: userToolDefaults.codexSandboxMode,
-              approvalPolicy: userToolDefaults.codexApprovalPolicy,
-              networkAccess: userToolDefaults.codexNetworkAccess,
-            };
-          }
-
-          // Build model config (if user has defaults for this tool)
-          let modelConfig: Record<string, unknown> | undefined = undefined;
-          if (userToolDefaults?.modelConfig) {
-            modelConfig = {
-              mode: userToolDefaults.modelConfig.mode || 'alias',
-              model: userToolDefaults.modelConfig.model || '',
-              updated_at: new Date().toISOString(),
-              thinkingMode: userToolDefaults.modelConfig.thinkingMode,
-              manualThinkingTokens: userToolDefaults.modelConfig.manualThinkingTokens,
-            };
-          }
-
-          // Determine MCP server IDs to attach
-          // Priority: explicit param > user defaults > empty array
-          const mcpServerIds = args.mcpServerIds || userToolDefaults?.mcpServerIds || [];
+          const modelConfig = resolvedConfig.modelConfig;
+          const mcpServerIds = resolvedConfig.mcpServerIds;
 
           // Create session
           const sessionData: Record<string, unknown> = {

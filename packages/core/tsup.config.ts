@@ -20,6 +20,7 @@ export default defineConfig({
     'utils/errors': 'src/utils/errors.ts', // Error handling and formatting utilities
     'utils/url': 'src/utils/url.ts', // Shared URL validation helpers
     'utils/permission-mode-mapper': 'src/utils/permission-mode-mapper.ts', // Permission mode mapping for cross-agent compatibility
+    'utils/session-defaults': 'src/utils/session-defaults.ts', // User defaults application for session configuration
     'utils/cron': 'src/utils/cron.ts', // Cron validation and parsing utilities
     'utils/context-window': 'src/utils/context-window.ts', // Context window calculation utilities
     'utils/path': 'src/utils/path.ts', // Path expansion utilities (tilde to home directory)
