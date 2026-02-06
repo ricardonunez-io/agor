@@ -276,19 +276,53 @@ function startCallbackServer(port: number = 0): Promise<{
 /**
  * Open browser for user authentication
  *
+ * Uses platform-specific commands to open the default browser.
+ * Falls back to the 'open' npm package if the system command fails.
+ *
  * @param url - URL to open in browser
  * @throws Error with helpful message if browser fails to open
  */
 async function openBrowser(url: string): Promise<void> {
+  const { exec } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const execAsync = promisify(exec);
+
+  console.log('[OAuth] Opening browser for URL:', url);
+
+  // Determine the command based on platform
+  const platform = process.platform;
+  let command: string;
+
+  if (platform === 'darwin') {
+    // macOS
+    command = `open "${url}"`;
+  } else if (platform === 'win32') {
+    // Windows
+    command = `start "" "${url}"`;
+  } else {
+    // Linux and others - try xdg-open
+    command = `xdg-open "${url}"`;
+  }
+
   try {
-    const open = (await import('open')).default;
-    await open(url);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Failed to open browser automatically: ${errorMessage}\n\n` +
-        `Please open this URL manually in your browser:\n${url}`
-    );
+    console.log('[OAuth] Executing command:', command);
+    await execAsync(command);
+    console.log('[OAuth] Browser command executed successfully');
+  } catch (execError) {
+    console.error('[OAuth] System open command failed:', execError);
+    // Fall back to the 'open' npm package
+    try {
+      console.log('[OAuth] Falling back to open npm package...');
+      const open = (await import('open')).default;
+      await open(url);
+      console.log('[OAuth] Open npm package succeeded');
+    } catch (openError) {
+      const errorMessage = openError instanceof Error ? openError.message : String(openError);
+      throw new Error(
+        `Failed to open browser automatically: ${errorMessage}\n\n` +
+          `Please open this URL manually in your browser:\n${url}`
+      );
+    }
   }
 }
 
