@@ -3,8 +3,8 @@
  */
 
 import type { BoardObject, ZoneTriggerBehavior } from '@agor/core/types';
-import { Alert, Input, Modal, Select, theme } from 'antd';
-import { useEffect, useId, useRef, useState } from 'react';
+import { Alert, Form, Input, Modal, Select } from 'antd';
+import { useEffect, useRef } from 'react';
 
 interface ZoneConfigModalProps {
   open: boolean;
@@ -15,6 +15,12 @@ interface ZoneConfigModalProps {
   zoneData: BoardObject;
 }
 
+interface ZoneConfigFormValues {
+  name: string;
+  triggerBehavior: ZoneTriggerBehavior;
+  triggerTemplate: string;
+}
+
 export const ZoneConfigModal = ({
   open,
   onCancel,
@@ -23,56 +29,49 @@ export const ZoneConfigModal = ({
   onUpdate,
   zoneData,
 }: ZoneConfigModalProps) => {
-  const { token } = theme.useToken();
-  const [name, setName] = useState(zoneName);
-  const [triggerBehavior, setTriggerBehavior] = useState<ZoneTriggerBehavior>('show_picker');
-  const [triggerTemplate, setTriggerTemplate] = useState('');
-  const nameId = useId();
-  const triggerBehaviorId = useId();
-  const triggerTemplateId = useId();
+  const [form] = Form.useForm<ZoneConfigFormValues>();
   const isInitializingRef = useRef(false);
 
   // Reset form when modal opens (prevent WebSocket updates from erasing user input)
   useEffect(() => {
     if (open && !isInitializingRef.current) {
       isInitializingRef.current = true;
-      setName(zoneName);
-      // Load existing trigger data if available
-      if (zoneData.type === 'zone' && zoneData.trigger) {
-        setTriggerBehavior(zoneData.trigger.behavior);
-        setTriggerTemplate(zoneData.trigger.template);
-      } else {
-        setTriggerBehavior('show_picker');
-        setTriggerTemplate('');
-      }
+      const trigger = zoneData.type === 'zone' ? zoneData.trigger : undefined;
+      form.setFieldsValue({
+        name: zoneName,
+        triggerBehavior: trigger?.behavior ?? 'show_picker',
+        triggerTemplate: trigger?.template ?? '',
+      });
     } else if (!open) {
-      // Reset flag when modal closes
       isInitializingRef.current = false;
     }
-  }, [open, zoneName, zoneData]);
+  }, [open, zoneName, zoneData, form]);
 
-  const handleSave = () => {
-    if (zoneData.type === 'zone') {
-      const hasChanges =
-        name !== zoneName ||
-        triggerTemplate.trim() !== (zoneData.trigger?.template || '') ||
-        triggerBehavior !== (zoneData.trigger?.behavior || 'show_picker');
+  const handleSave = async () => {
+    try {
+      const values = await form.validateFields();
 
-      if (hasChanges) {
-        onUpdate(objectId, {
-          ...zoneData,
-          label: name,
-          // Only save trigger if template is provided
-          trigger: triggerTemplate.trim()
-            ? {
-                behavior: triggerBehavior,
-                template: triggerTemplate.trim(),
-              }
-            : undefined, // Remove trigger if template is empty
-        });
+      if (zoneData.type === 'zone') {
+        const hasChanges =
+          values.name !== zoneName ||
+          values.triggerTemplate.trim() !== (zoneData.trigger?.template || '') ||
+          values.triggerBehavior !== (zoneData.trigger?.behavior || 'show_picker');
+
+        if (hasChanges) {
+          onUpdate(objectId, {
+            ...zoneData,
+            label: values.name,
+            trigger: {
+              behavior: values.triggerBehavior,
+              template: values.triggerTemplate.trim(),
+            },
+          });
+        }
       }
+      onCancel();
+    } catch {
+      // Validation failed — form will show errors
     }
-    onCancel();
   };
 
   return (
@@ -85,74 +84,45 @@ export const ZoneConfigModal = ({
       cancelText="Cancel"
       width={600}
     >
-      {/* Zone Name */}
-      <div style={{ marginBottom: 24 }}>
-        <label
-          htmlFor={nameId}
-          style={{
-            display: 'block',
-            marginBottom: 8,
-            fontWeight: 500,
-            color: token.colorText,
-          }}
+      <Form form={form} layout="vertical" requiredMark="optional">
+        <Form.Item
+          name="name"
+          label="Zone Name"
+          rules={[{ required: true, message: 'Zone name is required' }]}
         >
-          Zone Name
-        </label>
-        <Input
-          id={nameId}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Enter zone name..."
-          size="large"
-        />
-      </div>
+          <Input placeholder="Enter zone name..." size="large" />
+        </Form.Item>
 
-      <div style={{ marginBottom: 16 }}>
-        <label
-          htmlFor={triggerBehaviorId}
-          style={{
-            display: 'block',
-            marginBottom: 8,
-            fontWeight: 500,
-            color: token.colorText,
-          }}
-        >
-          Trigger Behavior
-        </label>
-        <Select
-          id={triggerBehaviorId}
-          value={triggerBehavior}
-          onChange={setTriggerBehavior}
-          style={{ width: '100%' }}
-          options={[
+        <Form.Item name="triggerBehavior" label="Trigger Behavior">
+          <Select
+            style={{ width: '100%' }}
+            options={[
+              {
+                value: 'show_picker',
+                label: 'Show Picker - Choose session and action when dropped',
+              },
+              { value: 'always_new', label: 'Always New - Auto-create new root session' },
+            ]}
+          />
+        </Form.Item>
+
+        <Form.Item
+          name="triggerTemplate"
+          label="Trigger Template"
+          rules={[
             {
-              value: 'show_picker',
-              label: 'Show Picker - Choose session and action when dropped',
+              required: true,
+              whitespace: true,
+              message: 'A trigger template is required for the zone trigger to work',
             },
-            { value: 'always_new', label: 'Always New - Auto-create new root session' },
           ]}
-        />
-      </div>
-
-      <div>
-        <label
-          htmlFor={triggerTemplateId}
-          style={{
-            display: 'block',
-            marginBottom: 8,
-            fontWeight: 500,
-            color: token.colorText,
-          }}
         >
-          Trigger Template
-        </label>
-        <Input.TextArea
-          id={triggerTemplateId}
-          value={triggerTemplate}
-          onChange={(e) => setTriggerTemplate(e.target.value)}
-          placeholder="Enter the prompt template that will be triggered when a worktree is dropped here..."
-          rows={6}
-        />
+          <Input.TextArea
+            placeholder="Enter the prompt template that will be triggered when a worktree is dropped here..."
+            rows={6}
+          />
+        </Form.Item>
+
         <Alert
           message="Handlebars Template Support"
           description={
@@ -200,7 +170,7 @@ export const ZoneConfigModal = ({
           showIcon
           style={{ marginTop: 12 }}
         />
-      </div>
+      </Form>
     </Modal>
   );
 };
