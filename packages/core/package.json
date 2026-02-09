@@ -209,7 +209,7 @@
     "@opencode-ai/sdk": "^1.1.53",
     "@slack/socket-mode": "^2.0.5",
     "@slack/web-api": "^7.13.0",
-    "bcryptjs": "^2.4.3",
+    "bcryptjs": "^3.0.3",
     "cron-parser": "^5.4.0",
     "cronstrue": "^3.9.0",
     "drizzle-orm": "^0.44.7",
@@ -221,7 +221,7 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
+    "@types/bcryptjs": "^3.0.0",
     "@types/iarna__toml": "^2.0.5",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.2",
