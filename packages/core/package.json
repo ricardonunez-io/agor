@@ -197,7 +197,7 @@
     "@feathersjs/express": "^5.0.37",
     "@feathersjs/feathers": "^5.0.37",
     "@feathersjs/rest-client": "^5.0.37",
-    "@feathersjs/schema": "^5.0.37",
+    "@feathersjs/schema": "^5.0.40",
     "@feathersjs/socketio": "^5.0.37",
     "@feathersjs/socketio-client": "^5.0.37",
     "@feathersjs/typebox": "^5.0.37",
