@@ -191,16 +191,19 @@ agor ALL=(ALL) NOPASSWD: /usr/bin/readlink *
 **Key Security Properties:**
 
 1. **Scoped Impersonation** - Only `agor_users` group members can be impersonated
+
    - Prevents escalation to system users (root, postgres, www-data, etc.)
    - All Agor-managed users automatically added to `agor_users`
 
 2. **Path Scoping** - Filesystem operations restricted to Agor-managed paths:
+
    - `/home/*/agor/*` - User worktree symlinks
    - `/home/*/.agor/*` - User Agor data
    - `/var/agor/*` - Shared storage (optional)
    - **Cannot access**: `/etc`, `/usr`, `/root`, system directories
 
 3. **No TTY Required** - `Defaults:agor !requiretty` enables daemon operation
+
    - Code MUST use `sudo -n` to fail fast if TTY somehow required
    - Without `-n` flag, missing TTY causes process freeze
 

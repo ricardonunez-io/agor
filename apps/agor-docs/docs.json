@@ -1,0 +1,118 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "aspen",
+  "name": "agor",
+  "description": "Next-gen agent orchestration for AI coding. Multiplayer workspace for Claude Code, Codex, and Gemini.",
+  "colors": {
+    "primary": "#2e9a92",
+    "dark": "#1c766f",
+    "light": "#7fe8df"
+  },
+  "logo": {
+    "light": "/public/logo.png",
+    "dark": "/public/logo.png",
+    "href": "https://agor.live"
+  },
+  "favicon": "/public/favicon.png",
+  "appearance": {
+    "default": "dark",
+    "strict": true
+  },
+  "background": {
+    "decoration": "grid",
+    "color": {
+      "light": "#f7fbfb",
+      "dark": "#0b1111"
+    }
+  },
+  "styling": {
+    "codeblocks": {
+      "theme": "ayu-dark"
+    }
+  },
+  "navbar": {
+    "links": [
+      {
+        "type": "github",
+        "href": "https://github.com/preset-io/agor"
+      },
+      {
+        "type": "discord",
+        "href": "https://discord.gg/HZKWXfgc"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Get Started",
+      "href": "https://agor.live/guide/getting-started"
+    }
+  },
+  "search": {
+    "prompt": "Search documentation..."
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/preset-io/agor",
+      "discord": "https://discord.gg/HZKWXfgc",
+      "website": "https://agor.live"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guide",
+        "pages": [
+          "guide/index",
+          "guide/getting-started",
+          "guide/concepts",
+          {
+            "group": "Features",
+            "pages": [
+              "guide/internal-mcp",
+              "guide/message-gateway",
+              "guide/scheduler",
+              "guide/environment-configuration",
+              "guide/advanced-features",
+              "guide/spawned-subsessions",
+              "guide/architecture",
+              "guide/sdk-comparison"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": ["guide/development"]
+          },
+          {
+            "group": "Deployment",
+            "pages": ["guide/multiplayer-unix-isolation", "guide/containerized-execution"]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "pages": ["api-reference/index", "api-reference/websockets"]
+      },
+      {
+        "tab": "Blog",
+        "pages": [
+          "blog/agor-openclaw",
+          "blog/agor-cloud",
+          "blog/openclaw",
+          "blog/agor-platform",
+          "blog/orchestration-layers",
+          "blog/context-engineering",
+          "blog/making-of-agor",
+          "blog/announcement"
+        ]
+      },
+      {
+        "tab": "Security",
+        "pages": ["security"]
+      },
+      {
+        "tab": "FAQ",
+        "pages": ["faq"]
+      }
+    ]
+  }
+}

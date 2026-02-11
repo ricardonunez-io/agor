@@ -1,0 +1,97 @@
+---
+title: agor
+description: >-
+  Next-gen agent orchestration for AI coding.
+  Multiplayer workspace for Claude Code, Codex, Gemini, and any agentic coding tool.
+---
+
+The multiplayer-ready, spatial layer that connects Claude Code, Codex, Gemini, and any agentic coding tool into one unified workspace.
+
+<Note>
+  **TL;DR:** Agor is a multiplayer spatial canvas where you coordinate multiple AI coding assistants
+  on parallel tasks, with GitHub-linked worktrees, automated workflow zones, and isolated test
+  environments—all running simultaneously.
+</Note>
+
+<Columns cols={2}>
+  <Card title="Get Started" icon="rocket" href="/guide/getting-started">
+    Install the CLI, launch your first daemon, and spin up a worktree.
+  </Card>
+  <Card title="Concepts" icon="compass" href="/guide/concepts">
+    Understand worktrees, sessions, boards, and the spatial workflow model.
+  </Card>
+  <Card title="API Reference" icon="square-terminal" href="/api-reference">
+    Explore REST endpoints, authentication, and WebSocket events.
+  </Card>
+  <Card title="Architecture" icon="blocks" href="/guide/architecture">
+    Dive into system design, storage, and real-time data flow.
+  </Card>
+</Columns>
+
+---
+
+## In Action
+
+<Columns cols={2}>
+  <Frame caption="Spatial canvas with worktrees and zones">
+    <img src="/public/Area.gif" alt="Spatial 2D Canvas" />
+  </Frame>
+  <Frame caption="Rich web UI for AI conversations">
+    <img src="/public/Convo.gif" alt="AI Conversation in Action" />
+  </Frame>
+  <Frame caption="MCP servers and worktree management">
+    <img src="/public/Settings.gif" alt="Settings and Configuration" />
+  </Frame>
+  <Frame caption="Live collaboration with cursors and comments">
+    <img src="/public/Social.gif" alt="Real-time Multiplayer" />
+  </Frame>
+</Columns>
+
+**▶️ [Watch 13-minute walkthrough on YouTube](https://www.youtube.com/watch?v=3in0qh7ZH0g)** — Unscripted demo showing Agor's core features.
+
+---
+
+## Quickstart
+
+```bash
+npm install -g agor-live
+agor init
+agor daemon start
+agor open
+```
+
+**Try in GitHub Codespaces (up in 1–2 minutes):**
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?skip_quickstart=true&machine=basicLinux32gb&repo=1069864589&ref=main&devcontainer_path=.devcontainer%2Fdevcontainer.json&geo=UsWest)
+
+See the [Getting Started Guide](/guide/getting-started) for detailed instructions, or the [Development Guide](/guide/development) for Docker setup.
+
+---
+
+## Key Features
+
+- **Agent swarm control** across Claude Code, Codex, and Gemini
+- **Multiplayer spatial canvas** for parallel work
+- **Session trees** with fork and spawn workflows
+- **Zone triggers** for workflow automation
+- **Isolated environments** per worktree
+
+---
+
+## Screenshots
+
+<Frame caption="Multiplayer spatial canvas with zones, real-time cursors, and session organization">
+  <img
+    src="/public/hero.png"
+    alt="Agor multiplayer spatial canvas showing AI agent sessions organized on a board with real-time cursors, zones, and worktree cards"
+  />
+</Frame>
+
+---
+
+## Learn More
+
+- [Guide Overview](/guide)
+- [API Reference](/api-reference)
+- [Security](/security)
+- [Blog](/blog)

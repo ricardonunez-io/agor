@@ -10,9 +10,20 @@ The pace of development has accelerated, but the process hasn't kept up. Days wa
 
 Just as Figma transformed design from a solo, file-based workflow into real-time spatial collaboration, Agor does the same for software development. A multiplayer canvas where every feature lives in its own worktree with a running environment. Where code reviews happen on a board backed by live dev servers, with a swarm of AIs a click away—not in Slack threads. Where you see what your teammates (and their AI agents) are building in real-time, without asking for status updates. The development workflow, rebuilt for the speed we code at now.
 
-import { GifGallery } from '../../components/GifGallery';
-
-<GifGallery />
+<Columns cols={2}>
+  <Frame caption="Spatial canvas with worktrees and zones">
+    <img src="/public/Area.gif" alt="Spatial 2D Canvas" />
+  </Frame>
+  <Frame caption="Rich web UI for AI conversations">
+    <img src="/public/Convo.gif" alt="AI Conversation in Action" />
+  </Frame>
+  <Frame caption="MCP servers and worktree management">
+    <img src="/public/Settings.gif" alt="Settings and Configuration" />
+  </Frame>
+  <Frame caption="Live collaboration with cursors and comments">
+    <img src="/public/Social.gif" alt="Real-time Multiplayer" />
+  </Frame>
+</Columns>
 
 ## Why this matters
 
@@ -32,24 +43,17 @@ Agor flips that into a multiplayer canvas. See all the work at once. Fork withou
 
 13-minute walkthrough showing Agor's key features in action:
 
-<div style={{ margin: '2rem 0', maxWidth: '100%' }}>
-  <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0 }}>
-    <iframe
-      src="https://www.youtube.com/embed/3in0qh7ZH0g"
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        borderRadius: '8px',
-      }}
-      frameBorder="0"
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-      allowFullScreen
-    />
-  </div>
-</div>
+<Frame>
+  <iframe
+    src="https://www.youtube.com/embed/3in0qh7ZH0g"
+    title="Agor walkthrough"
+    width="560"
+    height="315"
+    frameBorder="0"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+    allowFullScreen
+  />
+</Frame>
 
 You'll see:
 
@@ -71,7 +75,7 @@ docker compose up
 # Visit http://localhost:5173 → Login: admin@agor.live / admin
 ```
 
-More details: [Getting Started](/guide/getting-started), [Docker Guide](/guide/docker), [Development Guide](/guide/development)
+More details: [Getting Started](/guide/getting-started), [Containerized Execution](/guide/containerized-execution), [Development Guide](/guide/development)
 
 ## How Agor is different
 

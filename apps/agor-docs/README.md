@@ -1,6 +1,6 @@
 # Agor Documentation
 
-Documentation website built with Nextra.
+Documentation website built with Mintlify.
 
 ## Development
 
@@ -13,28 +13,23 @@ cd apps/agor-docs
 pnpm dev
 ```
 
-Open http://localhost:3001
+Open http://localhost:3000
 
 ## Structure
 
 ```
-pages/
-├── index.mdx          # Landing page (symlink to README.md)
-├── guide/             # User guides
-│   ├── getting-started.mdx
-│   ├── docker.mdx
-│   └── development.mdx
-├── cli/               # CLI reference (auto-generated in Phase 2)
-│   └── index.mdx
-└── api/               # API reference (auto-generated in Phase 2)
-    └── index.mdx
+docs/
+├── index.mdx
+├── guide/
+├── api-reference/
+└── blog/
 ```
 
 ## Phase 1 (Complete)
 
-- ✅ Nextra setup with dark mode
+- ✅ Mintlify setup with dark mode
 - ✅ Agor brand colors (#2e9a92 teal)
-- ✅ Landing page from README.md
+- ✅ Landing page with Mintlify components
 - ✅ Basic navigation structure
 - ✅ Guide pages (Getting Started, Docker, Development)
 - ✅ Auto-generated CLI docs from oclif
@@ -67,27 +62,18 @@ pnpm generate:api    # Generate API docs only
 pnpm docs:build      # Auto-generates docs then builds
 ```
 
-Output: `.next/` directory
+Output: Mintlify deployment artifacts
 
 ## Deployment
 
-Docs are automatically deployed to GitHub Pages on every push to `main` that changes:
+Docs are deployed via Mintlify on every push to `main` that changes:
 
 - `apps/agor-docs/**`
-- `apps/agor-cli/src/commands/**` (CLI docs are auto-generated)
 
-**GitHub Pages Setup (one-time):**
+**Mintlify Setup (one-time):**
 
-1. Go to repository Settings → Pages
-2. Source: **GitHub Actions**
-3. That's it! The workflow (`.github/workflows/deploy-docs.yml`) handles the rest.
-
-**Manual deployment trigger:**
-
-```bash
-gh workflow run deploy-docs.yml
-```
+1. Connect the repository in the Mintlify dashboard
+2. Set the docs path to `apps/agor-docs`
+3. Deployments trigger automatically on push
 
 **Deployment URL:** https://agor.live/
-
-Alternative options: Cloudflare Pages or Vercel (see [context/explorations/docs-website.md](../../context/explorations/docs-website.md))

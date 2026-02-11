@@ -16,13 +16,13 @@ Agor lets you define start/stop/health/app commands at the **repository level**,
 - **Shared dev environments:** The long-term goal is a shared QA-style environment per worktree that anyone can join—PMs, QA, or another engineer.
 - **Agent-friendly:** Agents assume the commands return quickly and can be retriggered safely during automated workflows.
 
-![Worktree card showing environment pill with access, start, stop, view logs, and edit controls](/screenshots/worktree_env_pill.png)
+![Worktree card showing environment pill with access, start, stop, view logs, and edit controls](/public/screenshots/worktree_env_pill.png)
 
 ## Agent-Driven Testing with MCP
 
 Agor's environment controls are exposed via [MCP (Model Context Protocol)](https://modelcontextprotocol.io) tools, enabling AI agents to run complete test cycles autonomously.
 
-![Agent using MCP tools to start a worktree environment and view its status](/screenshots/mcp_environment.png)
+![Agent using MCP tools to start a worktree environment and view its status](/public/screenshots/mcp_environment.png)
 
 **Full autonomous workflow:**
 
@@ -58,7 +58,7 @@ Because the template is stored **at the repo level**, updating it in the Environ
 
 ## Example: Agor with Docker Compose
 
-![Worktree environment configuration modal showing templated Docker Compose commands and port offsets](/screenshots/env_config.png)
+![Worktree environment configuration modal showing templated Docker Compose commands and port offsets](/public/screenshots/env_config.png)
 
 **Repository Environment Template**
 
@@ -96,7 +96,7 @@ http://localhost:{{add 5050 worktree.unique_id}}/
 2. Edit the **Repository Environment Template** once; changes sync to all worktrees on that repo.
 3. Press **Start** to validate your commands and watch logs in real time.
 
-   ![Environment log viewer showing live output for start/stop commands](/screenshots/env_logs.png)
+   ![Environment log viewer showing live output for start/stop commands](/public/screenshots/env_logs.png)
 
 4. Check the health badge and App URL to confirm the environment is ready.
 5. Share the App link with QA, PMs, or collaborators for fast feedback.

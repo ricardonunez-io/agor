@@ -9,19 +9,19 @@ Agor integrates with multiple AI coding agents. Each SDK has different capabilit
 
 ## Feature Matrix
 
-| Feature                     | Claude Code         | Codex                     | Gemini              | Notes                                                                                   |
-| --------------------------- | ------------------- | ------------------------- | ------------------- | --------------------------------------------------------------------------------------- |
-| **Streaming responses**     | ✅ Yes              | ✅ Yes                    | ✅ Yes              | All support token-level streaming for typewriter effect                                 |
-| **Stop mid-execution**      | ✅ Yes              | ⚠️ Limited                | ⚠️ Limited          | Claude has `interrupt()`, others may lose partial work                                  |
-| **Session import/export**   | ✅ Yes              | ❌ No                     | ❌ No               | Only Claude Code stores sessions as JSONL transcripts                                   |
-| **Session forkable**        | ✅ Yes (via replay) | ✅ Yes (via replay)       | ✅ Yes (via replay) | Agor emulates forking by replaying messages to new session                              |
-| **MCP integration**         | ✅ Native           | ✅ Native                  | ✅ Native           | All agents support MCP with Agor's built-in self-access server                          |
-| **Permission requests**     | ✅ Rich             | ⚠️ Basic                  | ⚠️ Basic            | Claude has granular tool permissions, others use simpler modes                          |
-| **Project instructions**    | ✅ CLAUDE.md        | ✅ AGENTS.md               | ⚠️ Manual           | Claude auto-loads CLAUDE.md, Codex auto-loads AGENTS.md, Gemini needs manual injection  |
-| **Tool execution**          | ✅ Rich widgets     | ⚠️ Basic                  | ⚠️ Basic            | Claude exposes detailed tool metadata for rich visualization                            |
-| **Session continuity**      | ✅ SDK-managed      | ✅ History-based          | ✅ History-based    | Claude uses `session_id`, others replay message history                                 |
-| **Token usage tracking**    | ✅ Full             | ✅ Full                   | ❌ No               | Claude & Codex now surface SDK usage metadata (input/output/cache) for pills + cost     |
-| **Context window tracking** | 🟡 Estimated        | 🟡 Estimated              | ❌ No               | Agor derives cumulative conversation usage; Codex uses the same formula via SDK metrics |
+| Feature                     | Claude Code         | Codex               | Gemini              | Notes                                                                                   |
+| --------------------------- | ------------------- | ------------------- | ------------------- | --------------------------------------------------------------------------------------- |
+| **Streaming responses**     | ✅ Yes              | ✅ Yes              | ✅ Yes              | All support token-level streaming for typewriter effect                                 |
+| **Stop mid-execution**      | ✅ Yes              | ⚠️ Limited          | ⚠️ Limited          | Claude has `interrupt()`, others may lose partial work                                  |
+| **Session import/export**   | ✅ Yes              | ❌ No               | ❌ No               | Only Claude Code stores sessions as JSONL transcripts                                   |
+| **Session forkable**        | ✅ Yes (via replay) | ✅ Yes (via replay) | ✅ Yes (via replay) | Agor emulates forking by replaying messages to new session                              |
+| **MCP integration**         | ✅ Native           | ✅ Native           | ✅ Native           | All agents support MCP with Agor's built-in self-access server                          |
+| **Permission requests**     | ✅ Rich             | ⚠️ Basic            | ⚠️ Basic            | Claude has granular tool permissions, others use simpler modes                          |
+| **Project instructions**    | ✅ CLAUDE.md        | ✅ AGENTS.md        | ⚠️ Manual           | Claude auto-loads CLAUDE.md, Codex auto-loads AGENTS.md, Gemini needs manual injection  |
+| **Tool execution**          | ✅ Rich widgets     | ⚠️ Basic            | ⚠️ Basic            | Claude exposes detailed tool metadata for rich visualization                            |
+| **Session continuity**      | ✅ SDK-managed      | ✅ History-based    | ✅ History-based    | Claude uses `session_id`, others replay message history                                 |
+| **Token usage tracking**    | ✅ Full             | ✅ Full             | ❌ No               | Claude & Codex now surface SDK usage metadata (input/output/cache) for pills + cost     |
+| **Context window tracking** | 🟡 Estimated        | 🟡 Estimated        | ❌ No               | Agor derives cumulative conversation usage; Codex uses the same formula via SDK metrics |
 
 **Legend:**
 

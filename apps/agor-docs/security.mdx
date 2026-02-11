@@ -5,13 +5,19 @@ description: Practical guidance for operating Agor safely while the product is s
 
 # Security
 
-> **Agor is still pre-1.0.** Given the early stage of the project, we recommend you keep Agor within trusted networks and provide access only to users you'd be confident giving the daemon's direct user access to the machine.
+<Warning>
+  **Agor is still pre-1.0.** Given the early stage of the project, we recommend you keep Agor within
+  trusted networks and provide access only to users you'd be confident giving the daemon's direct
+  user access to the machine.
+</Warning>
 
-<img
-  src="/security_audit.png"
-  alt="Security audit conducted using Agor itself - parallel sessions across Claude, Codex, and Gemini"
-  width="400"
-/>
+<Frame>
+  <img
+    src="/public/security_audit.png"
+    alt="Security audit conducted using Agor itself - parallel sessions across Claude, Codex, and Gemini"
+    width="400"
+  />
+</Frame>
 
 ## Security Status (v0.5+)
 
@@ -114,7 +120,7 @@ If the variable is missing, Agor falls back to **plaintext** storage and logs a 
 
 ### Per-user secrets & trust boundaries
 
-![Edit user settings modal showing agent API keys and environment variables per user](/screenshots/edit_user.png)
+![Edit user settings modal showing agent API keys and environment variables per user](/public/screenshots/edit_user.png)
 
 - **Per-user API keys** and environment variables live in each user’s profile (Settings → User). They are encrypted at rest with the master secret and only surface in the UI during entry.
 - Despite encryption, the daemon still hosts all secrets; a malicious admin (or compromised host) could recover them. Invite only collaborators you trust with your tool credentials.
@@ -159,9 +165,11 @@ id_ed25519  id_ed25519.pub  # Only Alice can read these
 ### Three Security Modes
 
 1. **Simple Mode (Default)** - No isolation, all runs as daemon user
+
    - Best for: Personal use, trusted teams, quick start
 
 2. **Insulated Mode** - Worktree groups + single executor user
+
    - Best for: Shared development, filesystem protection
    - Requires: Sudoers configuration
 
