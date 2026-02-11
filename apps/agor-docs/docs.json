@@ -19,10 +19,10 @@
     "strict": true
   },
   "background": {
-    "decoration": "grid",
+    "decoration": "windows",
     "color": {
-      "light": "#f7fbfb",
-      "dark": "#0b1111"
+      "light": "#f4fbfb",
+      "dark": "#0a1212"
     }
   },
   "styling": {
